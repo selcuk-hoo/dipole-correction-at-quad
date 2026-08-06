@@ -21,6 +21,36 @@ Akis:
     least squares ile akim duzeltmesini hesaplar -> damping ile
     kismen uygular -> yeni hedef akimlari gosterir -> kullanici guc
     kaynaklarini bu degerlere ayarlayip tekrar olcer.
+
+Tasarim notu - neden G (quadrupole gradyenti) burada hedeflenmiyor:
+  R matrisi 2x4 oldugu icin (2 olcum: Bx, By; 4 bilinmeyen: I0..I3)
+  sistem underdetermined'dir: ayni Bx,By duzeltmesini veren sonsuz
+  sayida ΔI vardir, aralarindaki fark R'nin 2 boyutlu null space'ine
+  aittir. Regularized least squares (lambda*||dI||^2) bu sonsuz
+  cozum arasindan minimum-norm olani secer, yani "gereksiz" (Bx,By'ye
+  hic katkisi olmayan ama quad'i bozabilecek) null-space sapmasini
+  sifirlar. Ideal bir 4-bobinli air-core quadrupolde tasarim simetrisi
+  geregi "quad modu" (+,-,+,- alternatif isaretli ortak olcekleme)
+  ile "dipol modlari" birbirine yaklasik ortogonaldir; mekanik ofset
+  bu ortogonalligi hafifce bozdugu icin Bx,By ile quad arasinda kucuk
+  bir coupling olusur (bu algoritmanin duzelttigi de budur). Dolayisiyla
+  bu duzeltmenin quad'a sizintisi da dogasi geregi kucuktur.
+
+  Kalan kucuk quad sapmasi bilinclii olarak bu algoritmada telafi
+  edilmiyor: gercek hizlandirici ortaminda bu duzeltme LOCO (Linear
+  Optics from Closed Orbit) gibi bir optik kalibrasyon adimindan ONCE
+  uygulanir; LOCO kaynagi ne olursa olsun (mekanik ofset, bu duzeltme,
+  sicaklik surklenmesi vb.) entegre gradyent hatalarini orbit response
+  matrix uzerinden olcup global quad trim'leriyle telafi eder. Bu
+  yuzden G icin bu algoritma dahilinde ayrica bir hedef/kisit tanimlamaya
+  gerek yoktur.
+
+  Bu varsayimin gecerliligi calistirma sirasina baglidir: bu uygulama
+  LOCO/optik olcumlerden ONCE, commissioning'in erken bir adimi olarak
+  calistirilmalidir. LOCO zaten calistirilip makine o hale gore kalibre
+  edildikten SONRA bu algoritma tekrar calistirilirsa (orn. yeniden
+  hizalama sonrasi), taze quad sapmasi LOCO'suz ortada kalabilir ve
+  ayrica telafi edilmesi gerekebilir.
 """
 import os
 import sys

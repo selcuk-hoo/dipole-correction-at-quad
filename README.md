@@ -113,6 +113,29 @@ elle o değerlere ayarlar ve rotating coil ölçümünü girer (aradaki
 Sonuç `response_matrix.json` dosyasına kaydedilir; bir sonraki
 çalıştırmada bu dosya varsa kalibrasyon adımı otomatik atlanır.
 
+**ΔI seçimi bir denge meselesidir:**
+
+- Çok küçük seçilirse rotating coil'in ölçüm gürültüsü türevi domine
+  eder; `R` gürültülü ve güvenilmez çıkar.
+- Çok büyük seçilirse merkezi fark artık mıknatısın o noktadaki gerçek
+  (yerel) eğimini değil, geniş bir aralığın ortalama eğimini yakalar —
+  mıknatıs tam lineer olmadığı için `R` gerçek Jacobian'dan sapmaya
+  başlar.
+
+README'deki "nominal akımın %0.5–2'si" bu yüzden sadece bir başlangıç
+noktasıdır; birkaç farklı ΔI ile deneyip `R`'nin tutarlı çıkıp
+çıkmadığına bakmak iyi bir sağlamadır. Ayrıca şu an her adımda tek
+ölçüm alınıyor — gürültüyü azaltmak için her adımda birkaç ölçüm alıp
+ortalamak kolay bir geliştirmedir (bkz. [Bölüm 8](#8-olası-geliştirmeler)).
+
+**`R` bir Jacobian'dır, global bir model değildir:** sadece
+kalibrasyonun yapıldığı nominal akım civarında geçerli bir yerel
+lineerleştirmedir. Düzeltme döngüsü (Faz 2) akımları bu civardan
+belirgin şekilde uzaklaştırırsa (örn. büyük bir mekanik ofset varsa),
+`R` artık gerçeği temsil etmeyebilir. Bu yüzden arayüzde "Yeniden
+Kalibre Et" butonu var — mıknatısın fiziksel durumu değiştiğinde ya da
+düzeltme akımları nominalden çok saptığında kullanılmalı.
+
 ### Faz 2 — Regularized least squares döngüsü
 
 Her iterasyonda:
@@ -135,7 +158,23 @@ gereksiz yere oynatan yönler). Regularized least squares çözümü, λ→0
 limitinde bu sonsuz çözüm kümesinden **minimum-norm** olanı seçer —
 yani "aynı düzeltmeyi en az akım değişikliğiyle yapan" çözümü. Bu hem
 sayısal olarak kararlıdır (R kötü koşullu olsa bile) hem de akımlarda
-gereksiz gezinmeyi engeller.
+gereksiz gezinmeyi engeller. λ ve α'nın bu kapalı çevrimde tam olarak
+neyi kontrol ettiğine (varış noktasını mı, yoksa oraya gidiş yolunu mu)
+dair kesin bir analiz [Bölüm 4](#4-neden-quadrupol-gradyenti-g-burada-hedeflenmiyor)'te.
+
+**α (damping) neden gerekli:** Yukarıdaki analiz `R`'nin tam doğru
+olduğunu varsayar. Gerçekte `R`, kalibrasyon gürültüsünden ve
+mıknatısın hafif nonlineerliğinden dolayı asla mükemmel değildir. Tek
+adımda `α=1` ile "tam" düzeltmeyi uygulamak, hatalı bir `R` ile
+overshoot veya salınıma yol açabilir. Küçük `α` ile çok adım atmak,
+her adımda taze ölçümle güncellenen bir geri besleme (feedback) döngüsü
+gibi çalışır — `R`'nin %100 doğru olmasına gerek kalmaz, yaklaşık doğru
+olması yeterlidir; kalan hatayı sonraki iterasyonlar temizler.
+
+**`tolerance` seçimi:** Rotating coil'in ölçüm gürültüsünün belirgin
+şekilde üzerinde seçilmelidir; aksi halde `‖e‖ < tolerance` koşulu
+gürültü yüzünden hiç sağlanmaz ya da anlamsız şekilde uzun süre
+iterasyona devam edilir.
 
 ### Kalıcılık ve loglama
 
@@ -175,6 +214,49 @@ korumayı önerir. Bu depodaki uygulama **bilinçli olarak bunu yapmaz**:
   trim'leriyle telafi eder — bu zaten onun standart işidir. Bu yüzden
   G için bu algoritma içinde ayrıca bir hedef/kısıt tanımlamaya gerek
   yoktur; iş LOCO'ya bırakılır.
+
+### λ'nın gerçek rolü: varış noktası değil, oraya giden yol
+
+Yukarıdaki "minimum-norm çözüm seçilir" ifadesi tek başına eksik
+kalabilir; net olalım: **λ, G'nin ne kadar oynayacağını ayarlamıyor.**
+Kapalı çevrim (tek seferlik değil, ölç → düzelt → tekrar ölç) yapısı
+sayesinde, sistem gerçekten lineer olduğu sürece şu gösterilebilir:
+
+- Akımın null-space bileşeni, başlangıçta (nominal akımlarda) sıfır
+  olduğu için **tüm iterasyon boyunca sıfırda kalır** — hiç değişmez,
+  λ ne olursa olsun.
+- `‖e‖ → 0`'a yakınsandığında ulaşılan nihai `ΔI`, **λ'dan tamamen
+  bağımsız olarak her zaman aynı minimum-norm çözümdür**
+  (`ΔI = Rᵀ(RRᵀ)⁻¹·(-offset)`). λ ve α sadece oraya **ne hızda ve nasıl**
+  varıldığını belirler (bir PI-kontrolcüde integral teriminin
+  steady-state hatayı kazançtan bağımsız sıfırlaması gibi) — **nereye**
+  varılacağını değil.
+
+Bu, sentetik bir mıknatıs modeliyle (dipol response `R`'ye ek olarak,
+uygulamanın hiç ölçmediği bir `G`-duyarlılık vektörü `R_G` tanımlanarak)
+sayısal olarak da doğrulandı — döngü tam yakınsayana kadar çalıştırılıp
+farklı λ değerleri karşılaştırıldı:
+
+```
+  lambda   alpha   final ||e||      delta G
+  0.0001    0.20      9.8e-10    -1.069962
+  0.0010    0.50      7.4e-10    -1.069962
+  0.0100    0.20      9.7e-10    -1.069962
+  0.1000    0.50      7.5e-10    -1.069962
+  1.0000    0.20      1.0e-09    -1.069962
+```
+
+λ, 10.000 kat değişse bile (0.0001 → 1.0) nihai `ΔG` **tam olarak
+aynı** — ve bu değer, teorik minimum-norm çözümün `R_G` üzerine
+izdüşümüyle bire bir örtüşüyor. Yani regularization'ın gerçek garantisi
+şudur: sonsuz çözüm ailesinden **tamamen gereksiz** (null-space)
+oynamayı kesin olarak sıfırlar; ama Bx,By'yi düzeltmek için **zorunlu**
+olan hareketin G'ye yansıması, tamamen `R` ile `R_G`'nin geometrik
+ilişkisine (bu bölümün başındaki ortogonallik varsayımına) bağlıdır ve
+λ ile ayarlanamaz. (Bu sonuç, mıknatısın kalibrasyon civarında gerçekten
+lineer davrandığı idealize varsayımına dayanır; pratikte kalibrasyon
+bölgesinden uzaklaşıldıkça sapabilir — bkz. Faz 1'deki "R bir
+Jacobian'dır" notu.)
 
 **Bu kararın tek varsayımı — çalıştırma sırası:** Bu uygulama LOCO'dan
 (veya herhangi bir optik ölçüm/kalibrasyon adımından) **önce**
@@ -268,3 +350,7 @@ Tüm parametreler `config.py` içindeki `CONFIG` sözlüğünde tanımlıdır.
   iki genişletme yolu (soft penalty veya null-space projeksiyonu).
 - `minimize_dipole.py`'nin de response-matrix tabanlı yaklaşıma
   taşınması (şu an sabit/varsayılan bir coupling modeli kullanıyor).
+- Kalibrasyon (Faz 1) sırasında her adımda tek ölçüm yerine birkaç
+  ölçüm alıp ortalamak; bu, rotating coil gürültüsünün `R`'ye
+  taşınmasını azaltır (bkz. [Bölüm 3](#3-quad_dipole_compensationpy--response-matrix-tabanlı-uygulama)'teki
+  "ΔI seçimi bir denge meselesidir").

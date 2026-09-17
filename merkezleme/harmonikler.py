@@ -1,34 +1,34 @@
-"""Harmonik donusumleri ve KONVANSIYONLAR.
+"""Harmonik dönüşümleri ve KONVANSİYONLAR.
 
-Programdaki butun harmonik/merkez/isaret konvansiyonu secimleri YALNIZCA bu
-modulde ve `yapilandirma.yaml` dosyasindadir. Baska hicbir modul harmonikleri
-kendi basina yorumlamaz.
+Programdaki bütün harmonik/merkez/işaret konvansiyonu seçimleri YALNIZCA bu
+modülde ve `yapilandirma.yaml` dosyasındadır. Başka hiçbir modül harmonikleri
+kendi başına yorumlamaz.
 
 Konvansiyonlar
---------------
-Alan acilimi (n = 1 dipol, n = 2 kuadrupol):
+---------------
+Alan açılımı (n = 1 dipol, n = 2 kuadrupol):
 
     B_y + i*B_x = SUM_{n>=1} C_n * (z / r_ref)^(n-1),   z = x + i*y
     C_n = B_n + i*A_n            (B: normal, A: skew)
 
 Buradan:
   * z = 0'da  B_y = B_1,  B_x = A_1
-  * Normal kuadrupol icin  G = B_2 / r_ref
+  * Normal kuadrupol için  G = B_2 / r_ref
 
-Manyetik merkez (feed-down): kuadrupolun merkezi z_c'de ise alan
-C_2*(z - z_c)/r_ref olur, yani gorunen dipol C_1 = -C_2*z_c/r_ref. Tersine:
+Manyetik merkez (feed-down): kuadrupolün merkezi z_c'de ise alan
+C_2*(z - z_c)/r_ref olur, yani görünen dipol C_1 = -C_2*z_c/r_ref. Tersine:
 
     z_c = -r_ref * C_1 / C_2
 
-`eslenik` bayragi, olcum yazilimi B_x + i*B_y konvansiyonunu kullaniyorsa
-gereken eslenik almayi; `feed_down_isareti` ise isaret belirsizligini karsilar.
+`eslenik` bayrağı, ölçüm yazılımı B_x + i*B_y konvansiyonunu kullanıyorsa
+gereken eşlenik almayı; `feed_down_isareti` ise işaret belirsizliğini karşılar.
 
-ONEMLI: Hedef tam olarak sifir oldugu icin, tutarli uygulanan bir isaret ya da
-eslenik hatasi kapali cevrimin yakinsamasini BOZMAZ. Raporlanan merkez
-y_rapor = T*y_gercek bicimindeki tersinir bir donusumse, kalibrasyon da ayni
-donusumle olculdugu icin R_rapor = T*R_gercek olur ve cozum y_rapor -> 0'a
-suruklenir; bu da y_gercek -> 0 demektir. Konvansiyon yalnizca raporlanan
-merkezin isaretini/yonunu, R_eff'i ve teshis ciktilarini etkiler.
+ÖNEMLİ: Hedef tam olarak sıfır olduğu için, tutarlı uygulanan bir işaret ya da
+eşlenik hatası kapalı çevrimin yakınsamasını BOZMAZ. Raporlanan merkez
+y_rapor = T*y_gercek biçimindeki tersinir bir dönüşümse, kalibrasyon da aynı
+dönüşümle ölçüldüğü için R_rapor = T*R_gercek olur ve çözüm y_rapor -> 0'a
+sürüklenir; bu da y_gercek -> 0 demektir. Konvansiyon yalnızca raporlanan
+merkezin işaretini/yönünü, R_eff'i ve teşhis çıktılarını etkiler.
 """
 from __future__ import annotations
 
@@ -40,22 +40,22 @@ import numpy as np
 
 from .yapilandirma import HarmoniklerYapilandirmasi
 
-# Girilen birimin Tesla'ya cevrim katsayisi ("units" mutlak olcek tasimaz).
+# Girilen birimin Tesla'ya çevrim katsayısı ("units" mutlak ölçek taşımaz).
 _BIRIM_TESLA_KATSAYISI: dict[str, float] = {"T": 1.0, "mT": 1e-3}
 
 
 class HarmonikHatasi(ValueError):
-    """Harmonik girisi ya da donusumu gecersiz."""
+    """Harmonik girişi ya da dönüşümü geçersiz."""
 
 
 @dataclass(frozen=True)
 class HarmonikOlcumu:
-    """Tek bir olcum noktasinda girilen harmonikler.
+    """Tek bir ölçüm noktasında girilen harmonikler.
 
     `bilesenler`: n -> C_n, girilen birimde (T, mT ya da units).
-    `mutlak_gradyen_T_m`: yalnizca birim "units" iken gereklidir (normalize
-    edilmis girdi mutlak olcek tasimadigi icin gradyen oradan okunamaz).
-    `ham_giris`: kullanicinin gerceken yazdigi degerler; yalnizca kayit icin.
+    `mutlak_gradyen_T_m`: yalnızca birim "units" iken gereklidir (normalize
+    edilmiş girdi mutlak ölçek taşımadığı için gradyen oradan okunamaz).
+    `ham_giris`: kullanıcının gerçekten yazdığı değerler; yalnızca kayıt için.
     """
 
     bilesenler: dict[int, complex]
@@ -65,7 +65,7 @@ class HarmonikOlcumu:
 
     def bilesen(self, n: int) -> complex:
         if n not in self.bilesenler:
-            raise HarmonikHatasi(f"C_{n} bileseni bu olcumde yok")
+            raise HarmonikHatasi(f"C_{n} bileşeni bu ölçümde yok")
         return self.bilesenler[n]
 
     @property
@@ -75,7 +75,7 @@ class HarmonikOlcumu:
 
 @dataclass(frozen=True)
 class KontrolVektoru:
-    """Kontrol edilen buyuklukler: y = [x_c, y_c, g].
+    """Kontrol edilen büyüklükler: y = [x_c, y_c, g].
 
     x_c, y_c metre cinsindendir; g boyutsuzdur.
     """
@@ -101,7 +101,7 @@ class KontrolVektoru:
 
 @dataclass(frozen=True)
 class IzlemeBuyuklukleri:
-    """Yalnizca izlenen (hedeflenmeyen) buyuklukler."""
+    """Yalnızca izlenen (hedeflenmeyen) büyüklükler."""
 
     sq_over_g: float | None
     roll_mrad: float | None
@@ -122,43 +122,43 @@ class IzlemeBuyuklukleri:
 
 
 class HarmonikKonvansiyonu:
-    """Yapilandirilmis konvansiyonlarla harmonik donusumleri.
+    """Yapılandırılmış konvansiyonlarla harmonik dönüşümleri.
 
-    Tum isaret/eslenik/faz/birim secimleri bu sinifin icinde uygulanir.
+    Tüm işaret/eşlenik/faz/birim seçimleri bu sınıfın içinde uygulanır.
     """
 
     def __init__(self, ayar: HarmoniklerYapilandirmasi) -> None:
         self.ayar = ayar
 
     # ------------------------------------------------------------------
-    # Giris bicimleri -> C_n
+    # Giriş biçimleri -> C_n
     # ------------------------------------------------------------------
     def genlik_fazdan(self, genlik: float, faz: float, n: int) -> complex:
-        """|C_n| ve faz degerinden C_n kurar (girilen birimde)."""
+        """|C_n| ve faz değerinden C_n kurar (girilen birimde)."""
         if genlik < 0:
-            raise HarmonikHatasi(f"C_{n} genligi negatif olamaz: {genlik}")
+            raise HarmonikHatasi(f"C_{n} genliği negatif olamaz: {genlik}")
         faz_rad = math.radians(faz) if self.ayar.faz_birimi == "derece" else float(faz)
         carpan = n if self.ayar.faz_n_carpani else 1
         aci = self.ayar.faz_isareti * carpan * faz_rad
         return self._eslenikle(complex(genlik * math.cos(aci), genlik * math.sin(aci)))
 
     def normal_skewden(self, b_n: float, a_n: float) -> complex:
-        """B_n ve A_n degerinden C_n kurar (girilen birimde)."""
+        """B_n ve A_n değerinden C_n kurar (girilen birimde)."""
         return self._eslenikle(complex(b_n, a_n))
 
     @staticmethod
     def normal_skewe(c_n: complex) -> tuple[float, float]:
-        """C_n -> (B_n, A_n). Arayuzde turetilmis degerleri gostermek icin."""
+        """C_n -> (B_n, A_n). Arayüzde türetilmiş değerleri göstermek için."""
         return c_n.real, c_n.imag
 
     def genlik_faza(self, c_n: complex, n: int) -> tuple[float, float]:
-        """C_n -> (|C_n|, faz). Bicimler arasi gecis icin (genlik_fazdan'in tersi).
+        """C_n -> (|C_n|, faz). Biçimler arası geçiş için (genlik_fazdan'ın tersi).
 
-        `faz_n_carpani` acikken multipol acisi dogasi geregi 360/n derece
-        modunda tanimlidir (ornegin n = 2 icin -120 ile +60 ayni alani verir);
-        bu fonksiyon ana deger (principal value) temsilcisini dondurur.
+        `faz_n_carpani` açıkken multipol açısı doğası gereği 360/n derece
+        modunda tanımlıdır (örneğin n = 2 için -120 ile +60 aynı alanı verir);
+        bu fonksiyon ana değer (principal value) temsilcisini döndürür.
         """
-        ham = self._eslenikle(c_n)  # eslenik islemi kendi tersidir
+        ham = self._eslenikle(c_n)  # eşlenik işlemi kendi tersidir
         genlik = abs(ham)
         carpan = n if self.ayar.faz_n_carpani else 1
         aci = math.atan2(ham.imag, ham.real) / (self.ayar.faz_isareti * carpan)
@@ -174,10 +174,10 @@ class HarmonikKonvansiyonu:
     def arka_plan_cikar(
         self, olcum: HarmonikOlcumu, arka_plan: HarmonikOlcumu | None
     ) -> HarmonikOlcumu:
-        """Arka plani KOMPLEKS uzayda cikarir.
+        """Arka planı KOMPLEKS uzayda çıkarır.
 
-        Genlikleri cikarmak yanlis olur; bu yuzden arka plan da ayni genlik/faz
-        (ya da normal/skew) formunda girilip C_n'e cevrilmis olmalidir.
+        Genlikleri çıkarmak yanlış olur; bu yüzden arka plan da aynı genlik/faz
+        (ya da normal/skew) formunda girilip C_n'e çevrilmiş olmalıdır.
         """
         if arka_plan is None:
             return olcum
@@ -196,32 +196,32 @@ class HarmonikKonvansiyonu:
         )
 
     # ------------------------------------------------------------------
-    # Merkez, gradyen, kontrol vektoru
+    # Merkez, gradyen, kontrol vektörü
     # ------------------------------------------------------------------
     def merkez(self, olcum: HarmonikOlcumu) -> complex:
         """Feed-down ile manyetik merkez z_c = x_c + i*y_c (metre).
 
-        Birim tasiyan bir orandir: C_1/C_2 oldugu icin girilen birim (T, mT ya
+        Birim taşıyan bir orandır: C_1/C_2 olduğu için girilen birim (T, mT ya
         da normalize units) sonucu etkilemez.
         """
         c1 = olcum.bilesen(1)
         c2 = olcum.bilesen(2)
         if c2 == 0:
-            raise HarmonikHatasi("C_2 sifir; merkez hesaplanamaz (kuadrupol yok mu?)")
+            raise HarmonikHatasi("C_2 sıfır; merkez hesaplanamaz (kuadrupol yok mu?)")
         return self.ayar.feed_down_isareti * (-self.ayar.r_ref_m * c1 / c2)
 
     def gradyen_T_m(self, olcum: HarmonikOlcumu) -> float:
         """Gradyen G (T/m).
 
         T/mT biriminde C_2'den okunur. "units" biriminde normalize girdi mutlak
-        olcek tasimadigi icin olcumle birlikte girilen mutlak gradyen kullanilir.
+        ölçek taşımadığı için ölçümle birlikte girilen mutlak gradyen kullanılır.
         """
         if self.ayar.birim == "units":
             if olcum.mutlak_gradyen_T_m is None:
                 if self.ayar.units_mutlak_gradyen_T_m is None:
                     raise HarmonikHatasi(
                         'Birim "units" iken gradyen normalize harmoniklerden okunamaz; '
-                        "olcumle birlikte mutlak gradyen (T/m) girilmelidir"
+                        "ölçümle birlikte mutlak gradyen (T/m) girilmelidir"
                     )
                 return self.ayar.units_mutlak_gradyen_T_m
             return olcum.mutlak_gradyen_T_m
@@ -234,7 +234,7 @@ class HarmonikKonvansiyonu:
     def kontrol_vektoru(self, olcum: HarmonikOlcumu, gradyen_hedefi_T_m: float) -> KontrolVektoru:
         """y = [x_c, y_c, g];  g = (G - G_hedef) / G_hedef."""
         if gradyen_hedefi_T_m == 0:
-            raise HarmonikHatasi("Gradyen hedefi sifir olamaz")
+            raise HarmonikHatasi("Gradyen hedefi sıfır olamaz")
         z_c = self.merkez(olcum)
         gradyen = self.gradyen_T_m(olcum)
         return KontrolVektoru(
@@ -244,22 +244,22 @@ class HarmonikKonvansiyonu:
         )
 
     # ------------------------------------------------------------------
-    # Yalnizca izleme
+    # Yalnızca izleme
     # ------------------------------------------------------------------
     def izleme(self, olcum: HarmonikOlcumu) -> IzlemeBuyuklukleri:
-        """SQ/G (roll) ve varsa b3/a3/b4/a4. Hicbiri hedeflenmez.
+        """SQ/G (roll) ve varsa b3/a3/b4/a4. Hiçbiri hedeflenmez.
 
-        ISARET NOTU: roll, alan cercevesinde okunan acidir. Kaynak kosegen
-        donunce C_2 -> C_2 * exp(-2i*rho) oldugu icin, harmoniklerden okunan
-        roll mekanik donusun TERS isaretiyle cikar. Yalnizca izleme amacli
-        oldugu ve buyuklugu dogru verdigi icin oldugu gibi raporlanir.
+        İŞARET NOTU: roll, alan çerçevesinde okunan açıdır. Kaynak köşegen
+        dönünce C_2 -> C_2 * exp(-2i*rho) olduğu için, harmoniklerden okunan
+        roll mekanik dönüşün TERS işaretiyle çıkar. Yalnızca izleme amaçlı
+        olduğu ve büyüklüğü doğru verdiği için olduğu gibi raporlanır.
         """
         c2 = olcum.bilesenler.get(2)
         sq_over_g: float | None = None
         roll_mrad: float | None = None
         if c2 is not None and c2.real != 0:
             sq_over_g = c2.imag / c2.real
-            # Skew/normal oraninin arctan'i, kuadrupol icin 2*roll acisidir.
+            # Skew/normal oranının arctan'i, kuadrupol için 2*roll açısıdır.
             roll_mrad = 0.5 * math.atan2(c2.imag, c2.real) * 1e3
 
         def bilesen_ciftleri(n: int) -> tuple[float | None, float | None]:
@@ -275,13 +275,13 @@ class HarmonikKonvansiyonu:
         )
 
     # ------------------------------------------------------------------
-    # Mertebe kontrolu (yazim hatasi yakalamanin ilk katmani)
+    # Mertebe kontrolü (yazım hatası yakalamanın ilk katmanı)
     # ------------------------------------------------------------------
     def mertebe_makul_mu(self, n: int, c_n: complex, aralik: tuple[float, float]) -> bool:
-        """|C_n| verilen makul aralikta mi?
+        """|C_n| verilen makul aralıkta mı?
 
-        n = 1 icin sifira cok yakin deger normaldir (iyi merkezlenmis miknatis),
-        bu yuzden alt sinir yalnizca n >= 2 icin zorlanir.
+        n = 1 için sıfıra çok yakın değer normaldir (iyi merkezlenmiş mıknatıs),
+        bu yüzden alt sınır yalnızca n >= 2 için zorlanır.
         """
         buyukluk = abs(c_n)
         alt, ust = aralik

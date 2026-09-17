@@ -1,27 +1,27 @@
-"""Guc kaynagi kontrolu (ITECH IT-M3233, sabit akim kipi).
+"""Güç kaynağı kontrolü (ITECH IT-M3233, sabit akım kipi).
 
-`eski/guc_kaynagi_orijinal.py` dosyasindaki sinif temel alinmistir; kullanilan
-SCPI komut kumesi AYNIDIR ve genisletilmemistir:
+`eski/guc_kaynagi_orijinal.py` dosyasındaki sınıf temel alınmıştır; kullanılan
+SCPI komut kümesi AYNIDIR ve genişletilmemiştir:
 
     *CLS, *IDN?, SYST:REM, VOLT, CURR, SYST:ERR?, OUTP ON/OFF,
     MEAS:VOLT?, MEAS:CURR?
 
 Eklenenler
-----------
-* `olcumleri_oku()` float dondurur, ayristirma hatalarini yakalar.
-* Her yazma isleminden sonra `SYST:ERR?` kontrol edilir; hata varsa islem
+-----------
+* `olcumleri_oku()` float döndürür, ayrıştırma hatalarını yakalar.
+* Her yazma işleminden sonra `SYST:ERR?` kontrol edilir; hata varsa işlem
   durdurulur ve kaydedilir.
-* Sabit akim kipinde `VOLT` bir uyum (compliance) sinirdir; yapilandirmadan
-  okunur ve akim ayarindan ONCE yazilir.
-* Akimlar asla tek adimda degistirilmez: yazilimda rampa (A/s). Rampa sonunda
-  `MEAS:CURR?` ile hedefe tolerans icinde oturdugu dogrulanir, ardindan
-  yapilandirilabilir bir bekleme uygulanir.
-* Bobin endüktif oldugu icin (~6.5 mH, 10 A) akim sifir degilken `OUTP OFF`
-  KULLANILMAZ; once rampa ile sifira inilir.
-* Dort kaynak `KaynakGrubu` ile birlikte yonetilir: es zamanli adimlarla
-  rampalama, hepsini okuma, acil durumda hepsini rampa ile sifirlama.
-* Varsayilan kip KURU CALISMA: komutlar kaydedilir ama gonderilmez. Gercek
-  donanim icin acik bir `--canli` bayragi gerekir.
+* Sabit akım kipinde `VOLT` bir uyum (compliance) sınırdır; yapılandırmadan
+  okunur ve akım ayarından ÖNCE yazılır.
+* Akımlar asla tek adımda değiştirilmez: yazılımda rampa (A/s). Rampa sonunda
+  `MEAS:CURR?` ile hedefe tolerans içinde oturduğu doğrulanır, ardından
+  yapılandırılabilir bir bekleme uygulanır.
+* Bobin endüktif olduğu için (~6.5 mH, 10 A) akım sıfır değilken `OUTP OFF`
+  KULLANILMAZ; önce rampa ile sıfıra inilir.
+* Dört kaynak `KaynakGrubu` ile birlikte yönetilir: eş zamanlı adımlarla
+  rampalama, hepsini okuma, acil durumda hepsini rampa ile sıfırlama.
+* Varsayılan kip KURU ÇALIŞMA: komutlar kaydedilir ama gönderilmez. Gerçek
+  donanım için açık bir `--canli` bayrağı gerekir.
 """
 from __future__ import annotations
 
@@ -35,32 +35,32 @@ import numpy as np
 from .yapilandirma import BOBIN_SAYISI, GucKaynaklariYapilandirmasi, GuvenlikYapilandirmasi
 
 
-# `cikis_kapat` icin varsayilan "akim sifir sayilir" esigi. Gercekte
-# `KaynakGrubu.guvenli_kapat`, yapilandirmadaki akim_tolerans_A degerini gecer;
-# bu sabit yalnizca dogrudan cagrilar icin bir taban saglar.
+# `cikis_kapat` için varsayılan "akım sıfır sayılır" eşiği. Gerçekte
+# `KaynakGrubu.guvenli_kapat`, yapılandırmadaki akim_tolerans_A değerini geçer;
+# bu sabit yalnızca doğrudan çağrılar için bir taban sağlar.
 SIFIR_AKIM_TOLERANSI_A = 0.02
 
 
 def _sifir_akim_dogrula(adres: str, olculen_akim_A: float, tolerans_A: float) -> None:
-    """Akim sifir sayilacak kadar kucuk mu? Degilse GuvenlikHatasi yukseltir."""
+    """Akım sıfır sayılacak kadar küçük mü? Değilse GuvenlikHatasi yükseltir."""
     if abs(olculen_akim_A) > tolerans_A:
         raise GuvenlikHatasi(
-            f"{adres}: akim {olculen_akim_A:.3f} A iken OUTP OFF kullanilamaz "
-            f"(esik {tolerans_A:.3f} A); once rampa ile sifira inilmelidir"
+            f"{adres}: akım {olculen_akim_A:.3f} A iken OUTP OFF kullanılamaz "
+            f"(eşik {tolerans_A:.3f} A); önce rampa ile sıfıra inilmelidir"
         )
 
 
 class GucKaynagiHatasi(RuntimeError):
-    """Guc kaynagi iletisimi ya da cihaz hatasi."""
+    """Güç kaynağı iletişimi ya da cihaz hatası."""
 
 
 class GuvenlikHatasi(RuntimeError):
-    """Guvenlik siniri asildi; islem uygulanmadi."""
+    """Güvenlik sınırı aşıldı; işlem uygulanmadı."""
 
 
 @dataclass
 class KomutKaydi:
-    """Tek bir SCPI islemi (kuru calismada da kaydedilir)."""
+    """Tek bir SCPI işlemi (kuru çalışmada da kaydedilir)."""
 
     zaman: float
     adres: str
@@ -76,7 +76,7 @@ class KomutKaydi:
 
 @dataclass
 class KomutGunlugu:
-    """SCPI komut gunlugu. kayit.py bunu duz metin olarak diske yazar."""
+    """SCPI komut günlüğü. kayit.py bunu düz metin olarak diske yazar."""
 
     kayitlar: list[KomutKaydi] = field(default_factory=list)
 
@@ -88,7 +88,7 @@ class KomutGunlugu:
 
 
 class GucKaynagiArayuzu(Protocol):
-    """Gercek ve sahte kaynaklarin ortak arayuzu."""
+    """Gerçek ve sahte kaynakların ortak arayüzü."""
 
     adres: str
 
@@ -101,7 +101,7 @@ class GucKaynagiArayuzu(Protocol):
 
 
 class _TemelKaynak:
-    """Gercek ve sahte kaynagin paylastigi gunluk/ayristirma mantigi."""
+    """Gerçek ve sahte kaynağın paylaştığı günlük/ayrıştırma mantığı."""
 
     def __init__(self, adres: str, gunluk: KomutGunlugu | None = None) -> None:
         self.adres = adres
@@ -116,15 +116,15 @@ class _TemelKaynak:
 
     @staticmethod
     def _float_ayristir(metin: str, ne: str) -> float:
-        """Cihaz yanitini float'a cevirir; basarisiz olursa aciklayici hata verir."""
+        """Cihaz yanıtını float'a çevirir; başarısız olursa açıklayıcı hata verir."""
         try:
             return float(str(metin).strip().split(",")[0])
         except (TypeError, ValueError) as hata:
-            raise GucKaynagiHatasi(f"{ne} yaniti sayiya cevrilemedi: {metin!r}") from hata
+            raise GucKaynagiHatasi(f"{ne} yanıtı sayıya çevrilemedi: {metin!r}") from hata
 
     @staticmethod
     def _hata_yaniti_sorunlu_mu(yanit: str) -> tuple[bool, str]:
-        """`SYST:ERR?` yanitini yorumlar. (sorunlu_mu, aciklama)"""
+        """`SYST:ERR?` yanıtını yorumlar. (sorunlu_mu, açıklama)"""
         metin = str(yanit).strip()
         if not metin:
             return False, ""
@@ -132,7 +132,7 @@ class _TemelKaynak:
         try:
             kod = int(float(ilk))
         except ValueError:
-            # Yorumlanamayan yanit: hata saymayiz ama gunlukte durur.
+            # Yorumlanamayan yanıt: hata saymayız ama günlükte durur.
             return False, metin
         return kod != 0, metin
 
@@ -142,13 +142,13 @@ class GucKaynagi(_TemelKaynak):
 
     def __init__(self, adres: str, gunluk: KomutGunlugu | None = None) -> None:
         super().__init__(adres, gunluk)
-        # pyvisa yalnizca canli kipte gerekir; kuru calisma ve testler
-        # pyvisa kurulu olmadan da calisir.
+        # pyvisa yalnızca canlı kipte gerekir; kuru çalışma ve testler
+        # pyvisa kurulu olmadan da çalışır.
         try:
             import pyvisa
         except ImportError as hata:  # pragma: no cover - ortama bagli
             raise GucKaynagiHatasi(
-                "pyvisa kurulu degil; canli kip icin 'pip install pyvisa pyvisa-py' gerekir"
+                "pyvisa kurulu değil; canlı kip için 'pip install pyvisa pyvisa-py' gerekir"
             ) from hata
         self._rm = pyvisa.ResourceManager("@py")
         self._cihaz = self._rm.open_resource(adres)
@@ -169,23 +169,23 @@ class GucKaynagi(_TemelKaynak):
         return yanit
 
     def hatalari_kontrol_et(self, baglam: str = "") -> None:
-        """`SYST:ERR?` ile cihaz hatasi var mi diye bakar; varsa yukseltir."""
+        """`SYST:ERR?` ile cihaz hatası var mı diye bakar; varsa yükseltir."""
         yanit = self._sorgula("SYST:ERR?")
         sorunlu, aciklama = self._hata_yaniti_sorunlu_mu(yanit)
         if sorunlu:
             raise GucKaynagiHatasi(
-                f"{self.adres}: cihaz hatasi {aciklama!r}"
+                f"{self.adres}: cihaz hatası {aciklama!r}"
                 + (f" (komut: {baglam})" if baglam else "")
             )
 
     # ------------------------------------------------------------------
-    # Ust seviye
+    # Üst seviye
     # ------------------------------------------------------------------
     def baslat(self, uyum_gerilimi_V: float) -> str:
-        """Uzaktan kumandaya al, uyum gerilimini yaz, akimi sifirla."""
+        """Uzaktan kumandaya al, uyum gerilimini yaz, akımı sıfırla."""
         kimlik = self._sorgula("*IDN?").strip()
         self._yaz("SYST:REM", hata_kontrolu=True)
-        # Sabit akim kipinde VOLT uyum sinirdir ve akimdan ONCE yazilir.
+        # Sabit akım kipinde VOLT uyum sınırıdır ve akımdan ÖNCE yazılır.
         self._yaz(f"VOLT {uyum_gerilimi_V}", hata_kontrolu=True)
         self._yaz("CURR 0", hata_kontrolu=True)
         return kimlik
@@ -194,7 +194,7 @@ class GucKaynagi(_TemelKaynak):
         self._yaz(f"CURR {akim_A:.4f}", hata_kontrolu=True)
 
     def olcumleri_oku(self) -> tuple[float, float]:
-        """(gerilim_V, akim_A) olarak float dondurur."""
+        """(gerilim_V, akim_A) olarak float döndürür."""
         gerilim = self._float_ayristir(self._sorgula("MEAS:VOLT?"), f"{self.adres} MEAS:VOLT?")
         akim = self._float_ayristir(self._sorgula("MEAS:CURR?"), f"{self.adres} MEAS:CURR?")
         return gerilim, akim
@@ -203,10 +203,10 @@ class GucKaynagi(_TemelKaynak):
         self._yaz("OUTP ON", hata_kontrolu=True)
 
     def cikis_kapat(self, olculen_akim_A: float, tolerans_A: float = SIFIR_AKIM_TOLERANSI_A) -> None:
-        """Cikisi kapatir. Akim sifir degilse REDDEDER (endüktif bobin).
+        """Çıkışı kapatır. Akım sıfır değilse REDDEDER (endüktif bobin).
 
-        Esik, cihazin kendi olcum gurultusunden buyuk olmalidir; bu yuzden
-        yapilandirmadaki `akim_tolerans_A` degeri kullanilir (bkz.
+        Eşik, cihazın kendi ölçüm gürültüsünden büyük olmalıdır; bu yüzden
+        yapılandırmadaki `akim_tolerans_A` değeri kullanılır (bkz.
         `KaynakGrubu.guvenli_kapat`).
         """
         _sifir_akim_dogrula(self.adres, olculen_akim_A, tolerans_A)
@@ -216,14 +216,14 @@ class GucKaynagi(_TemelKaynak):
         try:
             self._cihaz.close()
         finally:
-            self._kaydet("(baglanti kapatildi)")
+            self._kaydet("(bağlantı kapatıldı)")
 
 
 class SahteGucKaynagi(_TemelKaynak):
-    """Kuru calisma ve testler icin sahte kaynak.
+    """Kuru çalışma ve testler için sahte kaynak.
 
-    Komutlari kaydeder, cihaza hicbir sey gondermez. Olculen akim, ayarlanan
-    akimi kucuk bir hatayla izler; boylece oturma dogrulamasi gercekci calisir.
+    Komutları kaydeder, cihaza hiçbir şey göndermez. Ölçülen akım, ayarlanan
+    akımı küçük bir hatayla izler; böylece oturma doğrulaması gerçekçi çalışır.
     """
 
     def __init__(
@@ -268,16 +268,16 @@ class SahteGucKaynagi(_TemelKaynak):
         self.cikis_acik = False
 
     def kapat(self) -> None:
-        self._kaydet("(baglanti kapatildi)", gonderildi=False)
+        self._kaydet("(bağlantı kapatıldı)", gonderildi=False)
 
 
 class KaynakGrubu:
-    """Dort kaynagi birlikte yoneten katman.
+    """Dört kaynağı birlikte yöneten katman.
 
-    * `rampala()`: dort akimi es zamanli adimlarla hedefe goturur, oturmayi
-      `MEAS:CURR?` ile dogrular, ardindan bekleme uygular.
-    * `olcumleri_oku()`: dort kanalin gerilim/akim olcumleri.
-    * `acil_sifirla()`: her durumda akimlari rampa ile sifira indirir.
+    * `rampala()`: dört akımı eş zamanlı adımlarla hedefe götürür, oturmayı
+      `MEAS:CURR?` ile doğrular, ardından bekleme uygular.
+    * `olcumleri_oku()`: dört kanalın gerilim/akım ölçümleri.
+    * `acil_sifirla()`: her durumda akımları rampa ile sıfıra indirir.
     """
 
     def __init__(
@@ -309,7 +309,7 @@ class KaynakGrubu:
         gunluk: KomutGunlugu | None = None,
         bekle: Callable[[float], None] = time.sleep,
     ) -> "KaynakGrubu":
-        """Kip'e gore gercek ya da sahte kaynaklarla grup kurar."""
+        """Kip'e göre gerçek ya da sahte kaynaklarla grup kurar."""
         gunluk = gunluk if gunluk is not None else KomutGunlugu()
         kaynaklar: list[GucKaynagiArayuzu] = []
         for adres in ayar.visa_adresleri:
@@ -321,7 +321,7 @@ class KaynakGrubu:
 
     # ------------------------------------------------------------------
     def baslat(self) -> list[str]:
-        """Dort kaynagi uzaktan kumandaya alir, uyum gerilimini yazar, cikisi acar."""
+        """Dört kaynağı uzaktan kumandaya alır, uyum gerilimini yazar, çıkışı açar."""
         self.kimlikler = []
         for kaynak in self.kaynaklar:
             self.kimlikler.append(kaynak.baslat(self.ayar.uyum_gerilimi_V))
@@ -332,7 +332,7 @@ class KaynakGrubu:
         return self.kimlikler
 
     def olcumleri_oku(self) -> tuple[np.ndarray, np.ndarray]:
-        """(gerilimler, akimlar) - her biri 4 elemanli."""
+        """(gerilimler, akımlar) - her biri 4 elemanlı."""
         gerilimler = np.zeros(BOBIN_SAYISI, dtype=float)
         akimlar = np.zeros(BOBIN_SAYISI, dtype=float)
         for i, kaynak in enumerate(self.kaynaklar):
@@ -343,30 +343,30 @@ class KaynakGrubu:
     def _hedefleri_dogrula(self, hedefler: np.ndarray) -> np.ndarray:
         hedefler = np.asarray(hedefler, dtype=float)
         if hedefler.shape != (BOBIN_SAYISI,):
-            raise ValueError(f"{BOBIN_SAYISI} elemanli hedef vektoru bekleniyor")
+            raise ValueError(f"{BOBIN_SAYISI} elemanlı hedef vektörü bekleniyor")
         if np.any(hedefler < 0):
             raise GuvenlikHatasi(
-                f"Negatif akim istendi ({hedefler}); polarite role donanimiyla degistirilir, "
-                "guc kaynaklari yalnizca pozitif akim surer"
+                f"Negatif akım istendi ({hedefler}); polarite röle donanımıyla değiştirilir, "
+                "güç kaynakları yalnızca pozitif akım sürer"
             )
         asim = hedefler > self.guvenlik.bobin_basi_max_akim_A
         if np.any(asim):
             raise GuvenlikHatasi(
-                f"Bobin basi max akim {self.guvenlik.bobin_basi_max_akim_A} A asildi: {hedefler}"
+                f"Bobin başı max akım {self.guvenlik.bobin_basi_max_akim_A} A aşıldı: {hedefler}"
             )
         return hedefler
 
     def rampala(self, hedefler: np.ndarray) -> np.ndarray:
-        """Dort akimi es zamanli adimlarla hedefe goturur.
+        """Dört akımı eş zamanlı adımlarla hedefe götürür.
 
-        Adim sayisi en buyuk degisime gore hesaplanir; her kanal ayni adim
-        sayisinda ilerledigi icin dordu ayni anda hedefe varir. Rampa sonunda
-        oturma `MEAS:CURR?` ile dogrulanir, ardindan `oturma_suresi_s` beklenir.
+        Adım sayısı en büyük değişime göre hesaplanır; her kanal aynı adım
+        sayısında ilerlediği için dördü aynı anda hedefe varır. Rampa sonunda
+        oturma `MEAS:CURR?` ile doğrulanır, ardından `oturma_suresi_s` beklenir.
 
-        Olculen akimlari dondurur.
+        Ölçülen akımları döndürür.
         """
         if not self.baslatildi:
-            raise GucKaynagiHatasi("Kaynak grubu baslatilmadi (baslat() cagrilmali)")
+            raise GucKaynagiHatasi("Kaynak grubu başlatılmadı (baslat() çağrılmalı)")
         hedefler = self._hedefleri_dogrula(hedefler)
         baslangic = self.ayar_akimlari_A.copy()
         en_buyuk_degisim = float(np.max(np.abs(hedefler - baslangic)))
@@ -388,7 +388,7 @@ class KaynakGrubu:
         return olculen
 
     def _oturmayi_dogrula(self, hedefler: np.ndarray) -> np.ndarray:
-        """`MEAS:CURR?` ile akimlarin hedefe tolerans icinde oturdugunu dogrular."""
+        """`MEAS:CURR?` ile akımların hedefe tolerans içinde oturduğunu doğrular."""
         son_akimlar = np.zeros(BOBIN_SAYISI, dtype=float)
         for deneme in range(1, self.ayar.oturma_dogrulama_denemesi + 1):
             _, son_akimlar = self.olcumleri_oku()
@@ -399,9 +399,9 @@ class KaynakGrubu:
                 self.bekle(self.ayar.rampa_adim_suresi_s)
         sapma = np.abs(son_akimlar - hedefler)
         raise GucKaynagiHatasi(
-            "Akimlar hedefe oturmadi: hedef="
+            "Akımlar hedefe oturmadı: hedef="
             + np.array2string(hedefler, precision=3)
-            + " olculen="
+            + " ölçülen="
             + np.array2string(son_akimlar, precision=3)
             + f" sapma={np.array2string(sapma, precision=3)} "
             + f"(tolerans {self.ayar.akim_tolerans_A} A)"
@@ -409,14 +409,14 @@ class KaynakGrubu:
 
     # ------------------------------------------------------------------
     def sifira_rampala(self) -> np.ndarray:
-        """Dort akimi rampa ile sifira indirir (cikis kapatilmaz)."""
+        """Dört akımı rampa ile sıfıra indirir (çıkış kapatılmaz)."""
         return self.rampala(np.zeros(BOBIN_SAYISI, dtype=float))
 
     def acil_sifirla(self) -> None:
-        """Her durumda akimlari sifira indirmeyi dener; hatalari yutar ama kaydeder.
+        """Her durumda akımları sıfıra indirmeyi dener; hataları yutar ama kaydeder.
 
-        Beklenmeyen hata, iletisim kopmasi, pencerenin kapatilmasi ya da
-        kullanici kesintisinde cagrilir.
+        Beklenmeyen hata, iletişim kopması, pencerenin kapatılması ya da
+        kullanıcı kesintisinde çağrılır.
         """
         try:
             self.sifira_rampala()
@@ -425,7 +425,7 @@ class KaynakGrubu:
                 KomutKaydi(
                     zaman=time.time(),
                     adres="(grup)",
-                    komut=f"ACIL: sifira rampalama basarisiz: {hata}",
+                    komut=f"ACİL: sıfıra rampalama başarısız: {hata}",
                     gonderildi=False,
                 )
             )
@@ -437,7 +437,7 @@ class KaynakGrubu:
                     pass
 
     def guvenli_kapat(self) -> None:
-        """Akimlari sifirlar, cikislari kapatir, baglantilari kapatir."""
+        """Akımları sıfırlar, çıkışları kapatır, bağlantıları kapatır."""
         try:
             self.sifira_rampala()
         except Exception:  # pragma: no cover - acil durum yolu
@@ -451,7 +451,7 @@ class KaynakGrubu:
                     KomutKaydi(
                         zaman=time.time(),
                         adres=kaynak.adres,
-                        komut=f"UYARI: cikis kapatilamadi: {hata}",
+                        komut=f"UYARI: çıkış kapatılamadı: {hata}",
                         gonderildi=False,
                     )
                 )

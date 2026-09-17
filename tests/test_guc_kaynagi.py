@@ -49,7 +49,7 @@ def test_kullanilan_komut_kumesi_genisletilmemis(grup):
         "OUTP OFF",
         "MEAS:VOLT?",
         "MEAS:CURR?",
-        "(baglanti kapatildi)",
+        "(bağlantı kapatıldı)",
     )
     for komut in komutlar(grup):
         assert komut.startswith(izinli_onekler), f"izin verilmeyen komut: {komut}"
@@ -93,19 +93,19 @@ def test_oturmazsa_hata_verir(kaynak_grubu_uret, kfg):
         bekle=lambda s: None,
     )
     grup.baslat()
-    with pytest.raises(GucKaynagiHatasi, match="oturmadi"):
+    with pytest.raises(GucKaynagiHatasi, match="oturmadı"):
         grup.rampala(np.full(4, 1.0))
 
 
 def test_max_akim_asimi_reddedilir(grup, kfg):
     kotu = np.full(4, kfg.guvenlik.bobin_basi_max_akim_A + 0.1)
-    with pytest.raises(GuvenlikHatasi, match="max akim"):
+    with pytest.raises(GuvenlikHatasi, match="max akım"):
         grup.rampala(kotu)
 
 
 def test_negatif_akim_reddedilir(grup):
     """Polarite role ile degisir; kaynaklar yalnizca pozitif akim surer."""
-    with pytest.raises(GuvenlikHatasi, match="Negatif akim"):
+    with pytest.raises(GuvenlikHatasi, match="Negatif akım"):
         grup.rampala(np.array([-1.0, 10.0, 10.0, 10.0]))
 
 
@@ -139,7 +139,7 @@ def test_olcumler_float_dondurur():
 
 
 def test_bozuk_yanit_yakalanir():
-    with pytest.raises(GucKaynagiHatasi, match="sayiya cevrilemedi"):
+    with pytest.raises(GucKaynagiHatasi, match="sayıya çevrilemedi"):
         SahteGucKaynagi._float_ayristir("OVERLOAD", "MEAS:CURR?")
 
 
@@ -159,5 +159,5 @@ def test_acil_sifirlama_hata_yutar(grup):
 
 def test_baslatilmadan_rampa_reddedilir(kaynak_grubu_uret):
     grup = kaynak_grubu_uret()
-    with pytest.raises(GucKaynagiHatasi, match="baslatilmadi"):
+    with pytest.raises(GucKaynagiHatasi, match="başlatılmadı"):
         grup.rampala(np.full(4, 1.0))

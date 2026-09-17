@@ -1,4 +1,4 @@
-"""Harmonik konvansiyonlari, feed-down merkezi ve arka plan cikarma testleri."""
+"""Harmonik konvansiyonları, feed-down merkezi ve arka plan çıkarma testleri."""
 from __future__ import annotations
 
 import dataclasses
@@ -10,7 +10,7 @@ from merkezleme.harmonikler import HarmonikHatasi, HarmonikKonvansiyonu, Harmoni
 
 
 def c2_ver(kfg, gradyen_T_m: float = 0.1) -> complex:
-    """Verilen gradyeni uretecek (saf normal) C_2."""
+    """Verilen gradyeni üretecek (saf normal) C_2."""
     return complex(gradyen_T_m * kfg.harmonikler.r_ref_m, 0.0)
 
 
@@ -25,7 +25,7 @@ def test_feed_down_bilinen_ofseti_geri_verir(kfg, konvansiyon):
 
 
 def test_arka_plan_dipolu_merkez_hatasina_donusur(kfg, konvansiyon):
-    """1 uT arka plan dipolu, 0.2 T/m gradyende ~5 um merkez hatasi verir."""
+    """1 uT arka plan dipolü, 0.2 T/m gradyende ~5 um merkez hatası verir."""
     gradyen = 0.2
     olcum = HarmonikOlcumu(bilesenler={1: 1e-6 + 0j, 2: c2_ver(kfg, gradyen)})
     z = konvansiyon.merkez(olcum)
@@ -40,7 +40,7 @@ def test_g_hedefe_gore_bagil_hesaplanir(kfg, konvansiyon):
 
 
 def test_arka_plan_kompleks_olarak_cikarilir(kfg, konvansiyon):
-    """Arka plan genlikten degil, kompleks olarak cikarilmali."""
+    """Arka plan genlikten değil, kompleks olarak çıkarılmalı."""
     olcum = HarmonikOlcumu(bilesenler={1: 3e-6 + 1e-6j, 2: c2_ver(kfg)})
     arka_plan = HarmonikOlcumu(bilesenler={1: 1e-6 - 0.5e-6j, 2: 0j})
     net = konvansiyon.arka_plan_cikar(olcum, arka_plan)
@@ -54,13 +54,13 @@ def test_yalniz_dipol_secenegi_ust_harmonikleri_korur(kfg):
     arka_plan = HarmonikOlcumu(bilesenler={1: 1e-6 + 0j, 2: 1e-6 + 0j})
     net = konvansiyon.arka_plan_cikar(olcum, arka_plan)
     assert net.bilesen(1) == pytest.approx(2e-6 + 0j)
-    assert net.bilesen(2) == pytest.approx(2.5e-3 + 0j)  # n=2 dokunulmadi
+    assert net.bilesen(2) == pytest.approx(2.5e-3 + 0j)  # n=2 dokunulmadı
 
 
 @pytest.mark.parametrize("n", [1, 2, 3])
 @pytest.mark.parametrize("genlik, faz", [(2.5e-4, 33.0), (1e-6, -120.0)])
 def test_genlik_faz_gidis_donus(konvansiyon, kfg, n, genlik, faz):
-    """Genlik/faz <-> C_n donusumu, faz 360/n modunda korunmali."""
+    """Genlik/faz <-> C_n dönüşümü, faz 360/n modunda korunmalı."""
     c_n = konvansiyon.genlik_fazdan(genlik, faz, n)
     geri_genlik, geri_faz = konvansiyon.genlik_faza(c_n, n)
     assert geri_genlik == pytest.approx(genlik, rel=1e-12)
@@ -82,7 +82,7 @@ def test_negatif_genlik_reddedilir(konvansiyon):
 
 
 def test_units_biciminde_merkez_olcekten_bagimsiz(kfg, konvansiyon):
-    """Normalize "units" girdide merkez ayni cikar (C_1/C_2 orani oldugu icin)."""
+    """Normalize "units" girdide merkez aynı çıkar (C_1/C_2 oranı olduğu için)."""
     c2 = c2_ver(kfg)
     d = complex(120e-6, -45e-6)
     c1 = -c2 * d / kfg.harmonikler.r_ref_m
@@ -94,7 +94,7 @@ def test_units_biciminde_merkez_olcekten_bagimsiz(kfg, konvansiyon):
 
 
 def test_units_biciminde_gradyen_mutlak_deger_ister(kfg):
-    """Normalize girdi mutlak olcek tasimadigi icin gradyen ayrica girilmeli."""
+    """Normalize girdi mutlak ölçek taşımadığı için gradyen ayrıca girilmeli."""
     units = HarmonikKonvansiyonu(
         dataclasses.replace(kfg.harmonikler, birim="units", units_mutlak_gradyen_T_m=None)
     )
@@ -106,7 +106,7 @@ def test_units_biciminde_gradyen_mutlak_deger_ister(kfg):
 
 
 def test_mT_birimi_tesla_ya_cevrilir(kfg):
-    """mT biriminde girilen C_2, gradyeni dogru olcekle vermeli."""
+    """mT biriminde girilen C_2, gradyeni doğru ölçekle vermeli."""
     mt = HarmonikKonvansiyonu(dataclasses.replace(kfg.harmonikler, birim="mT"))
     # G = 0.1 T/m  ->  B_2 = 2.5e-3 T = 2.5 mT
     olcum = HarmonikOlcumu(bilesenler={1: 0j, 2: 2.5 + 0j})
@@ -129,8 +129,8 @@ def test_izleme_sq_ve_roll(kfg, konvansiyon):
 @pytest.mark.parametrize("eslenik", [False, True])
 @pytest.mark.parametrize("isaret", [1, -1])
 def test_konvansiyon_bayraklari_tersinir_donusum_uretir(kfg, eslenik, isaret):
-    """eslenik / feed_down_isareti bayraklari merkezi yalnizca TERSINIR bir
-    donusumle degistirir; bu yuzden kapali cevrimin yakinsamasini bozmazlar."""
+    """eslenik / feed_down_isareti bayrakları merkezi yalnızca TERSİNİR bir
+    dönüşümle değiştirir; bu yüzden kapalı çevrimin yakınsamasını bozmazlar."""
     ayar = dataclasses.replace(kfg.harmonikler, eslenik=eslenik, feed_down_isareti=isaret)
     konvansiyon = HarmonikKonvansiyonu(ayar)
     c2 = c2_ver(kfg)
@@ -143,7 +143,7 @@ def test_konvansiyon_bayraklari_tersinir_donusum_uretir(kfg, eslenik, isaret):
         }
     )
     z = konvansiyon.merkez(olcum)
-    # Buyukluk her zaman korunur; yalnizca isaret/yon degisir.
+    # Büyüklük her zaman korunur; yalnızca işaret/yön değişir.
     assert abs(z) == pytest.approx(abs(d), rel=1e-9)
     assert abs(z.real) == pytest.approx(abs(d.real), rel=1e-9)
     assert abs(z.imag) == pytest.approx(abs(d.imag), rel=1e-9)

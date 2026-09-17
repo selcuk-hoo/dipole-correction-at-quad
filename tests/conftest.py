@@ -1,7 +1,7 @@
-"""Testler icin ortak fixture'lar.
+"""Testler için ortak fixture'lar.
 
-Butun testler simulator ve sahte guc kaynaklariyla calisir; donanim ya da elle
-giris gerekmez.
+Bütün testler simülatör ve sahte güç kaynaklarıyla çalışır; donanım ya da elle
+giriş gerekmez.
 """
 from __future__ import annotations
 
@@ -31,16 +31,16 @@ def kfg() -> Yapilandirma:
 
 @pytest.fixture(scope="session")
 def qt_uygulama():
-    """Butun arayuz testlerinin paylastigi QApplication.
+    """Bütün arayüz testlerinin paylaştığı QApplication.
 
-    Session kapsaminda tutulur: QApplication nesnesine referans kalmazsa
-    coplenip yok edilir ve sonrasinda QWidget olusturmak Qt'yi abort ettirir.
-    PyQt5 kurulu degilse ilgili testler atlanir.
+    Session kapsamında tutulur: QApplication nesnesine referans kalmazsa
+    çöplenip yok edilir ve sonrasında QWidget oluşturmak Qt'yi abort ettirir.
+    PyQt5 kurulu değilse ilgili testler atlanır.
     """
     import os
 
     os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
-    pytest.importorskip("PyQt5", reason="PyQt5 kurulu degil")
+    pytest.importorskip("PyQt5", reason="PyQt5 kurulu değil")
     from PyQt5.QtWidgets import QApplication
 
     uygulama = QApplication.instance() or QApplication([])
@@ -60,7 +60,7 @@ def mod_bazi(kfg: Yapilandirma) -> ModBazi:
 
 @pytest.fixture
 def simulator_uret(kfg: Yapilandirma):
-    """Istenen ofset/roll/arka plan ile simulator ureten fabrika."""
+    """İstenen ofset/roll/arka plan ile simülatör üreten fabrika."""
 
     def uret(
         ofset_m: complex | None = None,
@@ -69,10 +69,10 @@ def simulator_uret(kfg: Yapilandirma):
         tohum: int = 1,
         **simulator_ayarlari,
     ) -> Simulator:
-        """Simulator uretir.
+        """Simülatör üretir.
 
-        `ofset_m`, `roll_rad` ve `arka_plan_T` verilmezse yapilandirmadaki
-        degerler korunur (None). Acikca 0 vermek "temiz durum" demektir.
+        `ofset_m`, `roll_rad` ve `arka_plan_T` verilmezse yapılandırmadaki
+        değerler korunur (None). Açıkça 0 vermek "temiz durum" demektir.
         """
         ayar = (
             dataclasses.replace(kfg.simulator, **simulator_ayarlari)
@@ -93,7 +93,7 @@ def simulator_uret(kfg: Yapilandirma):
 
 @pytest.fixture
 def temiz_simulator(simulator_uret):
-    """Gurultusuz, ofsetsiz, rollsuz, arka plansiz simulator (analitik kontroller icin)."""
+    """Gürültüsüz, ofsetsiz, rollsüz, arka plansız simülatör (analitik kontroller için)."""
     return simulator_uret(
         ofset_m=0j, roll_rad=0.0, arka_plan_T=0j, harmonik_gurultu_bagil=0.0
     )
@@ -101,7 +101,7 @@ def temiz_simulator(simulator_uret):
 
 @pytest.fixture
 def kaynak_grubu_uret(kfg: Yapilandirma):
-    """Sahte (kuru calisma) kaynak grubu ureten fabrika; beklemeler atlanir."""
+    """Sahte (kuru çalışma) kaynak grubu üreten fabrika; beklemeler atlanır."""
 
     def uret(guvenlik=None) -> KaynakGrubu:
         return KaynakGrubu.olustur(
@@ -117,7 +117,7 @@ def kaynak_grubu_uret(kfg: Yapilandirma):
 
 @pytest.fixture
 def akis_uret(kfg, konvansiyon, mod_bazi, kaynak_grubu_uret, tmp_path):
-    """Simulatore bagli, tam kurulmus bir IsAkisi ureten fabrika."""
+    """Simülatöre bağlı, tam kurulmuş bir IsAkisi üreten fabrika."""
 
     def uret(simulator: Simulator) -> tuple[IsAkisi, SimulatorGirisi, Calistirma]:
         kaynak = SimulatorGirisi(simulator)
@@ -129,7 +129,7 @@ def akis_uret(kfg, konvansiyon, mod_bazi, kaynak_grubu_uret, tmp_path):
 
 
 def kalibrasyonu_yurut(akis: IsAkisi, kaynak: SimulatorGirisi, max_adim: int = 200) -> None:
-    """Kalibrasyon fazini otomatik tamamlar (duzeltme fazi baslar)."""
+    """Kalibrasyon fazını otomatik tamamlar (düzeltme fazı başlar)."""
     from merkezleme.is_akisi import Bekleme, Faz
 
     akis.basla()
@@ -140,7 +140,7 @@ def kalibrasyonu_yurut(akis: IsAkisi, kaynak: SimulatorGirisi, max_adim: int = 2
             akis.olcum_gonder(kaynak.olcum_al(akis.mevcut_istek))
         else:  # pragma: no cover
             raise AssertionError(f"beklenmeyen bekleme: {akis.bekleme}")
-    raise AssertionError("kalibrasyon tamamlanmadi")
+    raise AssertionError("kalibrasyon tamamlanmadı")
 
 
 def y_olc(
@@ -150,7 +150,7 @@ def y_olc(
     gradyen_hedefi: float,
     arka_plan_cikar: bool = True,
 ):
-    """Arka plan sirasini uygulayarak tek bir y olcumu yapar."""
+    """Arka plan sırasını uygulayarak tek bir y ölçümü yapar."""
     arka_plan = simulator.olc(np.zeros(4)) if arka_plan_cikar else None
     olcum = simulator.olc(akimlar)
     net = konvansiyon.arka_plan_cikar(olcum, arka_plan)

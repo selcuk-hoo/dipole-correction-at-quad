@@ -1,31 +1,34 @@
-"""Arayuz temalari: varsayilan ve eskilerin fosforlu monokrom ekranlari.
+"""Arayüz temaları: varsayılan ve eskilerin fosforlu monokrom ekranları.
 
-Arayuzdeki BUTUN renkler bu moduldedir; `arayuz.py` hicbir rengi kendi icinde
-tanimlamaz. Boylece yeni bir tema eklemek icin yalnizca buraya bir `Tema`
-kaydi eklenir.
+Arayüzdeki BÜTÜN renkler bu modüldedir; `arayuz.py` hiçbir rengi kendi içinde
+tanımlamaz. Böylece yeni bir tema eklemek için yalnızca buraya bir `Tema`
+kaydı eklenir.
 
 Temalar
 -------
-* `varsayilan`      : sistem temasi (acik zemin, renkli vurgular)
-* `fosfor_yesil`    : P1 fosfor yesili monokrom CRT
+* `varsayilan`      : sistem teması (açık zemin, renkli vurgular)
+* `fosfor_yesil`    : P1 fosfor yeşili monokrom CRT
 * `fosfor_turuncu`  : P3 fosfor amber (turuncu) monokrom CRT
 
-Monokrom temalarda renk yerine **ters video** (zemin ile on planin yer
-degistirmesi) ve parlaklik kademeleri kullanilir; gercek CRT'lerde vurgu
-boyle yapiliyordu. Bu yuzden "tehlike" rengi yoktur: DURDUR dugmesi ters
-videoya gecer.
+Monokrom temalarda renk yerine **ters video** (zemin ile ön planın yer
+değiştirmesi) ve parlaklık kademeleri kullanılır; gerçek CRT'lerde vurgu
+böyle yapılıyordu. Bu yüzden "tehlike" rengi yoktur: DURDUR düğmesi ters
+videoya geçer.
+
+Not: tanımlayıcılar (sınıf/alan adları) ve yapılandırma değerleri bilinçli
+olarak ASCII'dir; yalnızca insanın okuduğu metinler tam Türkçedir.
 """
 from __future__ import annotations
 
 from dataclasses import dataclass
 
-# Monokrom temalarda kullanilan yazi tipi yigini (ilk bulunani kullanilir).
+# Monokrom temalarda kullanılan yazı tipi yığını (ilk bulunanı kullanılır).
 MONO_YIGIN = '"DejaVu Sans Mono", "Liberation Mono", "Courier New", monospace'
 
 
 @dataclass(frozen=True)
 class Tema:
-    """Bir temanin renk paleti ve turetilmis stilleri."""
+    """Bir temanın renk paleti ve türetilmiş stilleri."""
 
     ad: str
     baslik: str
@@ -36,7 +39,7 @@ class Tema:
     parlak: str
     sonuk: str
     cok_sonuk: str
-    # Yalnizca renkli (varsayilan) temada kullanilanlar
+    # Yalnızca renkli (varsayılan) temada kullanılanlar
     vurgu: str = "#0d47a1"
     uyari_zemin: str = "#fff8e1"
     uyari_kenar: str = "#ffca28"
@@ -46,13 +49,13 @@ class Tema:
     font_yigini: str = ""
 
     # ------------------------------------------------------------------
-    # Uygulama geneli stil sayfasi
+    # Uygulama geneli stil sayfası
     # ------------------------------------------------------------------
     def stil_sayfasi(self) -> str:
-        """QApplication'a uygulanacak QSS. Varsayilan tema icin bostur.
+        """QApplication'a uygulanacak QSS. Varsayılan tema için boştur.
 
-        Uygulama geneline verilir; boylece QMessageBox gibi ayri ust seviye
-        pencereler de temali gorunur.
+        Uygulama geneline verilir; böylece QMessageBox gibi ayrı üst seviye
+        pencereler de temalı görünür.
         """
         if not self.monokrom:
             return ""
@@ -66,8 +69,8 @@ QWidget {{
 QFrame#ustSerit {{
     border: 1px solid {self.sonuk};
 }}
-/* QLabel, QFrame'den turer; bu yuzden cerceve kurali yalnizca ust seride
-   baglanir ve QLabel kurali SONRA gelir (esit ozgullukte son kural kazanir). */
+/* QLabel, QFrame'den türer; bu yüzden çerçeve kuralı yalnızca üst şeride
+   bağlanır ve QLabel kuralı SONRA gelir (eşit özgüllükte son kural kazanır). */
 QLabel {{
     background: transparent;
     border: none;
@@ -157,7 +160,7 @@ QToolTip {{
 """
 
     # ------------------------------------------------------------------
-    # Rol bazli stiller (arayuzdeki tek tek ogeler)
+    # Rol bazlı stiller (arayüzdeki tek tek ögeler)
     # ------------------------------------------------------------------
     def _ters_video(self, kalin: bool = True) -> str:
         agirlik = "font-weight: bold;" if kalin else ""
@@ -167,7 +170,7 @@ QToolTip {{
         )
 
     def kip_stili(self, canli: bool) -> str:
-        """Kip etiketi: canli kip dikkat cekmeli (kazara canli calismayi onlemek icin)."""
+        """Kip etiketi: canlı kip dikkat çekmeli (kazara canlı çalışmayı önlemek için)."""
         if self.monokrom:
             if canli:
                 return self._ters_video()
@@ -181,12 +184,12 @@ QToolTip {{
         return f"color: white; background-color: {self.deneme_zemin}; padding: 2px 6px;"
 
     def eylem_stili(self) -> str:
-        """Sonraki eylem satiri: en dikkat cekici metin."""
+        """Sonraki eylem satırı: en dikkat çekici metin."""
         renk = self.parlak if self.monokrom else self.vurgu
         return f"color: {renk}; font-size: 13pt;"
 
     def yorum_stili(self) -> str:
-        """Girisin fiziksel karsiligini gosteren serit."""
+        """Girişin fiziksel karşılığını gösteren şerit."""
         if self.monokrom:
             return (
                 f"background-color: {self.panel_arka_plan}; color: {self.parlak}; "
@@ -201,7 +204,7 @@ QToolTip {{
         return f"font-size: 12pt; color: {self.on_plan}" + (";" if self.monokrom else "")
 
     def sonuk_stili(self) -> str:
-        """Ikincil/gri metin (sutun basliklari, izleme satiri, istege bagli alanlar)."""
+        """İkincil/gri metin (sütun başlıkları, izleme satırı, isteğe bağlı alanlar)."""
         renk = self.sonuk if self.monokrom else "gray"
         return f"color: {renk};"
 
@@ -209,7 +212,7 @@ QToolTip {{
         return "font-weight: bold;" + (f" color: {self.on_plan};" if self.monokrom else "")
 
     def durdur_stili(self) -> str:
-        """DURDUR dugmesi: monokrom temalarda ters video, renkli temada kirmizi."""
+        """DURDUR düğmesi: monokrom temalarda ters video, renkli temada kırmızı."""
         if self.monokrom:
             return self._ters_video()
         return f"color: white; background-color: {self.tehlike_zemin}; font-weight: bold;"
@@ -217,7 +220,7 @@ QToolTip {{
 
 VARSAYILAN = Tema(
     ad="varsayilan",
-    baslik="Varsayilan (sistem)",
+    baslik="Varsayılan (sistem)",
     monokrom=False,
     arka_plan="",
     panel_arka_plan="",
@@ -229,7 +232,7 @@ VARSAYILAN = Tema(
 
 FOSFOR_YESIL = Tema(
     ad="fosfor_yesil",
-    baslik="Fosfor yesili (CRT)",
+    baslik="Fosfor yeşili (CRT)",
     monokrom=True,
     arka_plan="#050b05",
     panel_arka_plan="#020602",
@@ -259,9 +262,9 @@ TEMALAR: dict[str, Tema] = {
 
 
 def tema_al(ad: str) -> Tema:
-    """Ada gore tema dondurur; bilinmeyen ad icin aciklayici hata verir."""
+    """Ada göre tema döndürür; bilinmeyen ad için açıklayıcı hata verir."""
     if ad not in TEMALAR:
         raise KeyError(
-            f"Bilinmeyen tema: {ad!r}; secenekler: {', '.join(TEMALAR)}"
+            f"Bilinmeyen tema: {ad!r}; seçenekler: {', '.join(TEMALAR)}"
         )
     return TEMALAR[ad]

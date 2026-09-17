@@ -20,7 +20,7 @@ def test_uc_tema_var():
 
 
 def test_bilinmeyen_tema_aciklayici_hata():
-    with pytest.raises(KeyError, match="secenekler"):
+    with pytest.raises(KeyError, match="seçenekler"):
         tema_al("fosfor_mavi")
 
 

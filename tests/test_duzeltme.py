@@ -176,7 +176,7 @@ def test_guvenlik_sinirlari_asilinca_uygulanmaz(kfg, mod_bazi):
     y = KontrolVektoru(x_c=2000e-6, y_c=0.0, g=0.0)
     oneri = duzeltme_hesapla(R, y, mod_bazi.nominal_akimlar, mod_bazi, kfg.duzeltme, kfg.guvenlik)
     assert not oneri.guvenlik.guvenli
-    assert any("adim basi" in i for i in oneri.guvenlik.ihlaller)
+    assert any("adım başı" in i for i in oneri.guvenlik.ihlaller)
 
 
 def test_maks_akim_siniri_kontrol_edilir(kfg, mod_bazi):
@@ -201,7 +201,7 @@ def test_oneri_ozeti_beklenen_degisimi_gosterir(kfg, mod_bazi):
     y = KontrolVektoru(x_c=100e-6, y_c=-50e-6, g=1e-4)
     oneri = duzeltme_hesapla(R, y, mod_bazi.nominal_akimlar, mod_bazi, kfg.duzeltme, kfg.guvenlik)
     metin = oneri.ozet_metni(kfg.miknatis.nominal_akim_A)
-    assert "Beklenen merkez degisimi" in metin
+    assert "Beklenen merkez değişimi" in metin
     assert "Mod genlikleri" in metin
     # alpha = 0.9 -> beklenen y, olculenin %10'una inmeli
     assert oneri.beklenen_y.x_c == pytest.approx(y.x_c * (1 - kfg.duzeltme.alpha), rel=1e-6)
@@ -223,7 +223,7 @@ def test_tekrarlanabilirlik_ve_tolerans_uyarisi(kfg, konvansiyon, mod_bazi, simu
     siki = dataclasses.replace(kfg.duzeltme, merkez_toleransi_um=0.01)
     sonuc_siki = tekrarlanabilirligi_degerlendir(olcumler, siki)
     assert not sonuc_siki.tolerans_yeterli_mi
-    assert any("cok siki" in u for u in sonuc_siki.uyarilar)
+    assert any("çok sıkı" in u for u in sonuc_siki.uyarilar)
 
 
 def test_tek_olcumle_tekrarlanabilirlik_hesaplanmaz(kfg):

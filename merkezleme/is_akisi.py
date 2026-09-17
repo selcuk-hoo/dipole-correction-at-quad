@@ -1,26 +1,26 @@
-"""Is akisi: adim sirasi, durum makinesi, durum dosyasi ve rutinler.
+"""İş akışı: adım sırası, durum makinesi, durum dosyası ve rutinler.
 
-Her olcum noktasinda sira sabittir:
+Her ölçüm noktasında sıra sabittir:
 
-    1. Program dort akimi rampa ile SIFIRA indirir, oturmasini bekler,
-       "Arka plan olcumunu alin ve girin" der.
-    2. Kullanici arka plan harmoniklerini girer ve onaylar.
-       (Atlarsa son gecerli arka plan kullanilir ve bu durum kaydedilir.)
-    3. (Gerekiyorsa) kullanicidan bir eylem istenir: role ile polarite
-       degisimi, modulatorun acilip kapatilmasi. Akimlar sifirdayken sorulur.
-    4. Program akimlari hedefe rampa ile cikarir, oturmasini bekler, olculen
-       akimlari gosterir, "Olcumu alin ve girin" der.
-    5. Kullanici harmonikleri girer ve onaylar.
-    6. Program arka plani cikarir, y'yi hesaplar, sonucu gosterir ve kaydeder,
-       sonraki adima gecer.
+    1. Program dört akımı rampa ile SIFIRA indirir, oturmasını bekler,
+       "Arka plan ölçümünü alın ve girin" der.
+    2. Kullanıcı arka plan harmoniklerini girer ve onaylar.
+       (Atlarsa son geçerli arka plan kullanılır ve bu durum kaydedilir.)
+    3. (Gerekiyorsa) kullanıcıdan bir eylem istenir: röle ile polarite
+       değişimi, modülatörün açılıp kapatılması. Akımlar sıfırdayken sorulur.
+    4. Program akımları hedefe rampa ile çıkarır, oturmasını bekler, ölçülen
+       akımları gösterir, "Ölçümü alın ve girin" der.
+    5. Kullanıcı harmonikleri girer ve onaylar.
+    6. Program arka planı çıkarır, y'yi hesaplar, sonucu gösterir ve kaydeder,
+       sonraki adıma geçer.
 
-Butun olcum noktalari tek bir gorev kuyrugundan gelir; kalibrasyon, duzeltme
-ve rutinler (tekrarlanabilirlik, polarite dogrulamasi, modulator
-karsilastirmasi) ayni makineyi kullanir.
+Bütün ölçüm noktaları tek bir görev kuyruğundan gelir; kalibrasyon, düzeltme
+ve rutinler (tekrarlanabilirlik, polarite doğrulaması, modülatör
+karşılaştırması) aynı makineyi kullanır.
 
-Arayuz olay tabanli calistigi icin bu sinif BLOKLAMAZ: `olcum_gonder`,
-`duzeltmeyi_onayla`, `kullanici_eylemini_onayla` gibi cagrilarla ilerler.
-Testler ve deneme kipi ayni cagrilari `otomatik_yurut` ile dongude yapar.
+Arayüz olay tabanlı çalıştığı için bu sınıf BLOKLAMAZ: `olcum_gonder`,
+`duzeltmeyi_onayla`, `kullanici_eylemini_onayla` gibi çağrılarla ilerler.
+Testler ve deneme kipi aynı çağrıları `otomatik_yurut` ile döngüde yapar.
 """
 from __future__ import annotations
 
@@ -86,12 +86,12 @@ class Bekleme(str, Enum):
 
 
 class IsAkisiHatasi(RuntimeError):
-    """Is akisi beklenmeyen bir durumda cagrildi."""
+    """İş akışı beklenmeyen bir durumda çağrıldı."""
 
 
 @dataclass
 class OlcumGorevi:
-    """Kuyrugun tek bir ogesi: bir akim ayarinda bir olcum."""
+    """Kuyruğun tek bir öğesi: bir akım ayarında bir ölçüm."""
 
     tur: str
     etiket: str
@@ -156,7 +156,7 @@ class OlcumGorevi:
 
 @dataclass
 class RutinSonucu:
-    """Bir rutinin (polarite, modulator, tekrarlanabilirlik) sonucu."""
+    """Bir rutinin (polarite, modülatör, tekrarlanabilirlik) sonucu."""
 
     ad: str
     metin: str
@@ -164,7 +164,7 @@ class RutinSonucu:
 
 
 class IsAkisi:
-    """Kalibrasyon ve duzeltme akisini yuruten durum makinesi."""
+    """Kalibrasyon ve düzeltme akışını yürüten durum makinesi."""
 
     def __init__(
         self,
@@ -221,12 +221,12 @@ class IsAkisi:
         self._toplam_gorev_tahmini = 0
 
     # ==================================================================
-    # Baslatma
+    # Başlatma
     # ==================================================================
     def basla(self) -> None:
-        """Kaynaklari baslatir, kalibrasyon plani varsa kuyruga koyar."""
+        """Kaynakları başlatır, kalibrasyon planı varsa kuyruğa koyar."""
         if self.faz is not Faz.HAZIR:
-            raise IsAkisiHatasi(f"basla() yalnizca HAZIR fazinda cagrilabilir (faz: {self.faz})")
+            raise IsAkisiHatasi(f"basla() yalnızca HAZIR fazında çağrılabilir (faz: {self.faz})")
         self.kaynaklar.baslat()
         if self.kalibrasyon is None:
             self._kalibrasyonu_kuyrukla()
@@ -237,7 +237,7 @@ class IsAkisi:
         self._sonraki_gorevi_al()
 
     def kalibrasyonu_yukle(self, sonuc: KalibrasyonSonucu) -> None:
-        """Onceki oturumdan kalibrasyon yukler; kalibrasyon fazi atlanir."""
+        """Önceki oturumdan kalibrasyon yükler; kalibrasyon fazı atlanır."""
         self.kalibrasyon = sonuc
         self.gradyen_hedefi_T_m = sonuc.gradyen_hedefi_T_m
 
@@ -273,7 +273,7 @@ class IsAkisi:
         )
 
     # ==================================================================
-    # Gorev hazirligi (donanim adimlari)
+    # Görev hazırlığı (donanım adımları)
     # ==================================================================
     def _sonraki_gorevi_al(self) -> None:
         if self.bekleme is Bekleme.DURAKLATILDI:
@@ -287,12 +287,12 @@ class IsAkisi:
         self._gorevi_hazirla()
 
     def _gorevi_hazirla(self) -> None:
-        """Mevcut gorev icin donanim adimlarini yapar ve beklemeyi belirler."""
+        """Mevcut görev için donanım adımlarını yapar ve beklemeyi belirler."""
         gorev = self.mevcut_gorev
         if gorev is None:
             return
 
-        # 1) Arka plan gerekiyorsa: akimlari sifira indir ve arka plan iste.
+        # 1) Arka plan gerekiyorsa: akımları sıfıra indir ve arka plan iste.
         if gorev.arka_plan_al and not self.arka_plan_taze:
             self.mevcut_akimlar_A = self.kaynaklar.sifira_rampala()
             _, self.olculen_akimlar_A = self.kaynaklar.olcumleri_oku()
@@ -309,7 +309,7 @@ class IsAkisi:
             )
             return
 
-        # 2) Kullanici eylemi gerekiyorsa (role/modulator): akimlar sifirda sorulur.
+        # 2) Kullanıcı eylemi gerekiyorsa (röle/modülatör): akımlar sıfırda sorulur.
         if gorev.kullanici_eylemi:
             if np.any(np.abs(self.mevcut_akimlar_A) > 1e-9):
                 self.kaynaklar.sifira_rampala()
@@ -318,7 +318,7 @@ class IsAkisi:
             self.mevcut_istek = None
             return
 
-        # 3) Hedefe rampala, oturmayi bekle, olculen akimlari goster.
+        # 3) Hedefe rampala, oturmayı bekle, ölçülen akımları göster.
         self.olculen_akimlar_A = self.kaynaklar.rampala(gorev.akimlar_A)
         self.olculen_gerilimler_V, self.olculen_akimlar_A = self.kaynaklar.olcumleri_oku()
         self.mevcut_akimlar_A = np.asarray(gorev.akimlar_A, dtype=float).copy()
@@ -334,19 +334,19 @@ class IsAkisi:
         )
 
     # ==================================================================
-    # Kullanici girisleri
+    # Kullanıcı girişleri
     # ==================================================================
     def arka_plani_atla(self) -> None:
-        """Arka plan adimini atlar; son gecerli arka plan kullanilir ve kaydedilir."""
+        """Arka plan adımını atlar; son geçerli arka plan kullanılır ve kaydedilir."""
         if self.bekleme is not Bekleme.ARKA_PLAN_GIRISI:
             raise IsAkisiHatasi("Arka plan beklenmiyor")
         if self.son_arka_plan is None:
             raise IsAkisiHatasi(
-                "Atlanamaz: henuz gecerli bir arka plan olcumu yok (ilk arka plan zorunlu)"
+                "Atlanamaz: henüz geçerli bir arka plan ölçümü yok (ilk arka plan zorunlu)"
             )
         self.atlanan_arka_plan_sayisi += 1
         self.arka_plan_taze = True
-        notu = "Arka plan adimi atlandi; son gecerli arka plan kullanildi"
+        notu = "Arka plan adımı atlandı; son geçerli arka plan kullanıldı"
         self.notlar.append(f"{self.mevcut_gorev.etiket if self.mevcut_gorev else ''}: {notu}")
         self.calistirma.olcum_yaz(
             OlcumKaydi(
@@ -362,25 +362,25 @@ class IsAkisi:
         self.durumu_kaydet()
 
     def kullanici_eylemini_onayla(self) -> None:
-        """Role degisimi / modulator gibi bir eylemin yapildigini onaylar."""
+        """Röle değişimi / modülatör gibi bir eylemin yapıldığını onaylar."""
         if self.bekleme is not Bekleme.KULLANICI_EYLEMI:
-            raise IsAkisiHatasi("Kullanici eylemi beklenmiyor")
+            raise IsAkisiHatasi("Kullanıcı eylemi beklenmiyor")
         gorev = self.mevcut_gorev
         if gorev is not None:
-            self.notlar.append(f"Kullanici eylemi onaylandi: {gorev.kullanici_eylemi}")
+            self.notlar.append(f"Kullanıcı eylemi onaylandı: {gorev.kullanici_eylemi}")
             gorev.kullanici_eylemi = None
         self._gorevi_hazirla()
         self.durumu_kaydet()
 
     def olcum_dogrula(self, olcum: HarmonikOlcumu) -> DogrulamaSonucu:
-        """Girisi uygulamadan once dogrular (mertebe + olasi yazim hatasi)."""
+        """Girişi uygulamadan önce doğrular (mertebe + olası yazım hatası)."""
         olculen_y: KontrolVektoru | None = None
         beklenen: KontrolVektoru | None = None
         if self.bekleme is Bekleme.OLCUM_GIRISI:
             net = self.konvansiyon.arka_plan_cikar(olcum, self.son_arka_plan)
             try:
                 olculen_y = self.konvansiyon.kontrol_vektoru(net, self.gradyen_hedefi())
-            except Exception:  # olcum gecersizse mertebe kontrolu yine calisir
+            except Exception:  # ölçüm geçersizse mertebe kontrolü yine çalışır
                 olculen_y = None
             if (
                 olculen_y is not None
@@ -413,14 +413,14 @@ class IsAkisi:
         return self.mevcut_akimlar_A
 
     def olcum_gonder(self, olcum: HarmonikOlcumu) -> None:
-        """Girilen harmonikleri isler ve akisi ilerletir."""
+        """Girilen harmonikleri işler ve akışı ilerletir."""
         if self.bekleme is Bekleme.ARKA_PLAN_GIRISI:
             self._arka_plani_isle(olcum)
             return
         if self.bekleme is Bekleme.OLCUM_GIRISI:
             self._olcumu_isle(olcum)
             return
-        raise IsAkisiHatasi(f"Su anda olcum beklenmiyor (bekleme: {self.bekleme})")
+        raise IsAkisiHatasi(f"Şu anda ölçüm beklenmiyor (bekleme: {self.bekleme})")
 
     def _arka_plani_isle(self, olcum: HarmonikOlcumu) -> None:
         self.son_arka_plan = olcum
@@ -453,7 +453,7 @@ class IsAkisi:
         net = self.konvansiyon.arka_plan_cikar(olcum, self.son_arka_plan)
         self.son_olcum_net = net
 
-        # Kalibrasyonun ilk sifir noktasi ayni zamanda G_hedef'in olculdugu noktadir.
+        # Kalibrasyonun ilk sıfır noktası aynı zamanda G_hedef'in ölçüldüğü noktadır.
         if (
             self.gradyen_hedefi_T_m is None
             and self.kfg.miknatis.gradyen_hedefi_kaynagi == "ilk_olcum"
@@ -494,7 +494,7 @@ class IsAkisi:
             )
         )
 
-        # Arka plan bir sonraki nokta icin tazeligini yitirir.
+        # Arka plan bir sonraki nokta için tazeliğini yitirir.
         self.arka_plan_taze = False
 
         if gorev.rutin:
@@ -510,10 +510,10 @@ class IsAkisi:
         self.durumu_kaydet()
 
     # ==================================================================
-    # Faz gecisleri
+    # Faz geçişleri
     # ==================================================================
     def gradyen_hedefi(self) -> float:
-        """Gecerli G_hedef: ilk olcumden gelen deger, yoksa yapilandirmadaki nominal."""
+        """Geçerli G_hedef: ilk ölçümden gelen değer, yoksa yapılandırmadaki nominal."""
         if self.gradyen_hedefi_T_m is not None:
             return self.gradyen_hedefi_T_m
         return self.kfg.miknatis.nominal_gradyen_T_m
@@ -523,8 +523,8 @@ class IsAkisi:
             self._kalibrasyonu_tamamla()
             return
         if self.faz is Faz.RUTIN:
-            # Rutin bittiginde rutin ONCESI faza donulur. Ana akis zaten
-            # tamamlanmissa TAMAMLANDI'da kalinir; yoksa duzeltme surer.
+            # Rutin bittiğinde rutin ÖNCESİ faza dönülür. Ana akış zaten
+            # tamamlanmışsa TAMAMLANDI'da kalınır; yoksa düzeltme sürer.
             onceki = getattr(self, "_rutin_oncesi_faz", Faz.TAMAMLANDI)
             if onceki is Faz.DUZELTME and (self.kuyruk or self.bekleyen_oneri is not None):
                 self.faz = Faz.DUZELTME
@@ -564,14 +564,14 @@ class IsAkisi:
     def _duzeltmeyi_degerlendir(self, y: KontrolVektoru) -> None:
         durum = yakinsama_durumu(y, self.kfg.duzeltme)
         if durum.yakinsadi:
-            self.notlar.append(f"Yakinsadi ({self.iterasyon} iterasyon): {durum.metin(self.kfg.duzeltme)}")
+            self.notlar.append(f"Yakınsadı ({self.iterasyon} iterasyon): {durum.metin(self.kfg.duzeltme)}")
             self.faz = Faz.TAMAMLANDI
             self.bekleme = Bekleme.YOK
             self.mevcut_istek = None
             return
         if self.iterasyon >= self.kfg.duzeltme.max_iterasyon:
             self.durdurma_nedeni = (
-                f"Maksimum iterasyon sayisina ({self.kfg.duzeltme.max_iterasyon}) ulasildi; "
+                f"Maksimum iterasyon sayısına ({self.kfg.duzeltme.max_iterasyon}) ulaşıldı; "
                 f"{durum.metin(self.kfg.duzeltme)}"
             )
             self.notlar.append(self.durdurma_nedeni)
@@ -580,7 +580,7 @@ class IsAkisi:
             self.mevcut_istek = None
             return
         if self.kalibrasyon is None:
-            raise IsAkisiHatasi("Duzeltme icin kalibrasyon gerekir")
+            raise IsAkisiHatasi("Düzeltme için kalibrasyon gerekir")
 
         self.bekleyen_oneri = duzeltme_hesapla(
             self.kalibrasyon.R,
@@ -594,12 +594,12 @@ class IsAkisi:
         self.mevcut_istek = None
 
     def duzeltmeyi_onayla(self) -> None:
-        """Onerilen akimlari uygular ve yeni bir olcum adimi kuyruklar."""
+        """Önerilen akımları uygular ve yeni bir ölçüm adımı kuyruklar."""
         if self.bekleme is not Bekleme.DUZELTME_ONAYI or self.bekleyen_oneri is None:
-            raise IsAkisiHatasi("Onaylanacak bir duzeltme onerisi yok")
+            raise IsAkisiHatasi("Onaylanacak bir düzeltme önerisi yok")
         oneri = self.bekleyen_oneri
         if not oneri.guvenlik.guvenli:
-            self.durdurma_nedeni = "Guvenlik siniri asildi; duzeltme UYGULANMADI.\n" + "\n".join(
+            self.durdurma_nedeni = "Güvenlik sınırı aşıldı; düzeltme UYGULANMADI.\n" + "\n".join(
                 oneri.guvenlik.ihlaller
             )
             self.notlar.append(self.durdurma_nedeni)
@@ -614,9 +614,9 @@ class IsAkisi:
         self._sonraki_gorevi_al()
         self.durumu_kaydet()
 
-    def duzeltmeyi_reddet(self, neden: str = "kullanici reddetti") -> None:
-        """Oneriyi uygulamadan akisi durdurur."""
-        self.durdurma_nedeni = f"Duzeltme uygulanmadi: {neden}"
+    def duzeltmeyi_reddet(self, neden: str = "kullanıcı reddetti") -> None:
+        """Öneriyi uygulamadan akışı durdurur."""
+        self.durdurma_nedeni = f"Düzeltme uygulanmadı: {neden}"
         self.notlar.append(self.durdurma_nedeni)
         self.bekleyen_oneri = None
         self.faz = Faz.DURDURULDU
@@ -624,13 +624,13 @@ class IsAkisi:
         self.durumu_kaydet()
 
     # ==================================================================
-    # Nokta tekrari, duraklatma, durdurma
+    # Nokta tekrarı, duraklatma, durdurma
     # ==================================================================
     def noktayi_tekrarla(self) -> None:
-        """Mevcut noktayi bastan alir (arka plan dahil)."""
+        """Mevcut noktayı baştan alır (arka plan dahil)."""
         if self.mevcut_gorev is None:
             raise IsAkisiHatasi("Tekrarlanacak nokta yok")
-        self.notlar.append(f"Nokta tekrarlandi: {self.mevcut_gorev.etiket}")
+        self.notlar.append(f"Nokta tekrarlandı: {self.mevcut_gorev.etiket}")
         if self.mevcut_gorev.tur == ADIM_KALIBRASYON and self._kalibrasyon_olcumleri:
             nokta = self.mevcut_gorev.kalibrasyon_noktasi
             if nokta is not None and self._kalibrasyon_olcumleri[-1][0] is nokta:
@@ -640,23 +640,23 @@ class IsAkisi:
         self.durumu_kaydet()
 
     def duraklat(self) -> None:
-        """Akisi duraklatir; akimlar oldugu gibi korunur."""
+        """Akışı duraklatır; akımlar olduğu gibi korunur."""
         if self.bekleme is Bekleme.DURAKLATILDI:
             return
         self._duraklatma_oncesi = self.bekleme
         self.bekleme = Bekleme.DURAKLATILDI
-        self.notlar.append("Akis duraklatildi")
+        self.notlar.append("Akış duraklatıldı")
         self.durumu_kaydet()
 
     def devam_et(self) -> None:
         if self.bekleme is not Bekleme.DURAKLATILDI:
             return
         self.bekleme = getattr(self, "_duraklatma_oncesi", Bekleme.YOK)
-        self.notlar.append("Akis devam ettirildi")
+        self.notlar.append("Akış devam ettirildi")
         self.durumu_kaydet()
 
-    def durdur(self, neden: str = "kullanici durdurdu") -> None:
-        """Akisi durdurur ve akimlari rampa ile sifira indirir."""
+    def durdur(self, neden: str = "kullanıcı durdurdu") -> None:
+        """Akışı durdurur ve akımları rampa ile sıfıra indirir."""
         self.durdurma_nedeni = neden
         self.notlar.append(f"DURDURULDU: {neden}")
         self.faz = Faz.DURDURULDU
@@ -673,7 +673,7 @@ class IsAkisi:
     # Rutinler
     # ==================================================================
     def tekrarlanabilirlik_rutinini_kuyrukla(self, n: int | None = None) -> None:
-        """Sabit akimlarda N tekrar olcum kuyruklar."""
+        """Sabit akımlarda N tekrar ölçüm kuyruklar."""
         sayi = n if n is not None else self.kfg.duzeltme.tekrarlanabilirlik_N
         akimlar = self.mevcut_akimlar_A.copy()
         if not np.any(akimlar):
@@ -696,10 +696,10 @@ class IsAkisi:
             self._sonraki_gorevi_al()
 
     def polarite_rutinini_kuyrukla(self) -> None:
-        """Polarite degisimi dogrulamasi: merkez(+) ve merkez(-) karsilastirmasi.
+        """Polarite değişimi doğrulaması: merkez(+) ve merkez(-) karşılaştırması.
 
-        Ayni akim GENLIKLERI uygulanir; isaret role donanimiyla degistirilir.
-        Iki olcumde de arka plan cikarma sirasi uygulanir.
+        Aynı akım GENLİKLERİ uygulanır; işaret röle donanımıyla değiştirilir.
+        İki ölçümde de arka plan çıkarma sırası uygulanır.
         """
         akimlar = self.mevcut_akimlar_A.copy()
         if not np.any(akimlar):
@@ -708,7 +708,7 @@ class IsAkisi:
         self.kuyruk.append(
             OlcumGorevi(
                 tur=ADIM_POLARITE,
-                etiket="polarite (+): duzeltilmis akimlar",
+                etiket="polarite (+): düzeltilmiş akımlar",
                 akimlar_A=akimlar,
                 arka_plan_al=True,
                 polarite_isareti=+1,
@@ -719,12 +719,12 @@ class IsAkisi:
         self.kuyruk.append(
             OlcumGorevi(
                 tur=ADIM_POLARITE,
-                etiket="polarite (-): ayni genlikler, ters polarite",
+                etiket="polarite (-): aynı genlikler, ters polarite",
                 akimlar_A=akimlar,
                 arka_plan_al=True,
                 kullanici_eylemi=(
-                    "Akimlar sifirda. ROLE ile miknatis polaritesini DEGISTIRIN, "
-                    "sonra onaylayin."
+                    "Akımlar sıfırda. RÖLE ile mıknatıs polaritesini DEĞİŞTİRİN, "
+                    "sonra onaylayın."
                 ),
                 polarite_isareti=-1,
                 modulator_acik=self.kfg.genel.modulator_acik,
@@ -737,10 +737,10 @@ class IsAkisi:
             self._sonraki_gorevi_al()
 
     def modulator_rutinini_kuyrukla(self) -> None:
-        """Modulator KAPALI ve ACIK durumlarinda duzeltilmis merkezi karsilastirir.
+        """Modülatör KAPALI ve AÇIK durumlarında düzeltilmiş merkezi karşılaştırır.
 
-        Program modulatoru kontrol etmez; yalnizca kullanicidan durumu
-        degistirmesini ister ve hangi durumda olculdugunu kaydeder.
+        Program modülatörü kontrol etmez; yalnızca kullanıcıdan durumu
+        değiştirmesini ister ve hangi durumda ölçüldüğünü kaydeder.
         """
         akimlar = self.mevcut_akimlar_A.copy()
         if not np.any(akimlar):
@@ -751,14 +751,14 @@ class IsAkisi:
             self.kuyruk.append(
                 OlcumGorevi(
                     tur=ADIM_MODULATOR,
-                    etiket=f"modulator {'ACIK' if durum else 'KAPALI'}",
+                    etiket=f"modülatör {'AÇIK' if durum else 'KAPALI'}",
                     akimlar_A=akimlar,
                     arka_plan_al=True,
                     kullanici_eylemi=(
                         None
                         if indeks == 0
-                        else f"Akimlar sifirda. Modulatoru {'ACIN' if durum else 'KAPATIN'}, "
-                        "sonra onaylayin."
+                        else f"Akımlar sıfırda. Modülatörü {'AÇIN' if durum else 'KAPATIN'}, "
+                        "sonra onaylayın."
                     ),
                     modulator_acik=durum,
                     rutin="modulator",
@@ -822,17 +822,17 @@ class IsAkisi:
             )
 
     # ==================================================================
-    # Durum paneli ve durum dosyasi
+    # Durum paneli ve durum dosyası
     # ==================================================================
     def sonraki_eylem_metni(self) -> str:
         if self.bekleme is Bekleme.DURAKLATILDI:
-            return "DURAKLATILDI - devam etmek icin Devam'a basin"
+            return "DURAKLATILDI - devam etmek için Devam'a basın"
         if self.bekleme is Bekleme.ARKA_PLAN_GIRISI:
-            return "ARKA PLAN OLCUMUNU ALIN VE GIRIN (akimlar sifirda)"
+            return "ARKA PLAN ÖLÇÜMÜNÜ ALIN VE GİRİN (akımlar sıfırda)"
         if self.bekleme is Bekleme.OLCUM_GIRISI:
-            return "OLCUMU ALIN VE GIRIN"
+            return "ÖLÇÜMÜ ALIN VE GİRİN"
         if self.bekleme is Bekleme.DUZELTME_ONAYI:
-            return "ONERILEN AKIMLARI ONAYLAYIN"
+            return "ÖNERİLEN AKIMLARI ONAYLAYIN"
         if self.bekleme is Bekleme.KULLANICI_EYLEMI:
             gorev = self.mevcut_gorev
             return gorev.kullanici_eylemi if gorev and gorev.kullanici_eylemi else "Eylem bekleniyor"
@@ -843,7 +843,7 @@ class IsAkisi:
         return "-"
 
     def durum_paneli(self) -> dict[str, Any]:
-        """Arayuzun surekli gosterdigi bilgiler."""
+        """Arayüzün sürekli gösterdiği bilgiler."""
         return {
             "faz": self.faz.value,
             "bekleme": self.bekleme.value,
@@ -909,7 +909,7 @@ class IsAkisi:
         self.calistirma.durum_yaz(self._durum_sozlugu())
 
     def durumu_uygula(self, durum: dict[str, Any]) -> None:
-        """Durum dosyasindan akisi geri yukler (kaldigi yerden devam)."""
+        """Durum dosyasından akışı geri yükler (kaldığı yerden devam)."""
 
         def olcumu_coz(veri: dict[str, Any] | None) -> HarmonikOlcumu | None:
             if veri is None:
@@ -957,11 +957,11 @@ class IsAkisi:
         self._toplam_gorev_tahmini = self.adim_no + len(self.kuyruk)
 
     def devam_ettir(self) -> None:
-        """Durum yuklendikten sonra donanimi hazirlar ve mevcut adimi tekrar kurar."""
+        """Durum yüklendikten sonra donanımı hazırlar ve mevcut adımı tekrar kurar."""
         self.kaynaklar.baslat()
         self.arka_plan_taze = False
         if self.mevcut_gorev is not None:
-            self.notlar.append(f"Kaldigi yerden devam: {self.mevcut_gorev.etiket}")
+            self.notlar.append(f"Kaldığı yerden devam: {self.mevcut_gorev.etiket}")
             self._gorevi_hazirla()
         else:
             self._sonraki_gorevi_al()
@@ -971,7 +971,7 @@ class IsAkisi:
     # Tamamlama
     # ==================================================================
     def ozeti_yaz(self) -> Any:
-        """Calistirma sonu Markdown ozetini ve SCPI gunlugunu yazar."""
+        """Çalıştırma sonu Markdown özetini ve SCPI günlüğünü yazar."""
         tekrarlanabilirlik_metni = "\n\n".join(
             f"[{r.ad}]\n{r.metin}" for r in self.rutin_sonuclari
         )
@@ -1001,7 +1001,7 @@ class IsAkisi:
 
 
 # ---------------------------------------------------------------------------
-# Otomatik yurutme (testler ve deneme kipi)
+# Otomatik yürütme (testler ve deneme kipi)
 # ---------------------------------------------------------------------------
 def otomatik_yurut(
     akis: IsAkisi,
@@ -1009,11 +1009,11 @@ def otomatik_yurut(
     max_adim: int = 500,
     uyari_onayla: bool = True,
 ) -> None:
-    """Akisi, olcumleri `kaynak`tan alarak sonuna kadar yurutur.
+    """Akışı, ölçümleri `kaynak`tan alarak sonuna kadar yürütür.
 
-    Elle girisin yerine gecer: arka plan ve olcum isteklerini otomatik
-    cevaplar, duzeltme onerilerini onaylar. Dogrulama uyarisi cikarsa
-    `uyari_onayla` True ise onaylanir (deneme kipi), False ise akis durur.
+    Elle girişin yerine geçer: arka plan ve ölçüm isteklerini otomatik
+    cevaplar, düzeltme önerilerini onaylar. Doğrulama uyarısı çıkarsa
+    `uyari_onayla` True ise onaylanır (deneme kipi), False ise akış durur.
     """
     for _ in range(max_adim):
         if akis.bitti_mi():
@@ -1021,11 +1021,11 @@ def otomatik_yurut(
         if akis.bekleme in (Bekleme.ARKA_PLAN_GIRISI, Bekleme.OLCUM_GIRISI):
             istek = akis.mevcut_istek
             if istek is None:
-                raise IsAkisiHatasi("Olcum istegi yok")
+                raise IsAkisiHatasi("Ölçüm isteği yok")
             olcum = kaynak.olcum_al(istek)
             sonuc = akis.olcum_dogrula(olcum)
             if sonuc.onay_gerekli and not uyari_onayla:
-                akis.durdur(f"Dogrulama uyarisi onaylanmadi: {sonuc.metin()}")
+                akis.durdur(f"Doğrulama uyarısı onaylanmadı: {sonuc.metin()}")
                 return
             akis.olcum_gonder(olcum)
         elif akis.bekleme is Bekleme.DUZELTME_ONAYI:
@@ -1036,6 +1036,6 @@ def otomatik_yurut(
             akis.devam_et()
         else:
             raise IsAkisiHatasi(
-                f"Otomatik yurutme ilerleyemiyor (faz: {akis.faz}, bekleme: {akis.bekleme})"
+                f"Otomatik yürütme ilerleyemiyor (faz: {akis.faz}, bekleme: {akis.bekleme})"
             )
-    raise IsAkisiHatasi(f"Otomatik yurutme {max_adim} adimda bitmedi")
+    raise IsAkisiHatasi(f"Otomatik yürütme {max_adim} adımda bitmedi")

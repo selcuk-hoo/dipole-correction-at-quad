@@ -1,36 +1,36 @@
-"""Kalibrasyon: nokta plani, fitler, 3x4 response matrix, SVD ve R_eff.
+"""Kalibrasyon: nokta planı, fitler, 3x4 response matrix, SVD ve R_eff.
 
-Elle giris yapildigi icin olcum sayisi bilincli olarak kucuk tutulur:
+Elle giriş yapıldığı için ölçüm sayısı bilinçli olarak küçük tutulur:
 
-* H, V, Q modlari zorunlu; M modu istege bagli kontroldur (dipole ve gradyene
-  katkisiz olmasi beklenir).
-* Mod basina 3 nokta (-D, 0, +D) ya da 5 nokta (-2D .. +2D).
-* Sifir noktasi modlar arasinda paylasilabilir (ortak_sifir_noktasi).
-* Noktalar, suruklenmeyi egimden ayirmak icin monoton OLMAYAN sirada alinir;
-  ayrica modlar birbirine gecmeli (round-robin) siralanir, boylece yavas bir
-  suruklenme tek bir modun egimine yuklenmez.
+* H, V, Q modları zorunlu; M modu isteğe bağlı kontroldür (dipole ve gradyene
+  katkısız olması beklenir).
+* Mod başına 3 nokta (-D, 0, +D) ya da 5 nokta (-2D .. +2D).
+* Sıfır noktası modlar arasında paylaşılabilir (ortak_sifir_noktasi).
+* Noktalar, sürüklenmeyi eğimden ayırmak için monoton OLMAYAN sırada alınır;
+  ayrıca modlar birbirine geçmeli (round-robin) sıralanır, böylece yavaş bir
+  sürüklenme tek bir modun eğimine yüklenmez.
 
 Response matrix
----------------
-Mod egimleri S (3x4, sutunlar Q/H/V/M) olcuulur ve bobin bazina cevrilir:
+----------------
+Mod eğimleri S (3x4, sütunlar Q/H/V/M) ölçülür ve bobin bazına çevrilir:
 
     R = S * V^T / 4
 
-Satirlar y = [x_c, y_c, g], sutunlar bobin basina BAGIL akim sapmasidir.
+Satırlar y = [x_c, y_c, g], sütunlar bobin başına BAĞIL akım sapmasıdır.
 
-Kosul sayisi iki bicimde raporlanir:
+Koşul sayısı iki biçimde raporlanır:
 
-* Ham kosul sayisi: R'nin tekil degerlerinden. Satirlar farkli birimde
-  oldugu icin (metre, metre, boyutsuz) bu sayi birim seciminden etkilenir ve
-  tek basina anlamli degildir.
-* Toleransa gore olceklenmis kosul sayisi: her satir kendi toleransina bolunur.
-  "Her uc hedefi de kendi toleransina, karsilastirilabilir akim cabasiyla
-  kontrol edebiliyor muyum?" sorusunun cevabidir. Esik buna uygulanir.
+* Ham koşul sayısı: R'nin tekil değerlerinden. Satırlar farklı birimde
+  olduğu için (metre, metre, boyutsuz) bu sayı birim seçiminden etkilenir ve
+  tek başına anlamlı değildir.
+* Toleransa göre ölçeklenmiş koşul sayısı: her satır kendi toleransına bölünür.
+  "Her üç hedefi de kendi toleransına, karşılaştırılabilir akım çabasıyla
+  kontrol edebiliyor muyum?" sorusunun cevabıdır. Eşik buna uygulanır.
 
-Not: R 3x4 ve rank 3 oldugu icin hedef y HER ZAMAN tam olarak erisilebilir;
-bu yuzden satirlarin birim karisimi (m, m, boyutsuz) cozumu etkilemez. Eski
-4x4 [Bx, By, G, SQ] kurulumunda ise SQ satiri sistemi kotu kosullu yapiyor ve
-agirlikli bir odunlesmeye zorluyordu.
+Not: R 3x4 ve rank 3 olduğu için hedef y HER ZAMAN tam olarak erişilebilir;
+bu yüzden satırların birim karışımı (m, m, boyutsuz) çözümü etkilemez. Eski
+4x4 [Bx, By, G, SQ] kurulumunda ise SQ satırı sistemi kötü koşullu yapıyor ve
+ağırlıklı bir ödünleşmeye zorluyordu.
 """
 from __future__ import annotations
 
@@ -56,7 +56,7 @@ ORTAK_SIFIR = "ortak_sifir"
 
 
 class KalibrasyonHatasi(ValueError):
-    """Kalibrasyon plani ya da fiti gecersiz."""
+    """Kalibrasyon planı ya da fiti geçersiz."""
 
 
 # ---------------------------------------------------------------------------
@@ -64,7 +64,7 @@ class KalibrasyonHatasi(ValueError):
 # ---------------------------------------------------------------------------
 @dataclass(frozen=True)
 class KalibrasyonNoktasi:
-    """Tek bir kalibrasyon olcum noktasi."""
+    """Tek bir kalibrasyon ölçüm noktası."""
 
     mod: str  # "Q" | "H" | "V" | "M" | ORTAK_SIFIR
     epsilon: float
@@ -73,7 +73,7 @@ class KalibrasyonNoktasi:
     @property
     def etiket(self) -> str:
         if self.mod == ORTAK_SIFIR:
-            return "ortak sifir (nominal akimlar)"
+            return "ortak sıfır (nominal akımlar)"
         return f"{self.mod} modu, eps = {self.epsilon:+.4f}"
 
     def akimlar(self, mod_bazi: ModBazi) -> np.ndarray:
@@ -97,7 +97,7 @@ class KalibrasyonPlani:
 
     @property
     def giris_sayisi(self) -> int:
-        """Kullanicinin elle yapacagi toplam harmonik girisi sayisi."""
+        """Kullanıcının elle yapacağı toplam harmonik girişi sayısı."""
         return self.nokta_sayisi + self.arka_plan_sayisi
 
     @property
@@ -106,21 +106,21 @@ class KalibrasyonPlani:
 
     def ozet_metni(self) -> str:
         return (
-            f"{self.nokta_sayisi} olcum noktasi + {self.arka_plan_sayisi} arka plan "
-            f"= {self.giris_sayisi} elle giris\n"
-            f"Tahmini sure: {self.tahmini_sure_dk:.0f} dk "
-            f"({self.olcum_basi_sure_dk:.1f} dk/olcum)"
+            f"{self.nokta_sayisi} ölçüm noktası + {self.arka_plan_sayisi} arka plan "
+            f"= {self.giris_sayisi} elle giriş\n"
+            f"Tahmini süre: {self.tahmini_sure_dk:.0f} dk "
+            f"({self.olcum_basi_sure_dk:.1f} dk/ölçüm)"
         )
 
 
 def _monoton_olmayan_sira(epsilonlar: Sequence[float]) -> list[float]:
-    """Zaman indeksi ile epsilon arasindaki korelasyonu en kucuk yapan siralama.
+    """Zaman indeksi ile epsilon arasındaki korelasyonu en küçük yapan sıralama.
 
-    Butun permutasyonlar denenir (en fazla 5 nokta oldugu icin ucuzdur). Amac
-    fonksiyonu sum(t_merkezli * eps); sifira ne kadar yakinsa, yavas bir zaman
-    suruklenmesi egime o kadar az sizar. Esitlik durumunda ardisik farklarin en
-    kucugu en buyuk olan (en "zigzag") siralama secilir, sonra sozlukbilimsel
-    siralama ile kesin sonuc uretilir.
+    Bütün permütasyonlar denenir (en fazla 5 nokta olduğu için ucuzdur). Amaç
+    fonksiyonu sum(t_merkezli * eps); sıfıra ne kadar yakınsa, yavaş bir zaman
+    sürüklenmesi eğime o kadar az sızar. Eşitlik durumunda ardışık farkların en
+    küçüğü en büyük olan (en "zigzag") sıralama seçilir, sonra sözlükbilimsel
+    sıralama ile kesin sonuç üretilir.
     """
     degerler = list(epsilonlar)
     if len(degerler) < 3:
@@ -141,7 +141,7 @@ def _monoton_olmayan_sira(epsilonlar: Sequence[float]) -> list[float]:
 
 
 def plan_olustur(ayar: KalibrasyonYapilandirmasi) -> KalibrasyonPlani:
-    """Yapilandirmadan kalibrasyon nokta planini uretir."""
+    """Yapılandırmadan kalibrasyon nokta planını üretir."""
     delta = ayar.delta_bagil
     if ayar.nokta_sayisi == 3:
         tum_epsilonlar = [-delta, 0.0, +delta]
@@ -155,20 +155,20 @@ def plan_olustur(ayar: KalibrasyonYapilandirmasi) -> KalibrasyonPlani:
         if not ayar.monoton_olmayan_sira:
             mod_epsilonlari[mod] = epsilonlar
         elif len(epsilonlar) == 2:
-            # Iki noktada (ortak sifirla birlikte 3 nokta) tek bir mod icinde
-            # zigzag mumkun degildir; bu yuzden modlar arasi yon degistirilir,
-            # boylece global epsilon dizisi monoton kalmaz ve yavas bir
-            # suruklenme butun modlarin egimine ayni yonde sizmaz.
+            # İki noktada (ortak sıfırla birlikte 3 nokta) tek bir mod içinde
+            # zigzag mümkün değildir; bu yüzden modlar arası yön değiştirilir,
+            # böylece global epsilon dizisi monoton kalmaz ve yavaş bir
+            # sürüklenme bütün modların eğimine aynı yönde sızmaz.
             mod_epsilonlari[mod] = epsilonlar if mod_indeksi % 2 == 0 else list(reversed(epsilonlar))
         else:
             mod_epsilonlari[mod] = _monoton_olmayan_sira(epsilonlar)
 
     sirali: list[tuple[str, float]] = []
     if ayar.ortak_sifir_noktasi:
-        # Ortak sifir en basta: ayni zamanda G_hedef'in olculdugu noktadir.
+        # Ortak sıfır en başta: aynı zamanda G_hedef'in ölçüldüğü noktadır.
         sirali.append((ORTAK_SIFIR, 0.0))
 
-    # Modlari birbirine gecmeli sirala (round-robin).
+    # Modları birbirine geçmeli sırala (round-robin).
     en_uzun = max(len(v) for v in mod_epsilonlari.values())
     for i in range(en_uzun):
         for mod in modlar:
@@ -189,14 +189,14 @@ def plan_olustur(ayar: KalibrasyonYapilandirmasi) -> KalibrasyonPlani:
 # ---------------------------------------------------------------------------
 @dataclass(frozen=True)
 class BilesenFiti:
-    """y'nin tek bir bileseninin (x_c, y_c ya da g) bir moda karsi fiti."""
+    """y'nin tek bir bileşeninin (x_c, y_c ya da g) bir moda karşı fiti."""
 
     bilesen: str
     egim: float
     kesisim: float
     artiklar: tuple[float, ...]
     artik_rms: float
-    r2: float | None  # yalnizca tepki veren bilesenler icin anlamli
+    r2: float | None  # yalnızca tepki veren bileşenler için anlamlı
     tepki: float  # |egim| * max|eps|
     tepki_veriyor: bool
     lineer_mi: bool | None
@@ -223,12 +223,12 @@ class ModFiti:
 
     @property
     def egim(self) -> np.ndarray:
-        """dy/deps (3 elemanli: x_c, y_c, g)."""
+        """dy/deps (3 elemanlı: x_c, y_c, g)."""
         return np.array([self.bilesenler[ad].egim for ad in Y_SATIRLARI], dtype=float)
 
     @property
     def lineer_mi(self) -> bool:
-        """Tepki veren butun bilesenler lineer mi?"""
+        """Tepki veren bütün bileşenler lineer mi?"""
         sonuclar = [
             b.lineer_mi for b in self.bilesenler.values() if b.tepki_veriyor and b.lineer_mi is not None
         ]
@@ -250,17 +250,17 @@ def _bilesen_fiti(
     r2_esigi: float,
     tolerans_olcegi: float,
 ) -> BilesenFiti:
-    """Tek bilesen icin dogru fiti ve lineerlik degerlendirmesi.
+    """Tek bileşen için doğru fiti ve lineerlik değerlendirmesi.
 
-    R^2 yalnizca gercekten TEPKI VEREN bilesenler icin hesaplanir: ornegin H
-    modunda g bileseni sabit sifir civarindadir, oradaki R^2 gurultuden ibaret
-    olur ve fiti haksiz yere "lineer degil" gosterir.
+    R^2 yalnızca gerçekten TEPKİ VEREN bileşenler için hesaplanır: örneğin H
+    modunda g bileşeni sabit sıfır civarındadır, oradaki R^2 gürültüden ibaret
+    olur ve fiti haksız yere "lineer değil" gösterir.
 
-    "Tepki veriyor" olcutu iki kosulu birlikte ister:
-      1. Tepki, bilesenin TOLERANS olceginden buyuk olmali (fiziksel anlamlilik).
-         Yalnizca fit artiklarina bakmak, 3 noktali bir fitte sans eseri kucuk
-         cikan artiklar yuzunden gurultuyu "tepki" sayabilir.
-      2. Tepki, artik gurultusunun belirgin uzerinde olmali.
+    "Tepki veriyor" ölçütü iki koşulu birlikte ister:
+      1. Tepki, bileşenin TOLERANS ölçeğinden büyük olmalı (fiziksel anlamlılık).
+         Yalnızca fit artıklarına bakmak, 3 noktalı bir fitte şans eseri küçük
+         çıkan artıklar yüzünden gürültüyü "tepki" sayabilir.
+      2. Tepki, artık gürültüsünün belirgin üzerinde olmalı.
     """
     egim, kesisim = np.polyfit(epsilonlar, degerler, 1)
     uydurulan = egim * epsilonlar + kesisim
@@ -296,9 +296,9 @@ def mod_fitleri(
     ayar: KalibrasyonYapilandirmasi,
     duzeltme: DuzeltmeYapilandirmasi,
 ) -> dict[str, ModFiti]:
-    """Her mod icin y'nin uc bileseninin dogru fitlerini hesaplar.
+    """Her mod için y'nin üç bileşeninin doğru fitlerini hesaplar.
 
-    Ortak sifir noktasi, olculen butun modlarin fitine eps = 0 verisi olarak
+    Ortak sıfır noktası, ölçülen bütün modların fitine eps = 0 verisi olarak
     dahil edilir.
     """
     olcum_listesi = list(olcumler)
@@ -311,7 +311,7 @@ def mod_fitleri(
         mod_verileri.setdefault(nokta.mod, []).append((nokta.epsilon, y))
 
     if not mod_verileri:
-        raise KalibrasyonHatasi("Hicbir mod icin olcum yok")
+        raise KalibrasyonHatasi("Hiçbir mod için ölçüm yok")
 
     fitler: dict[str, ModFiti] = {}
     for mod, veriler in mod_verileri.items():
@@ -319,7 +319,7 @@ def mod_fitleri(
         tum.sort(key=lambda p: p[0])
         epsilonlar = np.array([e for e, _ in tum], dtype=float)
         if len(np.unique(epsilonlar)) < 2:
-            raise KalibrasyonHatasi(f"{mod} modu icin en az iki farkli epsilon gerekir")
+            raise KalibrasyonHatasi(f"{mod} modu için en az iki farklı epsilon gerekir")
         bilesen_fitleri: dict[str, BilesenFiti] = {}
         for indeks, ad in enumerate(Y_SATIRLARI):
             degerler = np.array([y.dizi()[indeks] for _, y in tum], dtype=float)
@@ -337,7 +337,7 @@ def mod_fitleri(
 
 
 # ---------------------------------------------------------------------------
-# Sonuc
+# Sonuç
 # ---------------------------------------------------------------------------
 @dataclass
 class KalibrasyonSonucu:
@@ -359,26 +359,26 @@ class KalibrasyonSonucu:
     # ------------------------------------------------------------------
     @property
     def tek_adimda_duzeltilebilir_ofset_m(self) -> float:
-        """Adim basi bagil degisim siniriyla tek adimda duzeltilebilen en buyuk ofset.
+        """Adım başı bağıl değişim sınırıyla tek adımda düzeltilebilen en büyük ofset.
 
-        H ve V modlari ayni bobinleri paylastigi icin en kotu durum kosegendir:
-        bobin basina |eps_H| + |eps_V| = sqrt(2) * |z| / R_eff.
+        H ve V modları aynı bobinleri paylaştığı için en kötü durum köşegendir:
+        bobin başına |eps_H| + |eps_V| = sqrt(2) * |z| / R_eff.
         """
         return abs(self.r_eff_m) / math.sqrt(2.0)
 
     def ozet_metni(self) -> str:
         satirlar = [
             f"R_eff = {self.r_eff_m * 1e3:+.2f} mm",
-            "Tekil degerler: " + ", ".join(f"{s:.4g}" for s in self.tekil_degerler),
-            f"Kosul sayisi (ham): {self.kosul_sayisi:.2f}",
-            f"Kosul sayisi (toleransa gore olcekli): {self.kosul_sayisi_olcekli:.2f}",
+            "Tekil değerler: " + ", ".join(f"{s:.4g}" for s in self.tekil_degerler),
+            f"Koşul sayısı (ham): {self.kosul_sayisi:.2f}",
+            f"Koşul sayısı (toleransa göre ölçekli): {self.kosul_sayisi_olcekli:.2f}",
         ]
         if self.m_sutunu_orani is not None:
-            satirlar.append(f"M sutunu / (H,V,Q) orani: {self.m_sutunu_orani:.4f}")
+            satirlar.append(f"M sütunu / (H,V,Q) oranı: {self.m_sutunu_orani:.4f}")
         satirlar.append(f"G_hedef = {self.gradyen_hedefi_T_m:.6f} T/m")
-        satirlar.append(f"Modulator: {'ACIK' if self.modulator_acik else 'KAPALI'}")
+        satirlar.append(f"Modülatör: {'AÇIK' if self.modulator_acik else 'KAPALI'}")
         if self.supheli:
-            satirlar.append("SUPHELI KALIBRASYON:")
+            satirlar.append("ŞÜPHELİ KALİBRASYON:")
             satirlar.extend(f"  - {neden}" for neden in self.supheli_nedenleri)
         else:
             satirlar.append("Kalibrasyon kontrolleri tamam.")
@@ -452,7 +452,7 @@ class KalibrasyonSonucu:
 
 
 def _olcekli_kosul_sayisi(R: np.ndarray, duzeltme: DuzeltmeYapilandirmasi) -> float:
-    """Satirlari kendi toleransina bolerek kosul sayisi hesaplar."""
+    """Satırları kendi toleransına bölerek koşul sayısı hesaplar."""
     olcekler = np.array(
         [
             1.0 / duzeltme.merkez_toleransi_m,
@@ -468,10 +468,10 @@ def _olcekli_kosul_sayisi(R: np.ndarray, duzeltme: DuzeltmeYapilandirmasi) -> fl
 
 
 def _m_sutunu_orani(fitler: dict[str, ModFiti]) -> float | None:
-    """M modunun tepkisini, ilgili modlarin tepkisine gore boyutsuz olarak olcer.
+    """M modunun tepkisini, ilgili modların tepkisine göre boyutsuz olarak ölçer.
 
-    Her bilesen kendi "sahibi" modla karsilastirilir (x_c <-> H, y_c <-> V,
-    g <-> Q); boylece farkli birimler birbirine karistirilmaz.
+    Her bileşen kendi "sahibi" modla karşılaştırılır (x_c <-> H, y_c <-> V,
+    g <-> Q); böylece farklı birimler birbirine karıştırılmaz.
     """
     if "M" not in fitler:
         return None
@@ -496,7 +496,7 @@ def kalibrasyonu_kur(
     gradyen_hedefi_T_m: float,
     modulator_acik: bool,
 ) -> KalibrasyonSonucu:
-    """Mod fitlerinden R'yi kurar, tanilari hesaplar ve supheli olup olmadigina karar verir."""
+    """Mod fitlerinden R'yi kurar, tanıları hesaplar ve şüpheli olup olmadığına karar verir."""
     egimler = {mod: fit.egim for mod, fit in fitler.items()}
     R = mod_bazi.response_matrisi(egimler)
     tekil = np.linalg.svd(R, compute_uv=False)
@@ -505,11 +505,11 @@ def kalibrasyonu_kur(
 
     # R_eff = (dx_c / deps_H) / (dg / deps_Q)
     if "H" not in fitler or "Q" not in fitler:
-        raise KalibrasyonHatasi("R_eff icin H ve Q modu fitleri gerekir")
+        raise KalibrasyonHatasi("R_eff için H ve Q modu fitleri gerekir")
     dxc_deps_H = fitler["H"].bilesenler["x_c"].egim
     dg_deps_Q = fitler["Q"].bilesenler["g"].egim
     if dg_deps_Q == 0:
-        raise KalibrasyonHatasi("dg/deps_Q sifir; Q modu gradyeni degistirmiyor")
+        raise KalibrasyonHatasi("dg/deps_Q sıfır; Q modu gradyeni değiştirmiyor")
     r_eff = dxc_deps_H / dg_deps_Q
 
     m_orani = _m_sutunu_orani(fitler)
@@ -517,12 +517,12 @@ def kalibrasyonu_kur(
     nedenler: list[str] = []
     if kosul_olcekli > ayar.kosul_sayisi_esigi:
         nedenler.append(
-            f"Olcekli kosul sayisi {kosul_olcekli:.1f} > esik {ayar.kosul_sayisi_esigi:.1f}"
+            f"Ölçekli koşul sayısı {kosul_olcekli:.1f} > eşik {ayar.kosul_sayisi_esigi:.1f}"
         )
     if m_orani is not None and m_orani > ayar.m_sutunu_esigi_bagil:
         nedenler.append(
-            f"M sutunu kucuk degil (oran {m_orani:.3f} > esik {ayar.m_sutunu_esigi_bagil:.3f}); "
-            "monopol modu dipole/gradyene sizdiriyor olabilir"
+            f"M sütunu küçük değil (oran {m_orani:.3f} > eşik {ayar.m_sutunu_esigi_bagil:.3f}); "
+            "monopol modu dipole/gradyene sızdırıyor olabilir"
         )
     for mod, fit in fitler.items():
         if not fit.lineer_mi:
@@ -531,8 +531,8 @@ def kalibrasyonu_kur(
                 for ad, b in fit.bilesenler.items()
                 if b.tepki_veriyor and b.lineer_mi is False and b.r2 is not None
             ]
-            nedenler.append(f"{mod} modu fiti lineer degil: " + ", ".join(bozuk))
-    # Beklenen mod-bilesen eslesmesi: H -> x_c, V -> y_c, Q -> g
+            nedenler.append(f"{mod} modu fiti lineer değil: " + ", ".join(bozuk))
+    # Beklenen mod-bileşen eşleşmesi: H -> x_c, V -> y_c, Q -> g
     for mod, beklenen in (("H", "x_c"), ("V", "y_c"), ("Q", "g")):
         if mod not in fitler:
             continue
@@ -541,8 +541,8 @@ def kalibrasyonu_kur(
         en_buyuk = max(tepkiler, key=lambda ad: tepkiler[ad] / _bilesen_olcegi(ad, duzeltme))
         if en_buyuk != beklenen:
             nedenler.append(
-                f"{mod} modu en cok {en_buyuk} bilesenini etkiliyor ({beklenen} bekleniyordu); "
-                "bobin numaralandirmasi ya da faz/eslenik konvansiyonu ters olabilir"
+                f"{mod} modu en çok {en_buyuk} bileşenini etkiliyor ({beklenen} bekleniyordu); "
+                "bobin numaralandırması ya da faz/eşlenik konvansiyonu ters olabilir"
             )
 
     return KalibrasyonSonucu(
@@ -561,7 +561,7 @@ def kalibrasyonu_kur(
 
 
 def _bilesen_olcegi(bilesen: str, duzeltme: DuzeltmeYapilandirmasi) -> float:
-    """Bilesenin tolerans olcegi; farkli birimleri karsilastirmak icin."""
+    """Bileşenin tolerans ölçeği; farklı birimleri karşılaştırmak için."""
     if bilesen == "g":
         return duzeltme.g_toleransi
     return duzeltme.merkez_toleransi_m

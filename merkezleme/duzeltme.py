@@ -1,19 +1,19 @@
-"""Duzeltme adimi: pseudo-inverse cozumu, guvenlik sinirlari, yakinsama.
+"""Düzeltme adımı: pseudo-inverse çözümü, güvenlik sınırları, yakınsama.
 
     dI = alpha * pinv(R) * (y_hedef - y)
 
-`pinv` Moore-Penrose pseudo-inverse'tir, yani minimum normlu cozumu verir.
-Tikhonov regularizasyonu EKLENMEZ: R 3x4 ve rank 3 oldugu icin hedef zaten
-tam olarak erisilebilir; regularizasyon yalnizca yolu yavaslatir, varis
-noktasini degistirmez.
+`pinv` Moore-Penrose pseudo-inverse'tir, yani minimum normlu çözümü verir.
+Tikhonov regülarizasyonu EKLENMEZ: R 3x4 ve rank 3 olduğu için hedef zaten
+tam olarak erişilebilir; regülarizasyon yalnızca yolu yavaşlatır, varış
+noktasını değiştirmez.
 
-Sifir uzayi ve monopol
-----------------------
-R'nin sifir uzayi tam olarak M (monopol) yonudur: isaretli akimda uniform bir
-degisim, racetrack bobinlerde net akim uretmedigi icin dipole de gradyene de
-katkisizdir. `pinv` minimum normlu cozumu sectigi icin bu yonde bilesen
-uretmez; buna ek olarak her adimdan sonra (I - I_nominal) farkinin monopol
-bileseni acikca atilir, boylece olcum gurultusu sifir uzayinda birikmez.
+Sıfır uzayı ve monopol
+-----------------------
+R'nin sıfır uzayı tam olarak M (monopol) yönüdür: işaretli akımda üniform bir
+değişim, racetrack bobinlerde net akım üretmediği için dipole de gradyene de
+katkısızdır. `pinv` minimum normlu çözümü seçtiği için bu yönde bileşen
+üretmez; buna ek olarak her adımdan sonra (I - I_nominal) farkının monopol
+bileşeni açıkça atılır, böylece ölçüm gürültüsü sıfır uzayında birikmez.
 """
 from __future__ import annotations
 
@@ -37,13 +37,13 @@ class GuvenlikDegerlendirmesi:
 
     def metin(self) -> str:
         if self.guvenli:
-            return "Guvenlik sinirlari tamam."
-        return "GUVENLIK SINIRI ASILDI:\n" + "\n".join(f"  - {i}" for i in self.ihlaller)
+            return "Güvenlik sınırları tamam."
+        return "GÜVENLİK SINIRI AŞILDI:\n" + "\n".join(f"  - {i}" for i in self.ihlaller)
 
 
 @dataclass(frozen=True)
 class DuzeltmeOnerisi:
-    """Uygulanmadan once kullaniciya gosterilecek duzeltme onerisi."""
+    """Uygulanmadan önce kullanıcıya gösterilecek düzeltme önerisi."""
 
     mevcut_akimlar_A: np.ndarray
     yeni_akimlar_A: np.ndarray
@@ -64,12 +64,12 @@ class DuzeltmeOnerisi:
         )
 
     def asimetriler(self, nominal_akim_A: float) -> np.ndarray:
-        """Yeni akimlarin nominale gore bagil asimetrisi."""
+        """Yeni akımların nominale göre bağıl asimetrisi."""
         return (self.yeni_akimlar_A - nominal_akim_A) / nominal_akim_A
 
     def ozet_metni(self, nominal_akim_A: float) -> str:
         asimetri = self.asimetriler(nominal_akim_A)
-        satirlar = ["Bobin   ayar (A)    yeni (A)     fark (mA)   nominale gore"]
+        satirlar = ["Bobin   ayar (A)    yeni (A)     fark (mA)   nominale göre"]
         for i in range(BOBIN_SAYISI):
             satirlar.append(
                 f"  I{i + 1}   {self.mevcut_akimlar_A[i]:8.4f}   {self.yeni_akimlar_A[i]:8.4f}   "
@@ -80,13 +80,13 @@ class DuzeltmeOnerisi:
             "Mod genlikleri: "
             + "  ".join(f"{m}={self.mod_genlikleri.get(m, 0.0) * 100:+.4f}%" for m in MOD_SIRASI)
         )
-        satirlar.append(f"Olculen:  {self.olculen_y}")
+        satirlar.append(f"Ölçülen:  {self.olculen_y}")
         satirlar.append(f"Beklenen: {self.beklenen_y}")
         satirlar.append(
-            f"Beklenen merkez degisimi: {self.beklenen_merkez_degisimi_m * 1e6:.2f} um"
+            f"Beklenen merkez değişimi: {self.beklenen_merkez_degisimi_m * 1e6:.2f} um"
         )
         if abs(self.monopol_cikarilan) > 0:
-            satirlar.append(f"Atilan monopol bileseni: {self.monopol_cikarilan * 100:+.5f} %")
+            satirlar.append(f"Atılan monopol bileşeni: {self.monopol_cikarilan * 100:+.5f} %")
         satirlar.append(self.guvenlik.metin())
         return "\n".join(satirlar)
 
@@ -102,8 +102,8 @@ def _guvenligi_degerlendir(
     asim = yeni_akimlar_A > guvenlik.bobin_basi_max_akim_A
     for i in np.flatnonzero(asim):
         ihlaller.append(
-            f"I{i + 1} = {yeni_akimlar_A[i]:.3f} A, bobin basi max "
-            f"{guvenlik.bobin_basi_max_akim_A:.3f} A degerini asiyor"
+            f"I{i + 1} = {yeni_akimlar_A[i]:.3f} A, bobin başı max "
+            f"{guvenlik.bobin_basi_max_akim_A:.3f} A değerini aşıyor"
         )
     for i in np.flatnonzero(yeni_akimlar_A < 0):
         ihlaller.append(f"I{i + 1} = {yeni_akimlar_A[i]:.3f} A negatif olamaz")
@@ -111,14 +111,14 @@ def _guvenligi_degerlendir(
     adim = np.abs(yeni_akimlar_A - mevcut_akimlar_A) / nominal_akim_A
     for i in np.flatnonzero(adim > guvenlik.adim_basi_max_bagil_degisim):
         ihlaller.append(
-            f"I{i + 1} adim basi bagil degisim {adim[i] * 100:.3f} %, sinir "
+            f"I{i + 1} adım başı bağıl değişim {adim[i] * 100:.3f} %, sınır "
             f"{guvenlik.adim_basi_max_bagil_degisim * 100:.3f} %"
         )
 
     asimetri = np.abs(yeni_akimlar_A - nominal_akim_A) / nominal_akim_A
     for i in np.flatnonzero(asimetri > guvenlik.nominale_gore_max_asimetri):
         ihlaller.append(
-            f"I{i + 1} nominale gore asimetri {asimetri[i] * 100:.3f} %, sinir "
+            f"I{i + 1} nominale göre asimetri {asimetri[i] * 100:.3f} %, sınır "
             f"{guvenlik.nominale_gore_max_asimetri * 100:.3f} %"
         )
 
@@ -133,11 +133,11 @@ def duzeltme_hesapla(
     ayar: DuzeltmeYapilandirmasi,
     guvenlik: GuvenlikYapilandirmasi,
 ) -> DuzeltmeOnerisi:
-    """Bir duzeltme adimi onerir; akimlari UYGULAMAZ."""
+    """Bir düzeltme adımı önerir; akımları UYGULAMAZ."""
     R = np.asarray(R, dtype=float)
     mevcut_akimlar_A = np.asarray(mevcut_akimlar_A, dtype=float)
     if R.shape != (3, BOBIN_SAYISI):
-        raise ValueError(f"R 3x{BOBIN_SAYISI} olmalidir, {R.shape} verildi")
+        raise ValueError(f"R 3x{BOBIN_SAYISI} olmalıdır, {R.shape} verildi")
 
     hata = Y_HEDEF - olculen_y.dizi()
     delta_bagil = ayar.alpha * (np.linalg.pinv(R) @ hata)
@@ -168,7 +168,7 @@ def duzeltme_hesapla(
 
 
 # ---------------------------------------------------------------------------
-# Yakinsama
+# Yakınsama
 # ---------------------------------------------------------------------------
 @dataclass(frozen=True)
 class YakinsamaDurumu:
@@ -189,7 +189,7 @@ class YakinsamaDurumu:
 
 
 def yakinsama_durumu(olculen_y: KontrolVektoru, ayar: DuzeltmeYapilandirmasi) -> YakinsamaDurumu:
-    """|x_c|, |y_c| ve |g| kendi toleranslarinin altinda mi?"""
+    """|x_c|, |y_c| ve |g| kendi toleranslarının altında mı?"""
     merkez_tamam = (
         abs(olculen_y.x_c) < ayar.merkez_toleransi_m and abs(olculen_y.y_c) < ayar.merkez_toleransi_m
     )
@@ -207,7 +207,7 @@ def yakinsama_durumu(olculen_y: KontrolVektoru, ayar: DuzeltmeYapilandirmasi) ->
 # ---------------------------------------------------------------------------
 @dataclass(frozen=True)
 class TekrarlanabilirlikSonucu:
-    """Sabit akimlarda N tekrar olcumun sacilimi."""
+    """Sabit akımlarda N tekrar ölçümün saçılımı."""
 
     n: int
     x_c_sigma_m: float
@@ -219,7 +219,7 @@ class TekrarlanabilirlikSonucu:
 
     def ozet_metni(self) -> str:
         satirlar = [
-            f"Tekrarlanabilirlik ({self.n} olcum):",
+            f"Tekrarlanabilirlik ({self.n} ölçüm):",
             f"  sigma(x_c) = {self.x_c_sigma_m * 1e6:.3f} um",
             f"  sigma(y_c) = {self.y_c_sigma_m * 1e6:.3f} um",
             f"  sigma(g)   = {self.g_sigma:.6f}",
@@ -231,13 +231,13 @@ class TekrarlanabilirlikSonucu:
 def tekrarlanabilirligi_degerlendir(
     olcumler: list[KontrolVektoru], ayar: DuzeltmeYapilandirmasi
 ) -> TekrarlanabilirlikSonucu:
-    """Sabit akimlardaki tekrar olcumlerden sacilimi ve tolerans yeterliligini bulur.
+    """Sabit akımlardaki tekrar ölçümlerden saçılımı ve tolerans yeterliliğini bulur.
 
-    Tolerans, olculen tekrarlanabilirligin `tolerans_tekrarlanabilirlik_carpani`
-    katindan kucuk olmamalidir; kucukse uyarir.
+    Tolerans, ölçülen tekrarlanabilirliğin `tolerans_tekrarlanabilirlik_carpani`
+    katından küçük olmamalıdır; küçükse uyarır.
     """
     if len(olcumler) < 2:
-        raise ValueError("Tekrarlanabilirlik icin en az iki olcum gerekir")
+        raise ValueError("Tekrarlanabilirlik için en az iki ölçüm gerekir")
     diziler = np.array([y.dizi() for y in olcumler], dtype=float)
     x_sigma, y_sigma, g_sigma = (float(s) for s in diziler.std(axis=0, ddof=1))
     merkez_sigma = math.hypot(x_sigma, y_sigma)
@@ -247,15 +247,15 @@ def tekrarlanabilirligi_degerlendir(
     gereken_merkez_um = carpan * merkez_sigma * 1e6
     if ayar.merkez_toleransi_um < gereken_merkez_um:
         uyarilar.append(
-            f"Merkez toleransi {ayar.merkez_toleransi_um:.2f} um cok siki; olculen "
-            f"tekrarlanabilirlik {merkez_sigma * 1e6:.2f} um icin en az "
-            f"{gereken_merkez_um:.2f} um olmalidir"
+            f"Merkez toleransı {ayar.merkez_toleransi_um:.2f} um çok sıkı; ölçülen "
+            f"tekrarlanabilirlik {merkez_sigma * 1e6:.2f} um için en az "
+            f"{gereken_merkez_um:.2f} um olmalıdır"
         )
     gereken_g = carpan * g_sigma
     if ayar.g_toleransi < gereken_g:
         uyarilar.append(
-            f"g toleransi {ayar.g_toleransi:.5f} cok siki; olculen sacilim "
-            f"{g_sigma:.5f} icin en az {gereken_g:.5f} olmalidir"
+            f"g toleransı {ayar.g_toleransi:.5f} çok sıkı; ölçülen saçılım "
+            f"{g_sigma:.5f} için en az {gereken_g:.5f} olmalıdır"
         )
 
     return TekrarlanabilirlikSonucu(
@@ -270,7 +270,7 @@ def tekrarlanabilirligi_degerlendir(
 
 
 # ---------------------------------------------------------------------------
-# Yazim hatasi dogrulamasi (kalibrasyon varken)
+# Yazım hatası doğrulaması (kalibrasyon varken)
 # ---------------------------------------------------------------------------
 def beklenen_y(
     R: np.ndarray, referans_y: KontrolVektoru, bagil_akim_degisimi: np.ndarray

@@ -114,12 +114,12 @@ def test_arka_plan_atlanirsa_son_gecerli_kullanilir_ve_kaydedilir(
     assert akis.bekleme is Bekleme.OLCUM_GIRISI
     assert akis.atlanan_arka_plan_sayisi == 1
     assert akis.son_arka_plan is ilk_arka_plan, "son gecerli arka plan kullanilmali"
-    assert any("atlandi" in n for n in akis.notlar)
+    assert any("atlandı" in n for n in akis.notlar)
 
     # CSV'de arka_plan_taze = 0 olarak kaydedilmis olmali
     with calistirma.olcumler_csv.open(encoding="utf-8") as f:
         satirlar = list(csv.DictReader(f))
-    atlanan = [s for s in satirlar if s["not"].startswith("Arka plan adimi atlandi")]
+    atlanan = [s for s in satirlar if s["not"].startswith("Arka plan adımı atlandı")]
     assert atlanan and atlanan[0]["arka_plan_taze"] == "0"
 
 
@@ -127,7 +127,7 @@ def test_ilk_arka_plan_atlanamaz(kfg, simulator_uret, akis_uret):
     sim = simulator_uret(tohum=55)
     akis, _, _ = akis_uret(sim)
     akis.basla()
-    with pytest.raises(IsAkisiHatasi, match="gecerli bir arka plan"):
+    with pytest.raises(IsAkisiHatasi, match="geçerli bir arka plan"):
         akis.arka_plani_atla()
 
 
@@ -142,7 +142,7 @@ def test_noktayi_tekrarla_arka_plani_yeniden_ister(kfg, simulator_uret, akis_ure
     assert akis.bekleme is Bekleme.OLCUM_GIRISI
     akis.noktayi_tekrarla()
     assert akis.bekleme is Bekleme.ARKA_PLAN_GIRISI
-    assert any("tekrarlandi" in n for n in akis.notlar)
+    assert any("tekrarlandı" in n for n in akis.notlar)
 
 
 def test_duraklat_devam(kfg, simulator_uret, akis_uret):
@@ -191,7 +191,7 @@ def test_guvenlik_ihlalinde_duzeltme_uygulanmaz(
     otomatik_yurut(akis, kaynak, max_adim=200)
 
     assert akis.faz is Faz.DURDURULDU
-    assert "Guvenlik siniri" in (akis.durdurma_nedeni or "")
+    assert "Güvenlik sınırı" in (akis.durdurma_nedeni or "")
     assert akis.iterasyon == 0, "hicbir duzeltme uygulanmamis olmali"
 
 
@@ -282,7 +282,7 @@ def test_polarite_rutini_role_eylemi_ister(kfg, simulator_uret, akis_uret):
     for _ in range(60):
         if akis.bekleme is Bekleme.KULLANICI_EYLEMI:
             eylem_gorulen = True
-            assert "ROLE" in akis.sonraki_eylem_metni().upper()
+            assert "RÖLE" in akis.sonraki_eylem_metni().upper()
             assert np.allclose(akis.mevcut_akimlar_A, 0), "role degisimi akimlar sifirdayken"
             akis.kullanici_eylemini_onayla()
         elif akis.bekleme in (Bekleme.ARKA_PLAN_GIRISI, Bekleme.OLCUM_GIRISI):
@@ -324,10 +324,10 @@ def test_ciktilar_duz_metin_ve_eksiksiz(kfg, simulator_uret, akis_uret):
 
     # Markdown ozeti
     metin = ozet.read_text(encoding="utf-8")
-    for baslik in ("## Merkez", "## Son akimlar", "## Kalibrasyon",
-                   "## Yalnizca izlenen buyuklukler", "## Arka plan", "## Tekrarlanabilirlik"):
+    for baslik in ("## Merkez", "## Son akımlar", "## Kalibrasyon",
+                   "## Yalnızca izlenen büyüklükler", "## Arka plan", "## Tekrarlanabilirlik"):
         assert baslik in metin, baslik
-    assert "R_eff" in metin and "Tekil degerler" in metin
+    assert "R_eff" in metin and "Tekil değerler" in metin
     assert "SQ/G" in metin and "b3" in metin
 
 

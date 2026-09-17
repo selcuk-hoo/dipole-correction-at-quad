@@ -35,7 +35,7 @@ def test_plan_giris_sayisi(kfg, nokta_sayisi, arka_plan_her_n, beklenen_nokta, b
     assert plan.tahmini_sure_dk == pytest.approx(
         beklenen_giris * ayar.olcum_basi_tahmini_sure_dk
     )
-    assert "elle giris" in plan.ozet_metni()
+    assert "elle giriş" in plan.ozet_metni()
 
 
 def test_ortak_sifir_noktasi_paylasilir(kfg):
@@ -214,7 +214,7 @@ def test_kotu_kalibrasyon_supheli_isaretlenir(kfg, mod_bazi):
         fitler, mod_bazi, kfg.kalibrasyon, kfg.duzeltme, 0.1, modulator_acik=False
     )
     assert sonuc.supheli
-    assert any("M sutunu" in neden for neden in sonuc.supheli_nedenleri)
+    assert any("M sütunu" in neden for neden in sonuc.supheli_nedenleri)
 
 
 def test_mod_bilesen_eslesmesi_ters_ise_uyarir(kfg, mod_bazi):

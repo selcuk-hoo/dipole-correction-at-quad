@@ -76,14 +76,14 @@ def akisi_yurut(pencere, akis, max_adim: int = 400) -> None:
 
 def test_pencere_durum_panelini_gosterir(pencere_uret, kfg):
     pencere, akis, _, _, _ = pencere_uret()
-    assert "Adim 1 /" in pencere.adim_etiketi.text()
+    assert "Adım 1 /" in pencere.adim_etiketi.text()
     assert "ARKA PLAN" in pencere.eylem_etiketi.text()
     # Dort bobinin ayar/olculen/asimetri satiri
     assert len(pencere.akim_etiketleri) == 4
     for ayar, olculen, asimetri in pencere.akim_etiketleri:
         assert ayar.text() and olculen.text() and asimetri.text()
     # Akimlar sifirdayken asimetri "(sifir)" gosterilir
-    assert pencere.akim_etiketleri[0][2].text() == "(sifir)"
+    assert pencere.akim_etiketleri[0][2].text() == "(sıfır)"
 
 
 def test_deneme_kipinde_alanlar_otomatik_dolar(pencere_uret, kfg):
@@ -129,7 +129,7 @@ def test_yorum_satiri_girisin_fiziksel_karsiligini_gosterir(pencere_uret, kfg):
     assert "ARKA PLAN" in pencere.yorum_etiketi.text()
     pencere._onayla()  # arka plan girildi -> olcum bekleniyor
     assert akis.bekleme is Bekleme.OLCUM_GIRISI
-    assert "Bu giris su anlama geliyor" in pencere.yorum_etiketi.text()
+    assert "Bu giriş şu anlama geliyor" in pencere.yorum_etiketi.text()
     assert "x_c" in pencere.yorum_etiketi.text()
 
 
@@ -193,9 +193,9 @@ def test_duzeltme_onerisi_panelde_gosterilir(pencere_uret, kfg):
         raise AssertionError("duzeltme onayina gelinemedi")
 
     metin = pencere.oneri_metni.toPlainText()
-    assert "Bobin" in metin and "nominale gore" in metin
-    assert "Beklenen merkez degisimi" in metin
-    assert pencere.onayla_dugmesi.text() == "Onerilen akimlari UYGULA"
+    assert "Bobin" in metin and "nominale göre" in metin
+    assert "Beklenen merkez değişimi" in metin
+    assert pencere.onayla_dugmesi.text() == "Önerilen akımları UYGULA"
 
 
 def test_rutin_dugmeleri_calisir(pencere_uret):

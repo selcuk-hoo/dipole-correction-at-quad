@@ -1,14 +1,14 @@
-"""Kayit katmani: tarihli calistirma klasoru, CSV, JSON, SCPI gunlugu, ozet.
+"""Kayıt katmanı: tarihli çalıştırma klasörü, CSV, JSON, SCPI günlüğü, özet.
 
-Butun ciktilar DUZ METIN dosyalaridir; ikili (binary) bicim kullanilmaz.
+Bütün çıktılar DÜZ METİN dosyalarıdır; ikili (binary) biçim kullanılmaz.
 
     calistirmalar/2026-09-17_143500/
-        yapilandirma.yaml     kullanilan yapilandirmanin kopyasi (tekrarlanabilirlik)
-        olcumler.csv          her adim: zaman, adim turu, akimlar, harmonikler, y
-        kalibrasyon.json      R, tekil degerler, fit parametreleri, R_eff
-        scpi_gunlugu.txt      gonderilen (ya da kuru calismada kaydedilen) komutlar
-        durum.json            kaldigi yerden devam icin durum dosyasi
-        ozet.md               calistirma sonu Markdown ozeti
+        yapilandirma.yaml     kullanılan yapılandırmanın kopyası (tekrarlanabilirlik)
+        olcumler.csv          her adım: zaman, adım türü, akımlar, harmonikler, y
+        kalibrasyon.json      R, tekil değerler, fit parametreleri, R_eff
+        scpi_gunlugu.txt      gönderilen (ya da kuru çalışmada kaydedilen) komutlar
+        durum.json            kaldığı yerden devam için durum dosyası
+        ozet.md               çalıştırma sonu Markdown özeti
 """
 from __future__ import annotations
 
@@ -28,7 +28,7 @@ from .harmonikler import HarmonikOlcumu, IzlemeBuyuklukleri, KontrolVektoru
 from .kalibrasyon import KalibrasyonSonucu
 from .yapilandirma import BOBIN_SAYISI, Yapilandirma
 
-# Adim turleri (CSV'de "adim_turu" kolonu)
+# Adım türleri (CSV'de "adim_turu" kolonu)
 ADIM_ARKA_PLAN = "arka_plan"
 ADIM_KALIBRASYON = "kalibrasyon"
 ADIM_DUZELTME = "duzeltme"
@@ -39,7 +39,7 @@ ADIM_MODULATOR = "modulator_karsilastirma"
 
 @dataclass
 class OlcumKaydi:
-    """CSV'ye yazilacak tek bir olcum satiri."""
+    """CSV'ye yazılacak tek bir ölçüm satırı."""
 
     adim_turu: str
     adim_no: int
@@ -82,7 +82,7 @@ def _harmonik_degerleri(
 
 
 class Calistirma:
-    """Tek bir calistirmanin cikti klasoru ve dosyalari."""
+    """Tek bir çalıştırmanın çıktı klasörü ve dosyaları."""
 
     def __init__(self, yapilandirma: Yapilandirma, kok: str | Path | None = None) -> None:
         self.yapilandirma = yapilandirma
@@ -149,7 +149,7 @@ class Calistirma:
 
     # ------------------------------------------------------------------
     def olcum_yaz(self, kayit: OlcumKaydi) -> None:
-        """Bir olcum satirini CSV'ye ekler (her yazmada dosya acilir/kapanir)."""
+        """Bir ölçüm satırını CSV'ye ekler (her yazmada dosya açılır/kapanır)."""
 
         def akim_alanlari(degerler: Sequence[float] | None) -> list[str]:
             if degerler is None:
@@ -209,10 +209,10 @@ class Calistirma:
 
     # ------------------------------------------------------------------
     def durum_yaz(self, durum: dict[str, Any]) -> Path:
-        """Durum dosyasini ATOMIK yazar (gecici dosya + os.replace).
+        """Durum dosyasını ATOMİK yazar (geçici dosya + os.replace).
 
-        Program kapanir ya da cokerse kaldigi yerden devam edebilmek icin
-        her adimdan sonra cagrilir; yarim yazilmis dosya olmaz.
+        Program kapanır ya da çökerse kaldığı yerden devam edebilmek için
+        her adımdan sonra çağrılır; yarım yazılmış dosya olmaz.
         """
         gecici = self.durum_json.with_suffix(".json.tmp")
         with gecici.open("w", encoding="utf-8") as f:
@@ -230,7 +230,7 @@ class Calistirma:
 
     @staticmethod
     def yarim_calistirma_bul(kok: str | Path, durum_dosyasi_adi: str) -> Path | None:
-        """En son yarim kalmis calistirmanin durum dosyasini bulur."""
+        """En son yarım kalmış çalıştırmanın durum dosyasını bulur."""
         kok_dizin = Path(kok)
         if not kok_dizin.exists():
             return None
@@ -248,11 +248,11 @@ class Calistirma:
 
 
 # ---------------------------------------------------------------------------
-# Markdown ozeti
+# Markdown özeti
 # ---------------------------------------------------------------------------
 @dataclass
 class OzetVerisi:
-    """Calistirma sonu ozeti icin toplanan bilgiler."""
+    """Çalıştırma sonu özeti için toplanan bilgiler."""
 
     kip: str
     modulator_acik: bool
@@ -279,38 +279,38 @@ def _merkez_metni(y: KontrolVektoru | None) -> str:
 
 
 def ozet_yaz(calistirma: Calistirma, veri: OzetVerisi) -> Path:
-    """Calistirma sonu Markdown ozetini yazar."""
+    """Çalıştırma sonu Markdown özetini yazar."""
     y_kfg = calistirma.yapilandirma
     satirlar: list[str] = []
     ekle = satirlar.append
 
-    ekle(f"# Elektriksel merkezleme ozeti - {calistirma.etiket}")
+    ekle(f"# Elektriksel merkezleme özeti - {calistirma.etiket}")
     ekle("")
     ekle(f"- Kip: **{veri.kip}**")
-    ekle(f"- Modulator: **{'ACIK' if veri.modulator_acik else 'KAPALI'}**")
+    ekle(f"- Modülatör: **{'AÇIK' if veri.modulator_acik else 'KAPALI'}**")
     ekle(f"- Birim: `{y_kfg.harmonikler.birim}`, r_ref = {y_kfg.harmonikler.r_ref_mm:g} mm")
-    ekle(f"- Giris bicimi: `{y_kfg.harmonikler.giris_bicimi}`")
-    ekle(f"- Olcum satiri sayisi: {calistirma.satir_sayisi}")
+    ekle(f"- Giriş biçimi: `{y_kfg.harmonikler.giris_bicimi}`")
+    ekle(f"- Ölçüm satırı sayısı: {calistirma.satir_sayisi}")
     ekle("")
 
     ekle("## Merkez")
     ekle("")
     ekle("| | merkez ve gradyen |")
     ekle("|---|---|")
-    ekle(f"| Baslangic | {_merkez_metni(veri.baslangic_y)} |")
+    ekle(f"| Başlangıç | {_merkez_metni(veri.baslangic_y)} |")
     ekle(f"| Son | {_merkez_metni(veri.son_y)} |")
     if veri.baslangic_y is not None and veri.son_y is not None:
         ekle(
-            f"| Iyilesme | {veri.baslangic_y.merkez_normu_m * 1e6:.2f} um -> "
+            f"| İyileşme | {veri.baslangic_y.merkez_normu_m * 1e6:.2f} um -> "
             f"{veri.son_y.merkez_normu_m * 1e6:.2f} um |"
         )
-    ekle(f"| Iterasyon sayisi | {veri.iterasyon_sayisi} |")
+    ekle(f"| İterasyon sayısı | {veri.iterasyon_sayisi} |")
     ekle("")
 
     if veri.son_akimlar_A is not None and veri.nominal_akim_A:
-        ekle("## Son akimlar")
+        ekle("## Son akımlar")
         ekle("")
-        ekle("| Bobin | akim (A) | nominale gore |")
+        ekle("| Bobin | akım (A) | nominale göre |")
         ekle("|---|---|---|")
         for i, akim in enumerate(veri.son_akimlar_A):
             asimetri = (akim - veri.nominal_akim_A) / veri.nominal_akim_A * 100
@@ -322,26 +322,26 @@ def ozet_yaz(calistirma: Calistirma, veri: OzetVerisi) -> Path:
         ekle("## Kalibrasyon")
         ekle("")
         ekle(f"- R_eff = **{kal.r_eff_m * 1e3:+.2f} mm**")
-        ekle("- Tekil degerler: " + ", ".join(f"{s:.4g}" for s in kal.tekil_degerler))
-        ekle(f"- Kosul sayisi (ham / toleransa gore olcekli): {kal.kosul_sayisi:.2f} / "
+        ekle("- Tekil değerler: " + ", ".join(f"{s:.4g}" for s in kal.tekil_degerler))
+        ekle(f"- Koşul sayısı (ham / toleransa göre ölçekli): {kal.kosul_sayisi:.2f} / "
              f"{kal.kosul_sayisi_olcekli:.2f}")
         if kal.m_sutunu_orani is not None:
-            ekle(f"- M sutunu orani: {kal.m_sutunu_orani:.4f}")
+            ekle(f"- M sütunu oranı: {kal.m_sutunu_orani:.4f}")
         ekle(f"- G_hedef = {kal.gradyen_hedefi_T_m:.6f} T/m")
         ekle(
-            f"- Tek adimda duzeltilebilir ofset ~ "
+            f"- Tek adımda düzeltilebilir ofset ~ "
             f"{kal.tek_adimda_duzeltilebilir_ofset_m * y_kfg.guvenlik.adim_basi_max_bagil_degisim * 1e6:.0f}"
             " um"
         )
         if kal.supheli:
-            ekle("- **SUPHELI KALIBRASYON:**")
+            ekle("- **ŞÜPHELİ KALİBRASYON:**")
             for neden in kal.supheli_nedenleri:
                 ekle(f"  - {neden}")
         ekle("")
 
-    ekle("## Yalnizca izlenen buyuklukler")
+    ekle("## Yalnızca izlenen büyüklükler")
     ekle("")
-    ekle("| Buyukluk | duzeltme oncesi | duzeltme sonrasi |")
+    ekle("| Büyüklük | düzeltme öncesi | düzeltme sonrası |")
     ekle("|---|---|---|")
 
     def izleme_alani(izleme: IzlemeBuyuklukleri | None, ad: str) -> str:
@@ -368,20 +368,20 @@ def ozet_yaz(calistirma: Calistirma, veri: OzetVerisi) -> Path:
 
     ekle("## Arka plan")
     ekle("")
-    ekle(f"- Alinan arka plan olcumu: {veri.arka_plan_sayisi}")
+    ekle(f"- Alınan arka plan ölçümü: {veri.arka_plan_sayisi}")
     if veri.atlanan_arka_plan_sayisi:
         ekle(
-            f"- Kullanicinin atladigi arka plan adimi: {veri.atlanan_arka_plan_sayisi} "
-            "(son gecerli arka plan kullanildi)"
+            f"- Kullanıcının atladığı arka plan adımı: {veri.atlanan_arka_plan_sayisi} "
+            "(son geçerli arka plan kullanıldı)"
         )
-    for ad, olcum in (("Ilk", veri.arka_plan_ilk), ("Son", veri.arka_plan_son)):
+    for ad, olcum in (("İlk", veri.arka_plan_ilk), ("Son", veri.arka_plan_son)):
         if olcum is None:
             continue
         c1 = olcum.bilesenler.get(1, 0j)
         ekle(f"- {ad} arka plan C_1: B_1 = {c1.real:.6g}, A_1 = {c1.imag:.6g}")
     if veri.arka_plan_ilk is not None and veri.arka_plan_son is not None:
         fark = veri.arka_plan_son.bilesenler.get(1, 0j) - veri.arka_plan_ilk.bilesenler.get(1, 0j)
-        ekle(f"- Arka plan degisimi (C_1): |d| = {abs(fark):.6g}")
+        ekle(f"- Arka plan değişimi (C_1): |d| = {abs(fark):.6g}")
     ekle("")
 
     if veri.tekrarlanabilirlik_metni:
@@ -402,11 +402,11 @@ def ozet_yaz(calistirma: Calistirma, veri: OzetVerisi) -> Path:
     ekle("## Dosyalar")
     ekle("")
     for ad, yol in (
-        ("Olcumler (CSV)", calistirma.olcumler_csv),
+        ("Ölçümler (CSV)", calistirma.olcumler_csv),
         ("Kalibrasyon (JSON)", calistirma.kalibrasyon_json),
-        ("SCPI gunlugu", calistirma.scpi_gunlugu),
-        ("Durum dosyasi", calistirma.durum_json),
-        ("Yapilandirma", calistirma.dizin / "yapilandirma.yaml"),
+        ("SCPI günlüğü", calistirma.scpi_gunlugu),
+        ("Durum dosyası", calistirma.durum_json),
+        ("Yapılandırma", calistirma.dizin / "yapilandirma.yaml"),
     ):
         if yol.exists():
             ekle(f"- {ad}: `{yol.name}`")

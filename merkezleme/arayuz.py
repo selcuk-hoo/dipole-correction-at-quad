@@ -1,21 +1,24 @@
-"""PyQt5 masaustu arayuzu.
+"""PyQt5 masaüstü arayüzü.
 
 Ekranda her zaman bulunanlar:
-  * mevcut adim / toplam adim ve adim etiketi
-  * dort kaynagin AYAR ve OLCULEN akimlari, nominale gore asimetrileri
-  * son hesaplanan merkez (um) ve g
-  * son arka plan degeri ve tazeligi
+  * mevcut adım / toplam adım ve adım etiketi
+  * dört kaynağın AYAR ve ÖLÇÜLEN akımları, nominale göre asimetrileri
+  * son hesaplanan merkez (µm) ve g
+  * son arka plan değeri ve tazeliği
   * sonraki eylem
 
-Duzenler: Onayla, Bu noktayi tekrarla, Arka plani atla, Duraklat/Devam,
-DURDUR ve akimlari sifirla; ayrica rutin dugmeleri.
+Düğmeler: Onayla, Bu noktayı tekrarla, Arka planı atla, Duraklat/Devam,
+DURDUR ve akımları sıfırla; ayrıca rutin düğmeleri.
 
-Donanim islemleri (rampa + oturma beklemesi) bloklayici olabildigi icin
-bekleme, `qt_bekle` ile Qt olay dongusunu isleterek yapilir; islem suresince
-dugmeler devre disi kalir. Boylece arayuz donmaz, thread karmasasi da olmaz.
+Donanım işlemleri (rampa + oturma beklemesi) bloklayıcı olabildiği için
+bekleme, `qt_bekle` ile Qt olay döngüsünü işleterek yapılır; işlem süresince
+düğmeler devre dışı kalır. Böylece arayüz donmaz, thread karmaşası da olmaz.
 
-Pencere kapanirsa ya da beklenmeyen bir hata olursa akimlar rampa ile sifira
+Pencere kapanırsa ya da beklenmeyen bir hata olursa akımlar rampa ile sıfıra
 indirilir.
+
+Not: tanımlayıcılar (değişken/fonksiyon adları) ve yapılandırma değerleri
+bilinçli olarak ASCII'dir; yalnızca insanın okuduğu metinler tam Türkçedir.
 """
 from __future__ import annotations
 
@@ -60,10 +63,10 @@ BICIM_ETIKETLERI = {
 
 
 def qt_bekle(saniye: float) -> None:
-    """Qt olay dongusunu isleterek bekler (arayuz donmasin diye).
+    """Qt olay döngüsünü işleterek bekler (arayüz donmasın diye).
 
-    `KaynakGrubu`'na `bekle` olarak verilir; rampa adimlari arasindaki
-    beklemeler bu fonksiyondan gecer.
+    `KaynakGrubu`'na `bekle` olarak verilir; rampa adımları arasındaki
+    beklemeler bu fonksiyondan geçer.
     """
     bitis = time.monotonic() + max(0.0, saniye)
     uygulama = QApplication.instance()
@@ -77,7 +80,7 @@ def qt_bekle(saniye: float) -> None:
 
 
 class MerkezlemePencere(QWidget):
-    """Elektriksel merkezleme arayuzu."""
+    """Elektriksel merkezleme arayüzü."""
 
     def __init__(
         self,
@@ -86,8 +89,8 @@ class MerkezlemePencere(QWidget):
         deneme_kipi: bool = False,
         devam: bool = False,
     ) -> None:
-        """`devam=True` ise akis `basla()` yerine `devam_ettir()` ile kurulur
-        (durum dosyasindan geri yuklenmis bir akis icin)."""
+        """`devam=True` ise akış `basla()` yerine `devam_ettir()` ile kurulur
+        (durum dosyasından geri yüklenmiş bir akış için)."""
         super().__init__()
         self.kfg = yapilandirma
         self.akis = akis
@@ -107,7 +110,7 @@ class MerkezlemePencere(QWidget):
         self._paneli_yenile()
 
     # ==================================================================
-    # Arayuz kurulumu
+    # Arayüz kurulumu
     # ==================================================================
     def _arayuzu_kur(self) -> None:
         duzen = QVBoxLayout()
@@ -128,10 +131,10 @@ class MerkezlemePencere(QWidget):
         self.kip_etiketi = QLabel(f"Kip: {self.kfg.genel.kip.upper()}")
         duzen.addWidget(self.kip_etiketi)
         duzen.addWidget(
-            QLabel(f"Modulator: {'ACIK' if self.kfg.genel.modulator_acik else 'KAPALI'}")
+            QLabel(f"Modülatör: {'AÇIK' if self.kfg.genel.modulator_acik else 'KAPALI'}")
         )
-        duzen.addWidget(QLabel(f"Calistirma: {self.akis.calistirma.etiket}"))
-        self.deneme_etiketi = QLabel("DENEME KIPI (simulator)")
+        duzen.addWidget(QLabel(f"Çalıştırma: {self.akis.calistirma.etiket}"))
+        self.deneme_etiketi = QLabel("DENEME KİPİ (simülatör)")
         self.deneme_etiketi.setVisible(self.deneme_kipi)
         duzen.addWidget(self.deneme_etiketi)
         duzen.addStretch(1)
@@ -140,7 +143,7 @@ class MerkezlemePencere(QWidget):
         for ad, tema in TEMALAR.items():
             self.tema_secici.addItem(tema.baslik, ad)
         self.tema_secici.setCurrentIndex(list(TEMALAR).index(self.tema.ad))
-        # Icerige gore boyutlan: tema adlari kesilmesin
+        # İçeriğe göre boyutlan: tema adları kesilmesin
         self.tema_secici.setSizeAdjustPolicy(QComboBox.AdjustToContents)
         self.tema_secici.currentIndexChanged.connect(self._tema_degisti)
         duzen.addWidget(self.tema_secici)
@@ -148,7 +151,7 @@ class MerkezlemePencere(QWidget):
         return kutu
 
     def _adim_panelini_kur(self) -> QWidget:
-        kutu = QGroupBox("Adim")
+        kutu = QGroupBox("Adım")
         duzen = QVBoxLayout()
         self.adim_etiketi = QLabel("-")
         kalin = QFont()
@@ -162,10 +165,10 @@ class MerkezlemePencere(QWidget):
         return kutu
 
     def _akim_panelini_kur(self) -> QWidget:
-        kutu = QGroupBox("Akimlar")
+        kutu = QGroupBox("Akımlar")
         izgara = QGridLayout()
         self.sutun_basliklari: list[QLabel] = []
-        for sutun, baslik in enumerate(("Bobin", "ayar (A)", "olculen (A)", "nominale gore")):
+        for sutun, baslik in enumerate(("Bobin", "ayar (A)", "ölçülen (A)", "nominale göre")):
             etiket = QLabel(baslik)
             izgara.addWidget(etiket, 0, sutun)
             self.sutun_basliklari.append(etiket)
@@ -183,12 +186,12 @@ class MerkezlemePencere(QWidget):
     def _giris_panelini_kur(self) -> QWidget:
         harm = self.kfg.harmonikler
         kutu = QGroupBox(
-            f"Harmonik girisi   (r_ref = {harm.r_ref_mm:g} mm, birim: {harm.birim})"
+            f"Harmonik girişi   (r_ref = {harm.r_ref_mm:g} mm, birim: {harm.birim})"
         )
         duzen = QVBoxLayout()
 
         ust = QHBoxLayout()
-        ust.addWidget(QLabel("Giris bicimi:"))
+        ust.addWidget(QLabel("Giriş biçimi:"))
         self.bicim_secici = QComboBox()
         for anahtar, etiket in BICIM_ETIKETLERI.items():
             self.bicim_secici.addItem(etiket, anahtar)
@@ -197,7 +200,7 @@ class MerkezlemePencere(QWidget):
         ust.addWidget(self.bicim_secici)
         ust.addStretch(1)
         if self.deneme_kipi:
-            self.doldur_dugmesi = QPushButton("Simulatorden doldur")
+            self.doldur_dugmesi = QPushButton("Simülatörden doldur")
             self.doldur_dugmesi.clicked.connect(self._simulatorden_doldur)
             ust.addWidget(self.doldur_dugmesi)
         duzen.addLayout(ust)
@@ -210,7 +213,7 @@ class MerkezlemePencere(QWidget):
         satir = 0
         for n in self.kfg.harmonikler.tum_harmonikler:
             zorunlu = n in self.kfg.harmonikler.zorunlu_harmonikler
-            baslik = QLabel(f"n = {n}" + ("  (zorunlu)" if zorunlu else "  (istege bagli)"))
+            baslik = QLabel(f"n = {n}" + ("  (zorunlu)" if zorunlu else "  (isteğe bağlı)"))
             izgara.addWidget(baslik, satir, 0)
             self.satir_basliklari[n] = (baslik, zorunlu)
 
@@ -242,9 +245,9 @@ class MerkezlemePencere(QWidget):
 
         duzen.addLayout(izgara)
 
-        # Girisin FIZIKSEL KARSILIGI, yazarken canli gosterilir: yanlis yazilan
-        # bir rakam, Onayla'ya basmadan once burada gorulur. (Modal onay
-        # yalnizca "olasi yazim hatasi" uyarisinda cikar.)
+        # Girişin FİZİKSEL KARŞILIĞI, yazarken canlı gösterilir: yanlış yazılan
+        # bir rakam, Onayla'ya basmadan önce burada görülür. (Modal onay
+        # yalnızca "olası yazım hatası" uyarısında çıkar.)
         self.yorum_etiketi = QLabel("")
         self.yorum_etiketi.setWordWrap(True)
         duzen.addWidget(self.yorum_etiketi)
@@ -264,10 +267,10 @@ class MerkezlemePencere(QWidget):
         self._temayi_uygula()
 
     def _temayi_uygula(self) -> None:
-        """Tema stil sayfasini ve rol bazli stilleri uygular.
+        """Tema stil sayfasını ve rol bazlı stilleri uygular.
 
-        Stil sayfasi UYGULAMA genelinde verilir; boylece QMessageBox gibi ayri
-        ust seviye pencereler de temali gorunur.
+        Stil sayfası UYGULAMA genelinde verilir; böylece QMessageBox gibi ayrı
+        üst seviye pencereler de temalı görünür.
         """
         uygulama = QApplication.instance()
         if uygulama is not None:
@@ -290,15 +293,15 @@ class MerkezlemePencere(QWidget):
             etiket.setStyleSheet(self.tema.sonuk_stili())
 
     def _sonuc_panelini_kur(self) -> QWidget:
-        kutu = QGroupBox("Son sonuc")
+        kutu = QGroupBox("Son sonuç")
         duzen = QVBoxLayout()
         self.sonuc_etiketi = QLabel("-")
         self.arka_plan_etiketi = QLabel("-")
         self.izleme_etiketi = QLabel("-")
-        # Onay kararinin dayandigi metin buraya yazilir (onerilen akimlar, mod
-        # genlikleri, beklenen degisim ve guvenlik satiri). Kullanicinin
-        # onaylayacagi seyi gormek icin KAYDIRMAK ZORUNDA KALMAMASI gerekir,
-        # bu yuzden 12 satirlik oneri metnini sigdiracak yukseklik verilir.
+        # Onay kararının dayandığı metin buraya yazılır (önerilen akımlar, mod
+        # genlikleri, beklenen değişim ve güvenlik satırı). Kullanıcının
+        # onaylayacağı şeyi görmek için KAYDIRMAK ZORUNDA KALMAMASI gerekir,
+        # bu yüzden 12 satırlık öneri metnini sığdıracak yükseklik verilir.
         self.oneri_metni = QPlainTextEdit()
         self.oneri_metni.setReadOnly(True)
         self.oneri_metni.setMinimumHeight(260)
@@ -318,13 +321,13 @@ class MerkezlemePencere(QWidget):
         self.onayla_dugmesi = QPushButton("Onayla")
         self.onayla_dugmesi.setMinimumHeight(44)
         self.onayla_dugmesi.clicked.connect(self._onayla)
-        self.tekrarla_dugmesi = QPushButton("Bu noktayi tekrarla")
+        self.tekrarla_dugmesi = QPushButton("Bu noktayı tekrarla")
         self.tekrarla_dugmesi.clicked.connect(self._noktayi_tekrarla)
-        self.arka_plan_atla_dugmesi = QPushButton("Arka plani atla")
+        self.arka_plan_atla_dugmesi = QPushButton("Arka planı atla")
         self.arka_plan_atla_dugmesi.clicked.connect(self._arka_plani_atla)
         self.duraklat_dugmesi = QPushButton("Duraklat")
         self.duraklat_dugmesi.clicked.connect(self._duraklat_devam)
-        self.durdur_dugmesi = QPushButton("DURDUR ve akimlari sifirla")
+        self.durdur_dugmesi = QPushButton("DURDUR ve akımları sıfırla")
         self.durdur_dugmesi.setMinimumHeight(44)
         self.durdur_dugmesi.clicked.connect(self._durdur)
         for dugme in (
@@ -345,15 +348,15 @@ class MerkezlemePencere(QWidget):
         self.tekrarlanabilirlik_dugmesi.clicked.connect(
             lambda: self._rutin_calistir(self.akis.tekrarlanabilirlik_rutinini_kuyrukla)
         )
-        self.polarite_dugmesi = QPushButton("Polarite dogrulamasi")
+        self.polarite_dugmesi = QPushButton("Polarite doğrulaması")
         self.polarite_dugmesi.clicked.connect(
             lambda: self._rutin_calistir(self.akis.polarite_rutinini_kuyrukla)
         )
-        self.modulator_dugmesi = QPushButton("Modulator karsilastirmasi")
+        self.modulator_dugmesi = QPushButton("Modülatör karşılaştırması")
         self.modulator_dugmesi.clicked.connect(
             lambda: self._rutin_calistir(self.akis.modulator_rutinini_kuyrukla)
         )
-        self.ozet_dugmesi = QPushButton("Ozeti yaz")
+        self.ozet_dugmesi = QPushButton("Özeti yaz")
         self.ozet_dugmesi.clicked.connect(self._ozeti_yaz)
         for dugme in (
             self.tekrarlanabilirlik_dugmesi,
@@ -384,7 +387,7 @@ class MerkezlemePencere(QWidget):
         yeni = self.bicim_secici.currentData()
         if yeni == self.bicim:
             return
-        # Alanlar doluysa bicimi degistirirken degerleri cevir.
+        # Alanlar doluysa biçimi değiştirirken değerleri çevir.
         mevcut = self._alanlari_oku()
         cevrilebilir = True
         try:
@@ -396,8 +399,8 @@ class MerkezlemePencere(QWidget):
                 opsiyonel=self.kfg.harmonikler.opsiyonel_harmonikler,
             )
         except ValueError:
-            # AlanHatasi (bos/sayi degil) ya da HarmonikHatasi (ornegin negatif
-            # genlik): ikisi de ValueError turevidir.
+            # AlanHatasi (boş/sayı değil) ya da HarmonikHatasi (örneğin negatif
+            # genlik): ikisi de ValueError türevidir.
             cevrilebilir = False
         self.bicim = yeni
         self._alan_basliklarini_yenile()
@@ -418,11 +421,11 @@ class MerkezlemePencere(QWidget):
         return AlanGirisi(alanlar=alanlar, mutlak_gradyen_T_m=self.mutlak_gradyen_kutusu.text())
 
     def _alanlari_doldur(self, giris: AlanGirisi) -> None:
-        """Alanlari doldurur.
+        """Alanları doldurur.
 
-        Doldurma sirasinda sinyaller BLOKLANIR: aksi halde yarim doldurulmus
-        alanlar (ornegin bicim degisiminde hala eski bicimdeki degerler) yeni
-        bicimde yorumlanmaya calisilir ve gecici, anlamsiz hatalar uretir.
+        Doldurma sırasında sinyaller BLOKLANIR: aksi halde yarım doldurulmuş
+        alanlar (örneğin biçim değişiminde hâlâ eski biçimdeki değerler) yeni
+        biçimde yorumlanmaya çalışılır ve geçici, anlamsız hatalar üretir.
         """
         kutular = [k for cift in self.alan_kutulari.values() for k in cift]
         kutular.append(self.mutlak_gradyen_kutusu)
@@ -451,7 +454,7 @@ class MerkezlemePencere(QWidget):
             etiket.setText("")
 
     def _turetilenleri_yenile(self) -> None:
-        """Girilen degerlerin turetilmis B_n/A_n (ya da genlik/faz) karsiligini gosterir."""
+        """Girilen değerlerin türetilmiş B_n/A_n (ya da genlik/faz) karşılığını gösterir."""
         giris = self._alanlari_oku()
         for n in self.alan_kutulari:
             etiket = self.turetilen_etiketleri[n]
@@ -464,7 +467,7 @@ class MerkezlemePencere(QWidget):
                     tek_alan, self.akis.konvansiyon, self.bicim, zorunlu=(n,), opsiyonel=()
                 )
             except ValueError:
-                etiket.setText("(gecersiz)")
+                etiket.setText("(geçersiz)")
                 continue
             c_n = olcum.bilesen(n)
             if self.bicim == "genlik_faz":
@@ -477,12 +480,12 @@ class MerkezlemePencere(QWidget):
         self._yorumu_yenile(giris)
 
     def _yorumu_yenile(self, giris: AlanGirisi) -> None:
-        """Girisin fiziksel karsiligini (merkez ve g) canli gosterir."""
+        """Girişin fiziksel karşılığını (merkez ve g) canlı gösterir."""
         if self.akis.bekleme is Bekleme.ARKA_PLAN_GIRISI:
             self.yorum_etiketi.setVisible(True)
             self.yorum_etiketi.setText(
-                "Bu giris ARKA PLAN olarak kaydedilecek (akimlar sifirda, "
-                "olcumlerden kompleks olarak cikarilacak)."
+                "Bu giriş ARKA PLAN olarak kaydedilecek (akımlar sıfırda, "
+                "ölçümlerden kompleks olarak çıkarılacak)."
             )
             return
         if self.akis.bekleme is not Bekleme.OLCUM_GIRISI:
@@ -510,9 +513,9 @@ class MerkezlemePencere(QWidget):
             net = self.akis.konvansiyon.arka_plan_cikar(olcum, self.akis.son_arka_plan)
             y = self.akis.konvansiyon.kontrol_vektoru(net, self.akis.gradyen_hedefi())
         except Exception as hata:
-            self.yorum_etiketi.setText(f"Bu giris yorumlanamiyor: {hata}")
+            self.yorum_etiketi.setText(f"Bu giriş yorumlanamıyor: {hata}")
             return
-        self.yorum_etiketi.setText(f"Bu giris su anlama geliyor:   {y}")
+        self.yorum_etiketi.setText(f"Bu giriş şu anlama geliyor:   {y}")
 
     # ==================================================================
     # Panel yenileme
@@ -520,7 +523,7 @@ class MerkezlemePencere(QWidget):
     def _paneli_yenile(self) -> None:
         panel = self.akis.durum_paneli()
         self.adim_etiketi.setText(
-            f"Adim {panel['adim_no']} / {panel['toplam_adim']}"
+            f"Adım {panel['adim_no']} / {panel['toplam_adim']}"
             + (f"  -  {panel['etiket']}" if panel["etiket"] else "")
             + (f"   (faz: {panel['faz']}, iterasyon: {panel['iterasyon']})")
         )
@@ -533,17 +536,17 @@ class MerkezlemePencere(QWidget):
             ayar_e.setText(f"{ayar:.4f}")
             olculen_e.setText(f"{olculen:.4f}")
             if abs(ayar) < 1e-9:
-                asimetri_e.setText("(sifir)")
+                asimetri_e.setText("(sıfır)")
             else:
                 asimetri_e.setText(f"{(ayar - nominal) / nominal * 100:+.3f} %")
 
         if self.akis.son_y is not None:
             self.sonuc_etiketi.setText(str(self.akis.son_y))
         else:
-            self.sonuc_etiketi.setText("Henuz islenmis bir olcum yok.")
+            self.sonuc_etiketi.setText("Henüz işlenmiş bir ölçüm yok.")
         if self.akis.son_arka_plan is not None:
             c1 = self.akis.son_arka_plan.bilesenler.get(1, 0j)
-            tazelik = "bu adimda taze" if panel["arka_plan_taze"] else "onceki adimdan"
+            tazelik = "bu adımda taze" if panel["arka_plan_taze"] else "önceki adımdan"
             self.arka_plan_etiketi.setText(
                 f"Son arka plan: B_1 = {c1.real:.4g}, A_1 = {c1.imag:.4g} "
                 f"({self.kfg.harmonikler.birim}) - {tazelik}"
@@ -562,9 +565,9 @@ class MerkezlemePencere(QWidget):
                 deger = getattr(izleme, ad)
                 if deger is not None:
                     parcalar.append(f"{ad} = {deger:.4g}")
-            self.izleme_etiketi.setText("Izleme:  " + "   ".join(parcalar))
+            self.izleme_etiketi.setText("İzleme:  " + "   ".join(parcalar))
         if self.akis.son_arka_plan is None:
-            self.arka_plan_etiketi.setText("Henuz arka plan olcumu girilmedi.")
+            self.arka_plan_etiketi.setText("Henüz arka plan ölçümü girilmedi.")
 
         if self.akis.bekleyen_oneri is not None:
             self.oneri_metni.setPlainText(self.akis.bekleyen_oneri.ozet_metni(nominal))
@@ -598,9 +601,9 @@ class MerkezlemePencere(QWidget):
             )
         )
         if bekleme is Bekleme.DUZELTME_ONAYI:
-            self.onayla_dugmesi.setText("Onerilen akimlari UYGULA")
+            self.onayla_dugmesi.setText("Önerilen akımları UYGULA")
         elif bekleme is Bekleme.KULLANICI_EYLEMI:
-            self.onayla_dugmesi.setText("Eylemi yaptim, devam")
+            self.onayla_dugmesi.setText("Eylemi yaptım, devam")
         else:
             self.onayla_dugmesi.setText("Onayla")
         self.tekrarla_dugmesi.setEnabled(not self._mesgul and olcum_bekleniyor)
@@ -625,7 +628,7 @@ class MerkezlemePencere(QWidget):
     # Eylemler
     # ==================================================================
     def _mesgul_calistir(self, islev: Any, *args: Any) -> None:
-        """Donanim islemi iceren bir eylemi mesgul bayragiyla calistirir."""
+        """Donanım işlemi içeren bir eylemi meşgul bayrağıyla çalıştırır."""
         if self._mesgul:
             return
         self._mesgul = True
@@ -633,7 +636,7 @@ class MerkezlemePencere(QWidget):
         QApplication.setOverrideCursor(Qt.WaitCursor)
         try:
             islev(*args)
-        except Exception as hata:  # pragma: no cover - arayuz hata yolu
+        except Exception as hata:  # pragma: no cover - arayüz hata yolu
             self._hatayi_isle(hata)
         finally:
             QApplication.restoreOverrideCursor()
@@ -660,15 +663,15 @@ class MerkezlemePencere(QWidget):
                 opsiyonel=self.kfg.harmonikler.opsiyonel_harmonikler,
             )
         except AlanHatasi as hata:
-            QMessageBox.warning(self, "Gecersiz giris", str(hata))
+            QMessageBox.warning(self, "Geçersiz giriş", str(hata))
             return
 
         dogrulama = self.akis.olcum_dogrula(olcum)
         if dogrulama.onay_gerekli:
             yanit = QMessageBox.question(
                 self,
-                "Olasi yazim hatasi",
-                dogrulama.metin() + "\n\nGirdiginiz deger dogru mu?",
+                "Olası yazım hatası",
+                dogrulama.metin() + "\n\nGirdiğiniz değer doğru mu?",
                 QMessageBox.Yes | QMessageBox.No,
                 QMessageBox.No,
             )
@@ -699,13 +702,13 @@ class MerkezlemePencere(QWidget):
         yanit = QMessageBox.question(
             self,
             "Durdur",
-            "Akis durdurulacak ve dort akim rampa ile sifira indirilecek. Emin misiniz?",
+            "Akış durdurulacak ve dört akım rampa ile sıfıra indirilecek. Emin misiniz?",
             QMessageBox.Yes | QMessageBox.No,
             QMessageBox.No,
         )
         if yanit != QMessageBox.Yes:
             return
-        self._mesgul_calistir(self.akis.durdur, "kullanici durdurdu")
+        self._mesgul_calistir(self.akis.durdur, "kullanıcı durdurdu")
 
     def _rutin_calistir(self, kuyruklayici: Any) -> None:
         self._mesgul_calistir(kuyruklayici)
@@ -716,10 +719,10 @@ class MerkezlemePencere(QWidget):
         except Exception as hata:  # pragma: no cover
             self._hatayi_isle(hata)
             return
-        QMessageBox.information(self, "Ozet yazildi", f"Ozet dosyasi:\n{yol}")
+        QMessageBox.information(self, "Özet yazıldı", f"Özet dosyası:\n{yol}")
 
     def _simulatorden_doldur(self) -> None:
-        """Deneme kipinde alanlari simulator ciktisiyla doldurur."""
+        """Deneme kipinde alanları simülatör çıktısıyla doldurur."""
         kaynak = self.akis.olcum_kaynagi
         istek = self.akis.mevcut_istek
         if not isinstance(kaynak, SimulatorGirisi) or istek is None:
@@ -728,10 +731,10 @@ class MerkezlemePencere(QWidget):
         self._alanlari_doldur(olcumden_alanlar(olcum, self.akis.konvansiyon, self.bicim))
 
     # ==================================================================
-    # Guvenlik: hata ve kapanis
+    # Güvenlik: hata ve kapanış
     # ==================================================================
     def _hatayi_isle(self, hata: BaseException) -> None:
-        """Beklenmeyen hatada akimlari rampa ile sifira indirir ve bildirir."""
+        """Beklenmeyen hatada akımları rampa ile sıfıra indirir ve bildirir."""
         izleme = "".join(traceback.format_exception_only(type(hata), hata)).strip()
         try:
             self.akis.kaynaklar.acil_sifirla()
@@ -739,17 +742,17 @@ class MerkezlemePencere(QWidget):
             QMessageBox.critical(
                 self,
                 "Hata",
-                f"Beklenmeyen hata olustu; akimlar rampa ile sifira indirildi.\n\n{izleme}",
+                f"Beklenmeyen hata oluştu; akımlar rampa ile sıfıra indirildi.\n\n{izleme}",
             )
 
-    def closeEvent(self, olay: Any) -> None:  # noqa: N802 (Qt adlandirmasi)
-        """Pencere kapanirsa akimlari guvenli bicimde sifira indirir."""
+    def closeEvent(self, olay: Any) -> None:  # noqa: N802 (Qt adlandırması)
+        """Pencere kapanırsa akımları güvenli biçimde sıfıra indirir."""
         try:
             if not self.akis.bitti_mi():
-                self.akis.durdur("pencere kapatildi")
+                self.akis.durdur("pencere kapatıldı")
             self.akis.kaynaklar.guvenli_kapat()
             self.akis.ozeti_yaz()
-        except Exception:  # pragma: no cover - kapanis yolu
+        except Exception:  # pragma: no cover - kapanış yolu
             try:
                 self.akis.kaynaklar.acil_sifirla()
             except Exception:

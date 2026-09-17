@@ -1,0 +1,153 @@
+# =============================================================================
+#  pEDM air-core kuadrupol - elektriksel merkezleme yapilandirmasi
+#
+#  Butun fiziksel sabitler, sinirlar ve konvansiyon secimleri bu dosyada.
+#  Kodda gizli sabit yoktur.
+#
+#  Birim kurali: anahtar adlari birimi tasir (..._A, ..._mm, ..._T, ..._derece).
+#  Birimsiz (bagil) buyuklukler ..._bagil ya da oran olarak adlandirilir.
+# =============================================================================
+
+genel:
+  # kuru  : komutlar kaydedilir ama cihaza gonderilmez (VARSAYILAN)
+  # canli : gercek donanim. Yalnizca --canli bayragi ile secilebilir.
+  kip: kuru
+  # 1 kHz modulator durumu. Program modulatoru KONTROL ETMEZ, yalnizca kaydeder.
+  modulator_acik: false
+  calistirma_kok_dizini: calistirmalar
+  durum_dosyasi_adi: durum.json
+
+miknatis:
+  nominal_akim_A: 10.0
+  # Bobinler, cercevedeki etiketlere gore (etiketli taraftan bakildiginda):
+  #   1 sag ust, 2 sol ust, 3 sol alt, 4 sag alt
+  bobin_acilari_derece: [45.0, 135.0, 225.0, 315.0]
+  # Her bobinin nominal kuadrupol polaritesi (isaretli akim tanimi icin).
+  nominal_polarite: [1, -1, 1, -1]
+  # Hedef gradyen: "ilk_olcum" ise nominal akimlardaki ilk olcumden alinir.
+  gradyen_hedefi_kaynagi: ilk_olcum
+  nominal_gradyen_T_m: 0.1          # gradyen_hedefi_kaynagi: yapilandirma ise kullanilir
+  endustans_mH: 6.5                 # yalnizca belgeleme/uyari amacli
+
+modlar:
+  # Modlar, fiziksel akim GENLIKLERINE uygulanan pertubasyon desenleridir.
+  # Isaretli akimda (genlik x nominal_polarite) sunlara karsilik gelirler:
+  #   Q -> nominal kuadrupol deseni  (gradyen)
+  #   H -> yatay dipol   (sag cift 1,4  <->  sol cift 2,3)
+  #   V -> dusey dipol   (ust cift 1,2  <->  alt cift 3,4)
+  #   M -> uniform       (net dolasan akim = monopol; dipol ve gradyene katkisiz)
+  # Dordu birbirine ortogonaldir (Hadamard bazi).
+  Q: [1, 1, 1, 1]
+  H: [1, -1, -1, 1]
+  V: [1, 1, -1, -1]
+  M: [1, -1, 1, -1]
+
+harmonikler:
+  r_ref_mm: 25.0
+  # Arayuzde hangi giris bicimiyle baslanacagi (arayuzden degistirilebilir):
+  #   genlik_faz   : |C_n| ve faz
+  #   normal_skew  : B_n ve A_n
+  giris_bicimi: genlik_faz
+  # T | mT | units   (units: b_n = B_n / B_(units_referans_n) * 1e4)
+  birim: T
+  units_referans_n: 2
+  # units biciminde mutlak olcek icin gereken gradyen (T/m). null ise
+  # G_hedef olarak nominal_gradyen_T_m kullanilir.
+  units_mutlak_gradyen_T_m: null
+
+  # --- Faz konvansiyonu (yalnizca giris_bicimi: genlik_faz icin) ---
+  faz_birimi: derece               # derece | radyan
+  # true  : C_n = |C_n| * exp(i * n * faz)      (faz = multipol acisi)
+  # false : C_n = |C_n| * exp(i * faz)          (faz = dogrudan elektriksel faz)
+  faz_n_carpani: true
+  faz_isareti: 1                   # +1 | -1
+
+  # --- Merkez (feed-down) konvansiyonu ---
+  # z_c = feed_down_isareti * (-r_ref * C_1 / C_2)
+  # eslenik: true ise C_n yerine eslenigi kullanilir (B_x + i*B_y konvansiyonu).
+  feed_down_isareti: 1
+  eslenik: false
+  # Gradyen hangi bilesenden okunur: normal (B_2/r_ref) | genlik (|C_2|/r_ref)
+  gradyen_kaynagi: normal
+
+  # Arka plan cikarma: tum | yalniz_dipol
+  arka_plan_cikarma: tum
+  # Yalnizca izleme icin kaydedilecek ek harmonikler (zorunlu degil)
+  opsiyonel_harmonikler: [3, 4]
+
+guc_kaynaklari:
+  # ITECH IT-M3233, sabit akim kipi. Sira bobin numaralandirmasiyla ayni (1..4).
+  visa_adresleri:
+    - ASRL1::INSTR
+    - ASRL2::INSTR
+    - ASRL3::INSTR
+    - ASRL4::INSTR
+  # Sabit akim kipinde VOLT bir uyum (compliance) sinirdir; akimdan ONCE yazilir.
+  uyum_gerilimi_V: 20.0
+  rampa_hizi_A_s: 0.5
+  rampa_adim_suresi_s: 0.1
+  oturma_suresi_s: 2.0
+  akim_tolerans_A: 0.02
+  oturma_dogrulama_denemesi: 5
+
+guvenlik:
+  bobin_basi_max_akim_A: 10.5
+  adim_basi_max_bagil_degisim: 0.02      # bobin basina, her iterasyonda
+  nominale_gore_max_asimetri: 0.05       # bobin basina, toplam
+
+kalibrasyon:
+  modlar: [H, V, Q]                      # zorunlu uc mod
+  m_modu_kontrolu: true                  # M modu: istege bagli kontrol
+  nokta_sayisi: 3                        # 3  (-D, 0, +D)  |  5  (-2D .. +2D)
+  delta_bagil: 0.005                     # D = nominal akimin %0.5'i
+  ortak_sifir_noktasi: true              # sifir noktasi modlar arasinda paylasilir
+  monoton_olmayan_sira: true             # suruklenmeyi egimden ayirmak icin
+  arka_plan_her_n_noktada: 1             # 1 = her noktada (varsayilan)
+  olcum_basi_tahmini_sure_dk: 5.0        # sure tahmini icin
+  kosul_sayisi_esigi: 20.0               # ustunde kalibrasyon supheli
+  m_sutunu_esigi_bagil: 0.10             # M sutunu, H/V sutunlarinin bu katindan buyukse supheli
+  lineerlik_r2_esigi: 0.98               # altinda fit lineer sayilmaz
+  dosya_adi: kalibrasyon.json
+
+duzeltme:
+  alpha: 0.9                             # dI = alpha * pinv(R) * (y_hedef - y)
+  max_iterasyon: 5
+  merkez_toleransi_um: 5.0
+  g_toleransi: 0.001                     # |g| esigi (bagil)
+  monopol_cikar: true                    # her adimda (I - I_nominal)'in M bileseni atilir
+  tekrarlanabilirlik_N: 3                # sabit akimlarda tekrar olcum sayisi
+  tolerans_tekrarlanabilirlik_carpani: 2.5   # tolerans < carpan * tekrarlanabilirlik ise uyar
+
+dogrulama:
+  # Girilen deger, kalibrasyondan beklenen y'den bu kattan fazla saparsa
+  # "olasi yazim hatasi" uyarisi verilir ve yeniden onay istenir.
+  yazim_hatasi_sapma_carpani: 5.0
+  # Mertebe kontrolu: |C_1| ve |C_2| icin makul araliklar (birim: yapilandirilan birim)
+  c1_makul_aralik: [1.0e-9, 1.0e-2]
+  c2_makul_aralik: [1.0e-6, 1.0e+0]
+
+simulator:
+  # 2D cizgi akimi modeli. Yalnizca test ve deneme kipinde kullanilir.
+  bobin_yaricapi_m: 0.10                 # a
+  demet_yari_acisi_derece: 30.0          # alpha; R_eff = a*sqrt(2)/(4*cos(alpha))
+  sarim_sayisi: 72                       # 10 A'da G ~ 0.1 T/m
+  # Bildirilen harmonik cercevesinin donusu (C_n -> C_n * exp(i*n*aci)).
+  # Varsayilan 0: racetrack bobinin iki demeti zit yonlu oldugu icin, kosegen
+  # yerlesimde (45/135/225/315) nominal desen zaten NORMAL kuadrupol verir ve
+  # H -> x_c, V -> y_c dogrudan saglanir. Gercek duzenek farkli bir faz
+  # referansi kullaniyorsa bu aci ile ayarlanir.
+  olcum_cercevesi_acisi_derece: 0.0
+  miknatis_ofseti_mm: [0.10, -0.05]      # dx, dy
+  roll_mrad: 1.0
+  arka_plan_T: [1.0e-6, -0.4e-6]         # uniform B_y, B_x
+  arka_plan_surukleme_T_s: 0.0
+  # Olcum gurultusu: her harmonik bilesenine eklenen sigma = bu deger * |C_2|.
+  # 3e-5, |C_2| = 2.5 mT icin ~0.075 uT ve ~0.75 um merkez sacilimi demektir;
+  # bu, 5 um toleransin tekrarlanabilirlik carpani kontrolunu gecer.
+  harmonik_gurultu_bagil: 3.0e-5
+  harmonik_surukleme_bagil_s: 0.0
+  # Bobin basina yerlesim ve sarim hatalari (0 = kusursuz)
+  yerlesim_hatasi_radyal_mm: [0.0, 0.0, 0.0, 0.0]
+  yerlesim_hatasi_acisal_mrad: [0.0, 0.0, 0.0, 0.0]
+  sarim_hatasi_bagil: [0.0, 0.0, 0.0, 0.0]
+  tohum: 12345

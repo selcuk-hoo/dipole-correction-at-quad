@@ -1,356 +1,507 @@
-# dipole-correction-at-quad
+# Air-core kuadrupolde elektriksel merkezleme
 
-Bir quadrupol mıknatısta mekanik hizalama hatası (ofset), rotating coil
-ölçümlerinde istenmeyen bir **dipol alan** (Bx, By) olarak ortaya çıkar.
-Bu depo, mıknatısı fiziksel olarak hareket ettirmeden, sadece bobin
-akımlarını değiştirerek bu dipol alanı aktif olarak bastırmayı hedefleyen
-iki uygulama içerir. İkisi de aynı fikrin farklı olgunluk seviyelerindeki
-uygulamalarıdır; ikinci uygulama (`quad_dipole_compensation.py`) birincinin
-(`minimize_dipole.py`) yerini almak üzere, daha genel ve daha az varsayıma
-dayalı bir yöntemle yazılmıştır.
+pEDM (proton elektrik dipol momenti) depolama halkası deneyi için geliştirilen
+demirsiz (air-core) kuadrupol prototipinde, **mekanik ofsetten kaynaklanan dipol
+harmoniklerini dört bobin akımına küçük asimetriler uygulayarak sıfırlayan**
+yazılım. Mıknatıs mekanik olarak hareket ettirilmez; gradyen nominal değerinde
+tutulur.
+
+Donanım: dört bobin, her biri ayrı bir **ITECH IT-M3233** DC güç kaynağıyla
+(sabit akım kipi, nominal 10 A) beslenir. Alan, ayrı bir bilgisayarda çalışan
+rotating coil yazılımıyla ölçülür; sonuçlar bu programın arayüzüne **elle**
+girilir. Polarite her enjeksiyondan önce ayrı röle donanımıyla değiştirilir;
+mıknatıs ayrıca ayrı bir modülatör kartıyla 1 kHz'de %1 derinlikle modüle edilir
+(program bu ikisini kontrol etmez, yalnızca durumu kaydeder ve gerektiğinde
+kullanıcıdan değiştirmesini ister).
 
 ## İçindekiler
 
-- [1. Problem](#1-problem)
-- [2. `minimize_dipole.py` — ilk uygulama](#2-minimize_dipolepy--ilk-uygulama)
-- [3. `quad_dipole_compensation.py` — response-matrix tabanlı uygulama](#3-quad_dipole_compensationpy--response-matrix-tabanlı-uygulama)
-- [4. Neden quadrupol gradyenti (G) burada hedeflenmiyor](#4-neden-quadrupol-gradyenti-g-burada-hedeflenmiyor)
-- [5. Dosya yapısı](#5-dosya-yapısı)
-- [6. Kurulum ve çalıştırma](#6-kurulum-ve-çalıştırma)
-- [7. Parametreler](#7-parametreler)
-- [8. Olası geliştirmeler](#8-olası-geliştirmeler)
+- [1. Konvansiyonlar](#1-konvansiyonlar) ← **tüm işaret/birim/numaralandırma tanımları burada**
+- [2. Yöntem](#2-yöntem)
+- [3. İş akışı](#3-iş-akışı)
+- [4. Kurulum ve çalıştırma](#4-kurulum-ve-çalıştırma)
+- [5. Modüller](#5-modüller)
+- [6. Çıktılar](#6-çıktılar)
+- [7. Yapılandırma referansı](#7-yapılandırma-referansı)
+- [8. Güvenlik](#8-güvenlik)
+- [9. Simülatör ve testler](#9-simülatör-ve-testler)
+- [10. Bırakılan yaklaşım ve nedenleri](#10-bırakılan-yaklaşım-ve-nedenleri)
 
 ---
 
-## 1. Problem
+## 1. Konvansiyonlar
 
-Dört bağımsız güç kaynağıyla beslenen (`I0, I1, I2, I3`) bir air-core
-quadrupol mıknatısı düşünün. Mıknatıs mekanik olarak mükemmel
-hizalanmamışsa (merkez kayması, hafif dönüklük vb.), quadrupol alanının
-üzerine küçük bir dipol bileşeni biner. Bu, demet üzerinde istenmeyen bir
-orbit bükülmesine (kick) yol açar.
+Bu bölüm tek referanstır. Kodda karşılığı **yalnızca** `merkezleme/harmonikler.py`
+ve `merkezleme/modlar.py` dosyalarındadır; konvansiyon seçimleri koda dağıtılmamıştır
+ve hepsi `yapilandirma.yaml` üzerinden değiştirilebilir.
 
-Bu dipolü düzeltmenin iki yolu vardır:
+### 1.1 Harmonik tanımı
 
-1. Mıknatısı mekanik olarak yeniden hizalamak (yavaş, geri dönüşü zor,
-   genelde demet zamanı kaybettirir).
-2. Bobin akımlarını asimetrik hale getirerek, mıknatısı elektriksel
-   olarak "sanki doğru hizalanmış gibi" davranmaya zorlamak.
+`n = 1` dipol, `n = 2` kuadrupoldür. Referans yarıçapı `r_ref`'te karmaşık gösterim:
 
-Bu depodaki uygulamalar ikinci yolu, yani **sadece akım üzerinden**
-düzeltmeyi uygular.
+```
+B_y + i·B_x = Σ_{n≥1} C_n · (z / r_ref)^(n−1),      z = x + i·y
+C_n = B_n + i·A_n          (B: normal, A: skew)
+```
+
+Buradan doğrudan çıkanlar:
+
+| Büyüklük | Tanım |
+|---|---|
+| `z = 0`'da alan | `B_y = B_1`, `B_x = A_1` |
+| Gradyen | `G = B_2 / r_ref` (normal kuadrupol) |
+| Skew kuadrupol oranı | `SQ/G = A_2 / B_2` |
+| Roll açısı (alan çerçevesinde) | `½·arg(C_2)` |
+
+### 1.2 Manyetik merkez (feed-down)
+
+Kuadrupolün merkezi `z_c`'de ise alan `C_2·(z − z_c)/r_ref` olur, yani görünen
+dipol `C_1 = −C_2·z_c/r_ref`. Tersine çevirerek:
+
+```
+z_c = feed_down_isareti · ( −r_ref · C_1 / C_2 )
+x_c = Re(z_c),   y_c = Im(z_c)
+```
+
+Bu bir **orandır**: girilen birim (T, mT ya da normalize "units") merkezi
+etkilemez. Sağlama: `1 µT` arka plan dipolü, `G = 0.2 T/m`'de `1e−6/0.2 = 5 µm`
+merkez hatası verir — deneyin bilinen sayısıyla birebir.
+
+### 1.3 Bobin numaralandırması ve polarite
+
+Çerçevedeki etiketlere göre (etiketli taraftan bakıldığında):
+
+```
+        y
+        ↑
+   2 ●──┼──● 1        1: sağ üst   (135° ← 45°)
+     │  │  │          2: sol üst   (135°)
+ ────┼──●──┼──→ x     3: sol alt   (225°)
+     │  │  │          4: sağ alt   (315°)
+   3 ●──┼──● 4
+```
+
+`nominal_polarite = [+1, −1, +1, −1]`: her bobinin nominal kuadrupol polaritesi.
+**İşaretli akım** = fiziksel akım genliği × bu işaret. Güç kaynakları yalnızca
+pozitif akım sürer; işaret röle donanımıyla belirlenir.
+
+### 1.4 Mod bazı (Q / H / V / M)
+
+Modlar, fiziksel akım **genliklerine** uygulanan pertürbasyon desenleridir.
+İşaretli akımda ne anlama geldikleri sağ kolonda:
+
+| Mod | Genlik deseni | İşaretli akımda | Etkisi |
+|---|---|---|---|
+| `Q` | `(+1, +1, +1, +1)` | nominal kuadrupol deseni `(+,−,+,−)` | gradyen |
+| `H` | `(+1, −1, −1, +1)` | `(+,+,−,−)` | yatay merkez kayması (`x_c`) |
+| `V` | `(+1, +1, −1, −1)` | `(+,−,−,+)` | düşey merkez kayması (`y_c`) |
+| `M` | `(+1, −1, +1, −1)` | uniform `(+,+,+,+)` | **monopol**: dipole ve gradyene katkısız |
+
+Dördü birbirine ortogonaldir (Hadamard bazı: `VᵀV = 4I`). Mod genliği `ε`
+**bağıldır**: `ε = δI / I_nominal`. Bu seçim sayesinde `dg/dε_Q = 1` çıkar ve
+`R_eff` doğrudan metre birimine oturur.
+
+`M` modunun dipole ve gradyene katkısız olması, racetrack bobinin iki demetinin
+zıt yönlü akım taşımasından gelir: işaretli akımda uniform bir değişim net akım
+üretmez. Bu yön `R`'nin **sıfır uzayıdır**.
+
+### 1.5 Kontrol edilen vektör ve hedef
+
+```
+y = [x_c, y_c, g],      g = (G − G_hedef) / G_hedef
+Hedef: y = [0, 0, 0]
+```
+
+`x_c, y_c` metre, `g` boyutsuzdur. `G_hedef`, başlangıçta nominal akımlarda
+ölçülen gradyendir (`gradyen_hedefi_kaynagi: ilk_olcum`) ya da yapılandırmadan
+gelir.
+
+**Skew kuadrupol hedef DEĞİLDİR**; yalnızca izlenir (`SQ/G`, roll, `b3/a3/b4/a4`
+ile birlikte). Nedeni [Bölüm 10](#10-bırakılan-yaklaşım-ve-nedenleri)'da.
+
+### 1.6 Giriş biçimleri ve birimler
+
+Rotating coil ayrı bir bilgisayarda çalıştığı için değerler elle girilir. İki
+biçim de desteklenir, arayüzden anında geçiş yapılabilir:
+
+| Biçim | Alanlar | Dönüşüm |
+|---|---|---|
+| `genlik_faz` | `\|C_n\|`, faz | `C_n = \|C_n\|·exp(i·faz_isareti·n·φ)` (`faz_n_carpani: true`) veya `exp(i·faz_isareti·φ)` |
+| `normal_skew` | `B_n`, `A_n` | `C_n = B_n + i·A_n` |
+
+Birim `T`, `mT` ya da normalize `units` olabilir; `r_ref` ve birim arayüzde
+alanların yanında yazar. Girilen değerin türetilmiş karşılığı (`B_n`/`A_n` ya da
+`|C_n|`/faz) **salt okunur** olarak hemen gösterilir.
+
+> **`units` biçiminin sınırı:** normalize girdi mutlak ölçek taşımaz. Merkez
+> hesaplanabilir (orandır) ama gradyen okunamaz; bu yüzden `units` biçiminde
+> mutlak gradyen ayrı bir alandan girilir. Ayrıca akımlar sıfırken (arka plan
+> ölçümü) normalizasyon tanımsızdır — arka plan çıkarma kullanılacaksa birim
+> `T` ya da `mT` olmalıdır.
+
+Arka plan **kompleks uzayda** çıkarılır: `C_n^net = C_n^ölçülen − C_n^arka_plan`.
+Genlikleri çıkarmak yanlıştır; bu yüzden arka plan da aynı biçimde (faz bilgisiyle)
+girilir.
+
+### 1.7 Konvansiyon hatalarına bağışıklık
+
+Hedef tam olarak sıfır olduğu için, **tutarlı uygulanan** bir işaret ya da eşlenik
+hatası kapalı çevrimin yakınsamasını bozmaz: raporlanan merkez
+`y_rapor = T·y_gerçek` biçiminde tersinir bir dönüşümse, kalibrasyon da aynı
+dönüşümle ölçüldüğü için `R_rapor = T·R_gerçek` olur ve çözüm `y_rapor → 0`'a
+sürer; bu da `y_gerçek → 0` demektir. Konvansiyon yalnızca **raporlanan** merkezin
+işaretini/yönünü, `R_eff`'i ve teşhis çıktılarını etkiler.
+
+Bu yüzden konvansiyon riski üç katmanda yönetilir:
+
+1. Tüm seçimler tek modülde ve YAML'da (`faz_birimi`, `faz_n_carpani`,
+   `faz_isareti`, `eslenik`, `feed_down_isareti`, `gradyen_kaynagi`).
+2. Kalibrasyon, **beklenen mod–bileşen eşleşmesini** kontrol eder: `H → x_c`,
+   `V → y_c`, `Q → g`. Eşleşme tersse "bobin numaralandırması ya da faz/eşlenik
+   konvansiyonu ters olabilir" uyarısı verilir.
+3. Faz birimini yanlış seçmek (derece/radyan) fitleri doğrusallıktan çıkarır ve
+   lineerlik kontrolüne takılır.
 
 ---
 
-## 2. `minimize_dipole.py` — ilk uygulama
+## 2. Yöntem
 
-En basit senaryo: rotating coil yerine, mıknatısın **üstünde** ve
-**altında** iki dikey konumda ölçülen `bx1`, `bx2` alan değerleri
-kullanılır.
+### 2.1 Response matrix (Faz 1)
+
+Mod eğimleri `S` (3×4, sütunlar `Q/H/V/M`) ölçülür ve bobin bazına çevrilir:
 
 ```
-Bx1 (dipol)     = (bx1 + bx2) / 2      # ortalama
-Bx2 (quadrupol) = (bx1 - bx2) / 2      # fark
+R = S · Vᵀ / 4          (V: ortogonal mod matrisi)
 ```
 
-Bu iki büyüklüğün hedef değerlerden sapması (`D1`, `D2`), sabit öğrenme
-oranlarıyla (`learning_rate_dipol`, `learning_rate_quadrupol`) doğrudan
-akımlara uygulanır:
+- Satırlar: `x_c` [m], `y_c` [m], `g` [boyutsuz]
+- Sütunlar: bobin başına **bağıl** akım sapması `δI_i / I_nominal` [boyutsuz]
 
-- `I0` sadece dipol hatasına tepki verir.
-- Dört akımın hepsi, eşit ve aynı yönde, quadrupol hatasına tepki verir.
+`H`, `V`, `Q` zorunlu; `M` isteğe bağlı kontroldür (ölçülmezse sütunu sıfır kabul
+edilir — monopol dipole ve gradyene katkısız olduğu için bu fiziksel olarak
+doğrudur). Mod başına 3 nokta (`−Δ, 0, +Δ`) ya da 5 nokta (`−2Δ … +2Δ`);
+`Δ` varsayılan olarak nominal akımın %0.5'i. Sıfır noktası modlar arasında
+paylaşılabilir ve aynı zamanda `G_hedef`'in ölçüldüğü noktadır.
 
-Bu kural mıknatısın gerçek elektriksel davranışından (response matrix)
-değil, elle yazılmış sabit bir varsayımdan gelir — yani "I0 dipolü, hepsi
-birlikte quad'ı kontrol eder" varsayımı doğru olmayabilir. Bu, ikinci
-uygulamanın yazılma sebebidir.
+**Noktalar monoton olmayan sırada alınır.** Sıralama, zaman indeksi ile `ε`
+arasındaki korelasyonu en küçükleyen permütasyon seçilerek yapılır (5 noktada tam
+dekorelasyon mümkündür); ayrıca modlar birbirine geçmeli (round-robin) sıralanır,
+böylece yavaş bir sürüklenme tek bir modun eğimine yüklenmez. İki noktalı modlarda
+(3 nokta + ortak sıfır) modlar arası yön değiştirilir.
 
-*(Not: bu dosyadaki `config.py` bağımlılığı önceden depoda eksikti; artık
-`config.py` içinde her iki uygulama için de gerekli anahtarlar tanımlı.)*
+Her bileşen için doğru fit edilir; **eğim, kesişim, artıklar ve lineerlik (R²)**
+kaydedilir. R² yalnızca gerçekten tepki veren bileşenler için hesaplanır — tepki
+ölçütü, tepkinin hem ilgili **toleransın** hem de fit artıklarının belirgin
+üzerinde olmasıdır. (Aksi halde örneğin `H` modunda sabit sıfır civarında gezinen
+`g` bileşeni, gürültüden dolayı haksız yere "lineer değil" görünür.)
+
+Raporlanan tanılar: tekil değerler, ham ve **toleransa göre ölçeklenmiş** koşul
+sayısı, `M` sütunu oranı, ve
+
+```
+R_eff = (dx_c/dε_H) / (dg/dε_Q)
+```
+
+Koşul sayısı eşiği ölçeklenmiş değere uygulanır: satırlar farklı birimde olduğu
+için (m, m, boyutsuz) ham koşul sayısı birim seçiminden etkilenir ve tek başına
+anlamlı değildir. Ölçeklenmiş değer "her üç hedefi de kendi toleransına,
+karşılaştırılabilir akım çabasıyla kontrol edebiliyor muyum?" sorusunu yanıtlar.
+Bu prototip için sağlıklı değer ≈ 8.2'dir (eşik 20).
+
+Kalibrasyon şu durumlarda **şüpheli** işaretlenir: ölçeklenmiş koşul sayısı
+eşiğin üstünde, `M` sütunu küçük değil, fitler lineer değil, ya da mod–bileşen
+eşleşmesi beklenenden farklı.
+
+### 2.2 Düzeltme (Faz 2)
+
+```
+ΔI = α · pinv(R) · (y_hedef − y)
+```
+
+`pinv` Moore–Penrose pseudo-inverse'tir (minimum normlu çözüm). **Tikhonov
+regularizasyonu eklenmez:** `R` 3×4 ve rank 3 olduğu için hedef zaten tam olarak
+erişilebilir; regularizasyon yalnızca yolu yavaşlatır, varış noktasını
+değiştirmez. `α` varsayılan 0.9; sistem lineer olduğu için 1–3 iterasyon yeter.
+
+`R`'nin sıfır uzayı tam olarak `M` (monopol) yönü olduğundan `pinv` bu yönde
+bileşen üretmez; buna **ek olarak** her adımdan sonra `(I − I_nominal)` farkının
+monopol bileşeni açıkça atılır, böylece ölçüm gürültüsü sıfır uzayında birikmez.
+
+Uygulamadan önce önerilen akımlar, nominale göre asimetrileri, mod genlikleri ve
+beklenen merkez değişimi gösterilir; kullanıcı onayı istenir.
+
+**Durma:** `|x_c|` ve `|y_c|` merkez toleransının (varsayılan 5 µm) ve `|g|` kendi
+toleransının (varsayılan 1e−3) altına inince, ya da maksimum iterasyona ulaşınca.
+Tolerans, ölçülen merkez tekrarlanabilirliğinin ~2.5 katından küçük olmamalıdır;
+tekrarlanabilirlik rutini (sabit akımlarda N tekrar ölçüm) bunu ölçer ve tolerans
+çok sıkıysa uyarır.
+
+### 2.3 Beklenen büyüklükler
+
+Bu prototip için analitik olarak türetilen ve simülatörle doğrulanan ilişki:
+
+```
+R_eff = a·√2 / (4·cos α)
+```
+
+`a` = bobin yarıçapı, `α` = racetrack demetlerinin yarı açısı.
+
+| Büyüklük | Değer | Kaynak |
+|---|---|---|
+| `R_eff` (a = 100 mm, α = 30°) | **40.8 mm** | analitik = simülatör (birebir) |
+| `δI/I` (d = 100 µm) | **%0.245** | `d / R_eff` |
+| 1 µT arka plan @ 0.2 T/m | **5.0 µm** | `ΔC_1 / G` |
+| Tek adımda düzeltilebilir ofset | **≈ 577 µm** | `R_eff · sınır / √2` (sınır %2) |
+| Nominal gradyen (72 sarım, 10 A) | **0.0998 T/m** | simülatör |
 
 ---
 
-## 3. `quad_dipole_compensation.py` — response-matrix tabanlı uygulama
+## 3. İş akışı
 
-İkinci uygulama, mıknatısın gerçek elektriksel davranışını **varsaymak**
-yerine **ölçer**, ve düzeltmeyi sabit bir kuralla değil, **regularized
-least squares** optimizasyonuyla hesaplar. Girdi olarak sadece rotating
-coil'den (ya da eşdeğer bir ölçüm sisteminden) okunan yatay ve dikey
-dipol alanları (`Bx`, `By`) kullanılır — metin kutusuna elle girilir.
+Güç kaynakları bu yazılımdan doğrudan kontrol edilir; rotating coil ölçümü
+kullanıcı tarafından alınır ve elle girilir. Her ölçüm noktasında sıra sabittir:
 
-### Ölçüm ve hedef
+1. Program dört akımı **rampa ile sıfıra** indirir, oturmasını bekler,
+   "Arka plan ölçümünü alın ve girin" der.
+2. Kullanıcı arka plan harmoniklerini girer ve onaylar.
+3. (Gerekiyorsa) kullanıcıdan bir eylem istenir — röle ile polarite değişimi,
+   modülatörün açılıp kapatılması. Akımlar sıfırdayken sorulur.
+4. Program akımları hedefe **rampa ile** çıkarır, oturmasını `MEAS:CURR?` ile
+   doğrular, ölçülen akımları gösterir, "Ölçümü alın ve girin" der.
+5. Kullanıcı harmonikleri girer ve onaylar.
+6. Program arka planı çıkarır, `y`'yi hesaplar, sonucu gösterir ve kaydeder,
+   sonraki adıma geçer.
 
-```
-M = [Bx, By]        # ölçüm vektörü
-Target = [0, 0]      # ilk girilen dipol alanlar da dahil, hedef HER ZAMAN sıfır
-e = Target - M = -M  # hata vektörü
-```
+Arka planın her noktada mı yoksa N noktada bir mi alınacağı yapılandırılabilir
+(varsayılan: her noktada). Kullanıcı arka plan adımını atlarsa son geçerli arka
+plan kullanılır ve bu durum CSV'ye `arka_plan_taze = 0` ve bir not olarak
+kaydedilir.
 
-### Faz 1 — Response matrix kalibrasyonu (bir kez)
+Elle giriş sayısı ve tahmini süre başlamadan önce gösterilir:
 
-Mıknatısın `I0..I3` akımlarının `Bx, By`'yi nasıl etkilediği bilinmiyor,
-bu yüzden önce ölçülür. Uygulama bir sihirbaz gibi çalışır:
+| Kalibrasyon | Nokta | Arka plan her noktada | Arka plan 3 noktada bir |
+|---|---|---|---|
+| 3 nokta (H,V,Q,M) | 9 | 18 giriş | 12 giriş |
+| 5 nokta (H,V,Q,M) | 17 | 34 giriş | 23 giriş |
 
-1. Nominal akımlarda 1 ölçüm.
-2. Her bobin için sırayla `+ΔI` ve `-ΔI` uygulanıp birer ölçüm (4 bobin ×
-   2 = 8 ölçüm). Toplam **9 ölçüm**.
-3. Merkezi fark (central difference) ile response matrix'in her kolonu
-   hesaplanır:
+### Rutinler
 
-   ```
-   R[:, i] = (M(I_i + ΔI) - M(I_i - ΔI)) / (2·ΔI)
-   ```
+- **Tekrarlanabilirlik:** sabit akımlarda N tekrar ölçüm; `σ(x_c), σ(y_c), σ(g)`
+  raporlanır ve tolerans yeterliliği kontrol edilir. Sonuç, yazım hatası
+  doğrulamasının ölçeği olarak da kullanılır.
+- **Polarite doğrulaması:** düzeltilmiş akımlar uygulanır ve ölçüm alınır;
+  akımlar sıfırlanır, kullanıcıdan röle ile polariteyi değiştirmesi istenir; aynı
+  akım genlikleri ters polariteyle uygulanır ve ölçüm alınır.
+  `merkez(+) − merkez(−)` raporlanır. Her iki ölçümde de arka plan çıkarma sırası
+  uygulanır.
+- **Modülatör karşılaştırması:** düzeltilmiş merkez, modülatör kapalı ve açık
+  durumlarında ölçülüp karşılaştırılır. Program modülatörü kontrol etmez;
+  kullanıcıdan durumu değiştirmesini ister ve hangi durumda ölçüldüğünü kaydeder.
 
-   Sonuç, `Bx, By`'nin `I0..I3`'e duyarlılığını veren **2×4** bir matris
-   `R`'dir.
+### Kesinti ve devam
 
-Bu adımlar tamamen otomatik değildir: uygulama her adımda hangi
-akımların uygulanması gerektiğini gösterir, kullanıcı güç kaynaklarını
-elle o değerlere ayarlar ve rotating coil ölçümünü girer (aradaki
-"gerçek dünya" adımı — akım uygulama ve ölçüm — otomatikleştirilmemiştir,
-çünkü bu uygulamanın donanım kontrolü yoktur).
-
-Sonuç `response_matrix.json` dosyasına kaydedilir; bir sonraki
-çalıştırmada bu dosya varsa kalibrasyon adımı otomatik atlanır.
-
-**ΔI seçimi bir denge meselesidir:**
-
-- Çok küçük seçilirse rotating coil'in ölçüm gürültüsü türevi domine
-  eder; `R` gürültülü ve güvenilmez çıkar.
-- Çok büyük seçilirse merkezi fark artık mıknatısın o noktadaki gerçek
-  (yerel) eğimini değil, geniş bir aralığın ortalama eğimini yakalar —
-  mıknatıs tam lineer olmadığı için `R` gerçek Jacobian'dan sapmaya
-  başlar.
-
-README'deki "nominal akımın %0.5–2'si" bu yüzden sadece bir başlangıç
-noktasıdır; birkaç farklı ΔI ile deneyip `R`'nin tutarlı çıkıp
-çıkmadığına bakmak iyi bir sağlamadır. Ayrıca şu an her adımda tek
-ölçüm alınıyor — gürültüyü azaltmak için her adımda birkaç ölçüm alıp
-ortalamak kolay bir geliştirmedir (bkz. [Bölüm 8](#8-olası-geliştirmeler)).
-
-**`R` bir Jacobian'dır, global bir model değildir:** sadece
-kalibrasyonun yapıldığı nominal akım civarında geçerli bir yerel
-lineerleştirmedir. Düzeltme döngüsü (Faz 2) akımları bu civardan
-belirgin şekilde uzaklaştırırsa (örn. büyük bir mekanik ofset varsa),
-`R` artık gerçeği temsil etmeyebilir. Bu yüzden arayüzde "Yeniden
-Kalibre Et" butonu var — mıknatısın fiziksel durumu değiştiğinde ya da
-düzeltme akımları nominalden çok saptığında kullanılmalı.
-
-### Faz 2 — Regularized least squares döngüsü
-
-Her iterasyonda:
-
-```
-ölç Bx, By
-e = -[Bx, By]
-ΔI çöz:  (RᵀR + λI) ΔI = Rᵀe        # regularized least squares
-I_new = I_old + α·ΔI                # damping (kademeli uygulama)
-```
-
-`‖e‖ < tolerance` olduğunda yakınsama bildirilir (optimizasyon
-istenirse yine de devam ettirilebilir).
-
-**Neden regularization (λ‖ΔI‖²) gerekli:** `R` 2×4 olduğu için sistem
-**underdetermined**'dir — aynı `Bx, By` düzeltmesini veren sonsuz sayıda
-`ΔI` vardır (aralarındaki fark `R`'nin 2 boyutlu null space'ine aittir,
-yani `R·ΔI_null = [0,0]`: Bx,By'yi hiç değiştirmeyen ama akımları
-gereksiz yere oynatan yönler). Regularized least squares çözümü, λ→0
-limitinde bu sonsuz çözüm kümesinden **minimum-norm** olanı seçer —
-yani "aynı düzeltmeyi en az akım değişikliğiyle yapan" çözümü. Bu hem
-sayısal olarak kararlıdır (R kötü koşullu olsa bile) hem de akımlarda
-gereksiz gezinmeyi engeller. λ ve α'nın bu kapalı çevrimde tam olarak
-neyi kontrol ettiğine (varış noktasını mı, yoksa oraya gidiş yolunu mu)
-dair kesin bir analiz [Bölüm 4](#4-neden-quadrupol-gradyenti-g-burada-hedeflenmiyor)'te.
-
-**α (damping) neden gerekli:** Yukarıdaki analiz `R`'nin tam doğru
-olduğunu varsayar. Gerçekte `R`, kalibrasyon gürültüsünden ve
-mıknatısın hafif nonlineerliğinden dolayı asla mükemmel değildir. Tek
-adımda `α=1` ile "tam" düzeltmeyi uygulamak, hatalı bir `R` ile
-overshoot veya salınıma yol açabilir. Küçük `α` ile çok adım atmak,
-her adımda taze ölçümle güncellenen bir geri besleme (feedback) döngüsü
-gibi çalışır — `R`'nin %100 doğru olmasına gerek kalmaz, yaklaşık doğru
-olması yeterlidir; kalan hatayı sonraki iterasyonlar temizler.
-
-**`tolerance` seçimi:** Rotating coil'in ölçüm gürültüsünün belirgin
-şekilde üzerinde seçilmelidir; aksi halde `‖e‖ < tolerance` koşulu
-gürültü yüzünden hiç sağlanmaz ya da anlamsız şekilde uzun süre
-iterasyona devam edilir.
-
-### Kalıcılık ve loglama
-
-- `response_matrix.json`: kalibrasyon sonucu (R, nominal akımlar, ΔI,
-  zaman damgası). Sonraki çalıştırmalarda otomatik yüklenir.
-- `logs/dipol_duzeltme_logu.txt`: her iterasyonun `Bx, By, ‖e‖,
-  I0..I3` değerleri.
+Her adımdan sonra durum dosyası **atomik olarak** yazılır (geçici dosya +
+`os.replace`). Program kapanır ya da çökerse `--devam` ile kaldığı yerden devam
+edilir. Duraklat/Devam ve "DURDUR ve akımları sıfırla" her an kullanılabilir.
 
 ---
 
-## 4. Neden quadrupol gradyenti (G) burada hedeflenmiyor
-
-Bu, projenin en önemli tasarım kararlarından biri, bu yüzden ayrı bir
-başlıkta açıklıyoruz (kaynak: `quad_dipole_compensation.py` docstring'i).
-
-Alternatif bir tasarım (bu depoya dahil edilmedi, ama değerlendirildi),
-ölçüm vektörünü `[Bx, By, G, SQ]` olacak şekilde 4 harmoniğe genişletip,
-ilk ölçülen `G` değerini de hedef olarak sabitleyerek quadrupolü açıkça
-korumayı önerir. Bu depodaki uygulama **bilinçli olarak bunu yapmaz**:
-
-- İdeal bir 4-bobinli air-core quadrupolde, tasarım simetrisi gereği
-  "quad modu" (bobinlerin `+,-,+,-` alternatif işaretli, ortak ölçekte
-  birlikte değişmesi) ile "dipol modları" birbirine yaklaşık
-  **ortogonaldir**. Mekanik ofset bu ortogonalliği hafifçe bozduğu için
-  Bx, By ile G arasında küçük bir coupling oluşur — bu uygulamanın
-  düzelttiği tam olarak budur. Dolayısıyla bu düzeltmenin G'ye sızıntısı
-  da doğası gereği küçüktür.
-- Regularized least squares zaten minimum-norm çözümü seçtiği için
-  (bkz. Faz 2), null space yönünde **gereksiz** bir G sürüklenmesi
-  olmaz; kalan küçük sızıntı sadece Bx,By'yi düzeltmek için zorunlu
-  olan akım değişiminin yan etkisidir.
-- Gerçek hızlandırıcı ortamında bu düzeltme, **LOCO (Linear Optics from
-  Closed Orbit)** gibi bir optik kalibrasyon adımından **önce**
-  uygulanır. LOCO, kaynağı ne olursa olsun (mekanik ofset, bu
-  düzeltmenin kendisi, sıcaklık sürüklenmesi vb.) entegre gradyent
-  hatalarını orbit response matrix üzerinden ölçüp global quad
-  trim'leriyle telafi eder — bu zaten onun standart işidir. Bu yüzden
-  G için bu algoritma içinde ayrıca bir hedef/kısıt tanımlamaya gerek
-  yoktur; iş LOCO'ya bırakılır.
-
-### λ'nın gerçek rolü: varış noktası değil, oraya giden yol
-
-Yukarıdaki "minimum-norm çözüm seçilir" ifadesi tek başına eksik
-kalabilir; net olalım: **λ, G'nin ne kadar oynayacağını ayarlamıyor.**
-Kapalı çevrim (tek seferlik değil, ölç → düzelt → tekrar ölç) yapısı
-sayesinde, sistem gerçekten lineer olduğu sürece şu gösterilebilir:
-
-- Akımın null-space bileşeni, başlangıçta (nominal akımlarda) sıfır
-  olduğu için **tüm iterasyon boyunca sıfırda kalır** — hiç değişmez,
-  λ ne olursa olsun.
-- `‖e‖ → 0`'a yakınsandığında ulaşılan nihai `ΔI`, **λ'dan tamamen
-  bağımsız olarak her zaman aynı minimum-norm çözümdür**
-  (`ΔI = Rᵀ(RRᵀ)⁻¹·(-offset)`). λ ve α sadece oraya **ne hızda ve nasıl**
-  varıldığını belirler (bir PI-kontrolcüde integral teriminin
-  steady-state hatayı kazançtan bağımsız sıfırlaması gibi) — **nereye**
-  varılacağını değil.
-
-Bu, sentetik bir mıknatıs modeliyle (dipol response `R`'ye ek olarak,
-uygulamanın hiç ölçmediği bir `G`-duyarlılık vektörü `R_G` tanımlanarak)
-sayısal olarak da doğrulandı — döngü tam yakınsayana kadar çalıştırılıp
-farklı λ değerleri karşılaştırıldı:
-
-```
-  lambda   alpha   final ||e||      delta G
-  0.0001    0.20      9.8e-10    -1.069962
-  0.0010    0.50      7.4e-10    -1.069962
-  0.0100    0.20      9.7e-10    -1.069962
-  0.1000    0.50      7.5e-10    -1.069962
-  1.0000    0.20      1.0e-09    -1.069962
-```
-
-λ, 10.000 kat değişse bile (0.0001 → 1.0) nihai `ΔG` **tam olarak
-aynı** — ve bu değer, teorik minimum-norm çözümün `R_G` üzerine
-izdüşümüyle bire bir örtüşüyor. Yani regularization'ın gerçek garantisi
-şudur: sonsuz çözüm ailesinden **tamamen gereksiz** (null-space)
-oynamayı kesin olarak sıfırlar; ama Bx,By'yi düzeltmek için **zorunlu**
-olan hareketin G'ye yansıması, tamamen `R` ile `R_G`'nin geometrik
-ilişkisine (bu bölümün başındaki ortogonallik varsayımına) bağlıdır ve
-λ ile ayarlanamaz. (Bu sonuç, mıknatısın kalibrasyon civarında gerçekten
-lineer davrandığı idealize varsayımına dayanır; pratikte kalibrasyon
-bölgesinden uzaklaşıldıkça sapabilir — bkz. Faz 1'deki "R bir
-Jacobian'dır" notu.)
-
-**Bu kararın tek varsayımı — çalıştırma sırası:** Bu uygulama LOCO'dan
-(veya herhangi bir optik ölçüm/kalibrasyon adımından) **önce**
-çalıştırılmalıdır, commissioning'in erken bir adımı olarak. LOCO zaten
-çalıştırılıp makine o hâle göre kalibre edildikten **sonra** bu
-uygulama tekrar çalıştırılırsa (örn. yeniden hizalama sonrası), taze
-bir G sapması LOCO'suz ortada kalabilir ve ayrıca telafi edilmesi
-gerekebilir.
-
-G'yi yine de korumak istenirse, `quad_dipole_compensation.py`
-docstring'inde iki genişletme yolu tarif edilmiştir: G'yi düşük
-ağırlıklı bir "soft penalty" olarak ölçüm vektörüne eklemek, ya da
-kalibrasyonda `R`'nin G satırını da ölçüp düzeltmeyi onun null
-space'ine projekte ederek G'ye birinci mertebede hiç dokunulmamasını
-garanti etmek.
-
----
-
-## 5. Dosya yapısı
-
-```
-config.py                      İki uygulama için de ortak parametreler (CONFIG sözlüğü)
-minimize_dipole.py              İlk uygulama (iki-prob, sabit öğrenme oranı)
-dipole_core.py                  quad_dipole_compensation.py'nin PyQt5'ten bağımsız
-                                 çekirdek matematiği: kalibrasyon adımları, response
-                                 matrix hesabı, regularized least squares, damping,
-                                 response matrix'in JSON'a kayıt/yükleme.
-quad_dipole_compensation.py     İkinci uygulama: PyQt5 arayüzü, kalibrasyon
-                                 sihirbazı ve düzeltme döngüsü.
-response_matrix.json            (çalıştırınca oluşur, .gitignore'da) Kalibrasyon
-                                 sonucu — R matrisi, nominal akımlar, ΔI.
-logs/                           (çalıştırınca oluşur, .gitignore'da) İterasyon logları.
-```
-
-`dipole_core.py`'nin PyQt5'e bağımlı olmaması bilinçlidir: bu sayede
-çekirdek algoritma GUI olmadan da (örn. otomatik testlerle, ya da
-ileride bir komut satırı / donanım-otomasyonlu sürümde) kullanılıp
-doğrulanabilir.
-
----
-
-## 6. Kurulum ve çalıştırma
+## 4. Kurulum ve çalıştırma
 
 ```bash
-pip install numpy matplotlib PyQt5
-
-# İlk uygulama
-python minimize_dipole.py
-
-# İkinci (önerilen) uygulama
-python quad_dipole_compensation.py
+pip install numpy pyyaml PyQt5          # arayüz için
+pip install pyvisa pyvisa-py            # yalnızca gerçek donanım için
+pip install pytest                      # testler için
 ```
 
-`quad_dipole_compensation.py` ilk çalıştırıldığında `response_matrix.json`
-yoksa otomatik olarak Faz 1 kalibrasyon sihirbazını başlatır. Kalibrasyon
-tamamlandıktan sonra bir daha kalibre etmeye gerek kalmaz; arayüzdeki
-"Yeniden Kalibre Et" butonu ile istenildiğinde tekrarlanabilir (örn.
-mıknatısın fiziksel durumu değiştiyse).
+```bash
+python -m merkezleme                    # KURU ÇALIŞMA, elle giriş (varsayılan)
+python -m merkezleme --deneme           # deneme kipi: alanlar simülatörden dolar
+python -m merkezleme --otomatik         # arayüzsüz, simülatörle baştan sona
+python -m merkezleme --devam            # yarım kalmış son çalıştırmadan devam
+python -m merkezleme --kalibrasyon calistirmalar/<tarih>/kalibrasyon.json
+python -m merkezleme --canli            # GERÇEK DONANIM (açık bayrak zorunlu)
+```
+
+**Varsayılan kip kuru çalışmadır:** SCPI komutları kaydedilir ama cihaza
+gönderilmez. Gerçek donanım için `--canli` zorunludur; yapılandırmada `kip: canli`
+yazsa bile bayrak verilmediyse kuru çalışmada devam edilir ve uyarı basılır.
+Arayüzde kip etiketi canlıda kırmızı, kuruda yeşil gösterilir.
 
 ---
 
-## 7. Parametreler
+## 5. Modüller
 
-Tüm parametreler `config.py` içindeki `CONFIG` sözlüğünde tanımlıdır.
+| Modül | Sorumluluk |
+|---|---|
+| `yapilandirma.py` | YAML → tip açıklamalı dataclass'lar, doğrulama. Kodda gizli sabit yok. |
+| `harmonikler.py` | **Tüm konvansiyonlar**: giriş biçimleri, arka plan, feed-down, `g`, izleme |
+| `modlar.py` | Bobin numaralandırma, Q/H/V/M mod bazı, `R` kurulumu, monopol çıkarma |
+| `guc_kaynagi.py` | `GucKaynagi` (IT-M3233), `KaynakGrubu`, `SahteGucKaynagi`, kuru çalışma |
+| `kalibrasyon.py` | Nokta planı, fitler, `R`, SVD, `R_eff`, şüphe bayrakları, JSON |
+| `duzeltme.py` | `pinv` düzeltmesi, güvenlik değerlendirmesi, yakınsama, tekrarlanabilirlik |
+| `dogrulama.py` | Mertebe kontrolü ve "olası yazım hatası" |
+| `olcum_kaynagi.py` | Soyut ölçüm kaynağı (`ElleGiris` / `SimulatorGirisi`), alan dönüşümleri |
+| `is_akisi.py` | Adım sırası durum makinesi, görev kuyruğu, durum dosyası, rutinler |
+| `arayuz.py` | PyQt5 arayüzü |
+| `simulator.py` | 2D çizgi akımı mıknatıs modeli |
+| `kayit.py` | Tarihli çalıştırma klasörü, CSV/JSON/SCPI günlüğü/Markdown özeti |
+| `ana.py` | Komut satırı girişi |
 
-`quad_dipole_compensation.py` için:
+`is_akisi.py` bloklamaz: `olcum_gonder`, `duzeltmeyi_onayla`,
+`kullanici_eylemini_onayla` gibi çağrılarla ilerler. Arayüz bunları düğmelerden,
+testler `otomatik_yurut` ile döngüden çağırır — aynı durum makinesi.
 
-| Anahtar | Anlamı | Tipik değer |
-|---|---|---|
-| `nominal_akimlar` | Kalibrasyonun ve düzeltme döngüsünün başlangıç akımları `[I0,I1,I2,I3]` (A) | mıknatısın çalışma akımı |
-| `delta_i_kalibrasyon` | Kalibrasyonda her bobine uygulanan sapma ΔI (A) | nominal akımın ~%0.5–2'si |
-| `lambda_regularizasyon` | Regularization katsayısı λ | 0.001–0.1 |
-| `alpha_damping` | Damping katsayısı α (her iterasyonda uygulanan düzeltme oranı) | 0.2–0.5 |
-| `tolerance` | Yakınsama eşiği ‖[Bx,By]‖ (mT) | ölçüm hassasiyetine göre |
-| `response_matrix_path` | Kalibrasyon sonucunun kaydedileceği/okunacağı dosya | `response_matrix.json` |
-| `log_dir` | İterasyon loglarının yazılacağı klasör | `logs` |
+### Güç kaynağı katmanı
 
-`minimize_dipole.py` için: `learning_rate_dipol`, `learning_rate_quadrupol`,
-`bx1_target`, `bx2_target`, `nominal_akim`.
+`eski/guc_kaynagi_orijinal.py` temel alınmıştır; **kullanılan SCPI komut kümesi
+aynıdır ve genişletilmemiştir**: `*CLS`, `*IDN?`, `SYST:REM`, `VOLT`, `CURR`,
+`SYST:ERR?`, `OUTP ON/OFF`, `MEAS:VOLT?`, `MEAS:CURR?`.
+
+Eklenenler: `olcumleri_oku()` float döndürür ve ayrıştırma hatalarını yakalar;
+her yazmadan sonra `SYST:ERR?` kontrol edilir; sabit akım kipinde `VOLT` bir uyum
+sınırı olduğu için akımdan **önce** yazılır; akımlar asla tek adımda
+değiştirilmez (yazılımda rampa, A/s), rampa sonunda oturma `MEAS:CURR?` ile
+doğrulanır ve ardından bekleme uygulanır; bobin endüktif olduğu için (≈6.5 mH)
+akım sıfır değilken `OUTP OFF` kullanılmaz. `KaynakGrubu` dört kanalı eş zamanlı
+adımlarla rampalar, hepsini okur ve acil durumda hepsini rampa ile sıfırlar.
 
 ---
 
-## 8. Olası geliştirmeler
+## 6. Çıktılar
 
-- Güç kaynağı ve rotating coil ile doğrudan haberleşme (şu an her iki
-  uygulama da "kullanıcı elle akımı ayarlar, elle ölçümü girer"
-  modelindedir); bu otomatikleştirilirse Faz 1 kalibrasyonu da tam
-  otomatik hale gelir.
-- G (quadrupol gradyenti) korumasının açık şekilde eklenmesi gerekirse,
-  bkz. [Bölüm 4](#4-neden-quadrupol-gradyenti-g-burada-hedeflenmiyor)'teki
-  iki genişletme yolu (soft penalty veya null-space projeksiyonu).
-- `minimize_dipole.py`'nin de response-matrix tabanlı yaklaşıma
-  taşınması (şu an sabit/varsayılan bir coupling modeli kullanıyor).
-- Kalibrasyon (Faz 1) sırasında her adımda tek ölçüm yerine birkaç
-  ölçüm alıp ortalamak; bu, rotating coil gürültüsünün `R`'ye
-  taşınmasını azaltır (bkz. [Bölüm 3](#3-quad_dipole_compensationpy--response-matrix-tabanlı-uygulama)'teki
-  "ΔI seçimi bir denge meselesidir").
+Tüm çıktılar **düz metin**tir; ikili biçim kullanılmaz. Her çalıştırma kendi
+tarihli klasörüne yazar:
+
+```
+calistirmalar/2026-09-17_143500/
+    yapilandirma.yaml     kullanılan yapılandırmanın kopyası (tekrarlanabilirlik)
+    olcumler.csv          her adım: zaman, adım türü, dört akımın ayar ve ölçülen
+                          değerleri, girilen tüm harmonikler (ham / arka plan /
+                          net), hesaplanan y, izleme büyüklükleri
+    kalibrasyon.json      R, tekil değerler, fit parametreleri, R_eff
+    scpi_gunlugu.txt      gönderilen (kuru çalışmada kaydedilen) komutlar
+    durum.json            kaldığı yerden devam için durum dosyası
+    ozet.md               çalıştırma sonu Markdown özeti
+```
+
+Özet şunları içerir: başlangıç ve son merkez, son akımlar ve nominale göre
+asimetrileri, iterasyon sayısı, `R`'nin tekil değerleri, `R_eff`, `SQ/G`,
+düzeltme öncesi ve sonrası `b3/a3/b4/a4`, arka plan değerleri ve değişimi,
+tekrarlanabilirlik ve notlar.
+
+---
+
+## 7. Yapılandırma referansı
+
+Tüm yapılandırma tek dosyadadır: **`yapilandirma.yaml`**. Öne çıkan anahtarlar:
+
+| Bölüm | Anahtar | Varsayılan | Anlamı |
+|---|---|---|---|
+| `genel` | `kip` | `kuru` | `kuru` \| `canli` (canlı için `--canli` şart) |
+| | `modulator_acik` | `false` | 1 kHz modülatör durumu (yalnızca kaydedilir) |
+| `miknatis` | `nominal_akim_A` | `10.0` | Bobin başına nominal akım |
+| | `bobin_acilari_derece` | `[45,135,225,315]` | Bobin konumları |
+| | `nominal_polarite` | `[1,-1,1,-1]` | Nominal kuadrupol polaritesi |
+| | `gradyen_hedefi_kaynagi` | `ilk_olcum` | `G_hedef` ilk ölçümden mi, yapılandırmadan mı |
+| `modlar` | `Q/H/V/M` | Hadamard | Genlik bazında mod desenleri (ortogonal olmalı) |
+| `harmonikler` | `r_ref_mm` | `25.0` | Referans yarıçapı |
+| | `giris_bicimi` | `genlik_faz` | `genlik_faz` \| `normal_skew` |
+| | `birim` | `T` | `T` \| `mT` \| `units` |
+| | `faz_birimi`, `faz_n_carpani`, `faz_isareti` | `derece`, `true`, `1` | Faz konvansiyonu |
+| | `feed_down_isareti`, `eslenik` | `1`, `false` | Merkez konvansiyonu |
+| | `arka_plan_cikarma` | `tum` | `tum` \| `yalniz_dipol` |
+| `guc_kaynaklari` | `visa_adresleri` | `ASRL1..4::INSTR` | Dört kaynağın adresi (bobin sırasıyla) |
+| | `uyum_gerilimi_V` | `20.0` | Sabit akım kipinde uyum sınırı |
+| | `rampa_hizi_A_s` | `0.5` | Rampa hızı |
+| | `akim_tolerans_A` | `0.02` | Oturma doğrulama toleransı |
+| `guvenlik` | `bobin_basi_max_akim_A` | `10.5` | Asla aşılmaz |
+| | `adim_basi_max_bagil_degisim` | `0.02` | Bobin başına, her iterasyonda |
+| | `nominale_gore_max_asimetri` | `0.05` | Bobin başına, toplam |
+| `kalibrasyon` | `nokta_sayisi` | `3` | `3` \| `5` |
+| | `delta_bagil` | `0.005` | `Δ` (nominal akımın oranı) |
+| | `ortak_sifir_noktasi` | `true` | Sıfır noktası modlar arasında paylaşılsın mı |
+| | `arka_plan_her_n_noktada` | `1` | 1 = her noktada |
+| `duzeltme` | `alpha` | `0.9` | Düzeltme oranı |
+| | `merkez_toleransi_um` | `5.0` | `\|x_c\|` ve `\|y_c\|` eşiği |
+| | `g_toleransi` | `0.001` | `\|g\|` eşiği |
+| | `monopol_cikar` | `true` | Her adımda monopol bileşenini at |
+| `dogrulama` | `yazim_hatasi_sapma_carpani` | `5.0` | Beklenenden kaç kat sapma uyarı verir |
+| `simulator` | `bobin_yaricapi_m`, `demet_yari_acisi_derece` | `0.10`, `30.0` | `R_eff`'i belirler |
+
+---
+
+## 8. Güvenlik
+
+- Bobin başına maksimum akım asla aşılmaz; negatif akım reddedilir (işaret röle
+  ile değiştirilir).
+- Adım başı bağıl değişim ve nominale göre toplam asimetri sınırlanır. Bir çözüm
+  sınırı aşıyorsa **uygulanmaz**; neden kaydedilir ve akış durur.
+- Akımlar asla tek adımda değiştirilmez; endüktif bobinde akım sıfır değilken
+  çıkış kapatılmaz.
+- Beklenmeyen hata, iletişim kopması, pencerenin kapatılması ya da kullanıcı
+  kesintisinde tüm akımlar rampa ile sıfıra indirilir.
+- Rotating coil başka bir bilgisayarda olduğu için tek gerçek hata kaynağı yazım
+  hatasıdır. Üç katman: (a) mertebe kontrolü, (b) kalibrasyon varken beklenen
+  `y`'den sapma için "olası yazım hatası" uyarısı ve yeniden onay, (c) girişin
+  fiziksel karşılığının (`x_c`, `y_c`, `g`) yazarken **canlı** gösterilmesi.
+
+---
+
+## 9. Simülatör ve testler
+
+`simulator.py`, mıknatısı 2 boyutlu çizgi akımlarıyla modeller: dört racetrack
+bobin, her biri `a ≈ 10 cm` yarıçapta ve kutup ekseni etrafında `±α` açılarında
+**iki zıt yönlü** iletken demetiyle; bobin başına radyal/açısal yerleşim ve sarım
+sayısı hataları; mıknatıs ofseti `(dx, dy)` ve roll; yavaş değişebilen uniform
+arka plan; her harmoniğe ölçüm gürültüsü ve sürüklenme. Çıktısı, elle girişle
+**aynı biçimdedir**.
+
+Gürültü ölçeği sabittir (nominal `|C_2|`); anlık `|C_2|` kullanılmaz, çünkü arka
+plan ölçümünde akımlar sıfır olduğundan anlık değer sıfıra gider ve ölçek
+anlamsızlaşır.
+
+```bash
+python -m pytest tests/ -q                 # 144 test, ~2 s
+QT_QPA_PLATFORM=offscreen python -m pytest tests/ -q   # arayüz testleri dahil
+```
+
+Testler donanımsız ve elle girişsiz çalışır; elle giriş katmanı soyut olduğu için
+simülatöre bağlanır, güç kaynakları için sahte sürüm kullanılır. Kapsanan
+senaryolar: ≤3 iterasyonda yakınsama (rastgele ofsetlerden), `g`'nin tolerans
+içinde kalması, akım asimetrisinin `d/R_eff` olması, monopol bileşeninin çok
+sayıda iterasyonda büyümemesi, `SQ/G`'nin pratikte değişmemesi, 3 ve 5 noktalı
+kalibrasyondan çıkan `R_eff`'in simülatör geometrisiyle tutarlılığı, arka plan
+çıkarmanın etkisi, yazım hatası uyarısının bilerek bozulmuş girişi yakalaması,
+durum dosyasından devam, güvenlik sınırları ve arayüzün tüm akışı.
+
+`tests/test_sq_kotu_kosulluluk.py` bir gereksinimi doğrulamaz; **belgeleme
+amaçlıdır** ve aşağıdaki bölümü sayısal olarak gösterir.
+
+---
+
+## 10. Bırakılan yaklaşım ve nedenleri
+
+Bu depoda önce farklı bir yaklaşım denenmişti: `[Bx, By, G, SQ]` üzerinde doğrudan
+4×4 response matrix, `ΔI` üzerinde Tikhonov regularizasyonu ve yüksek damping.
+Eski dosyalar `eski/` klasöründe, o dönemin belgesi `eski/README_eski.md`
+içindedir. Bırakılma nedenleri, testlerle de doğrulanmış hâlde:
+
+1. **Skew kuadrupol dört bobin akımıyla kontrol edilemez.** 4 katlı simetrik
+   düzende `C_2` her akım kombinasyonu için saf gerçektir: `A_2 ≡ 0`. Ölçülen
+   `d(SQ/G)/dε` ideal geometride ~1e−15'tir (yani tam olarak sıfır). SQ'ya ancak
+   bobinlerin küçük açısal yerleşim hataları üzerinden zayıf bir yol açılır:
+   5 mrad mertebesinde hatalarla en güçlü tutamak ~7e−3/birim `ε` olur, ve 1 mrad
+   roll'dan gelen tipik `SQ/G = 0.002`'yi sıfırlamak **%29 bağıl akım değişimi**
+   ister — izin verilen toplam asimetri %5. SQ'yu hedefe koymak problemi kötü
+   koşullu yapar ve akımları nominalden çok uzağa sürükler.
+2. **Monopol modu bir sıfır uzayı yönüdür.** Uniform (işaretli akımda uniform)
+   akım modu dipolü ve gradyeni değiştirmez, dolayısıyla akımların serbestçe
+   kayabileceği bir yöndür. Bu yaklaşımda `pinv` o yönde bileşen üretmez ve her
+   adımda bileşen açıkça atılır.
+3. **T ile T/m'yi aynı normda toplamak.** Eski kurulumda farklı birimdeki
+   büyüklükler aynı normda toplanıyor ve yalnızca adım büyüklüğünü cezalandıran
+   bir regularizasyon kullanılıyordu; bu, ağırlıklı ve keyfi bir ödünleşmeye
+   zorluyordu. Yeni kurulumda `R` 3×4 ve rank 3 olduğu için hedef **tam olarak**
+   erişilebilir: satırları toleranslarına göre ölçeklemek çözümü değiştirmez
+   (testle doğrulanmıştır), yani birim karışımı sorunu ortadan kalkar.

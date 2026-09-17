@@ -1,4 +1,7 @@
 __pycache__/
 *.pyc
-logs/
-response_matrix.json
+.pytest_cache/
+
+# Calistirma ciktilari (tarihli klasorler): olcumler.csv, kalibrasyon.json,
+# scpi_gunlugu.txt, durum.json, ozet.md
+calistirmalar/

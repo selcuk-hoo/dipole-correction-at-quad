@@ -1,14 +1,14 @@
-"""Komut satiri girisi: `python -m merkezleme`.
+"""Komut satırı girişi: `python -m merkezleme`.
 
-    python -m merkezleme                      kuru calisma, elle giris (varsayilan)
-    python -m merkezleme --canli               GERCEK DONANIM (acik bayrak gerekir)
-    python -m merkezleme --deneme              deneme kipi: alanlar simulatorden dolar
-    python -m merkezleme --devam               yarim kalmis son calistirmadan devam
-    python -m merkezleme --kalibrasyon D.json  kayitli kalibrasyonu yukle, faz 1'i atla
-    python -m merkezleme --otomatik            arayuzsuz: simulatorle bastan sona kosar
+    python -m merkezleme                      kuru çalışma, elle giriş (varsayılan)
+    python -m merkezleme --canli               GERÇEK DONANIM (açık bayrak gerekir)
+    python -m merkezleme --deneme              deneme kipi: alanlar simülatörden dolar
+    python -m merkezleme --devam               yarım kalmış son çalıştırmadan devam
+    python -m merkezleme --kalibrasyon D.json  kayıtlı kalibrasyonu yükle, faz 1'i atla
+    python -m merkezleme --otomatik            arayüzsüz: simülatörle baştan sona koşar
 
-Varsayilan kip KURU CALISMADIR: SCPI komutlari kaydedilir ama cihaza
-gonderilmez. Gercek donanim icin `--canli` zorunludur.
+Varsayılan kip KURU ÇALIŞMADIR: SCPI komutları kaydedilir ama cihaza
+gönderilmez. Gerçek donanım için `--canli` zorunludur.
 """
 from __future__ import annotations
 
@@ -36,34 +36,34 @@ def arguman_ayristirici() -> argparse.ArgumentParser:
         description="pEDM air-core kuadrupol - elektriksel merkezleme",
     )
     ayristirici.add_argument(
-        "--yapilandirma", default=VARSAYILAN_YAPILANDIRMA, help="YAML yapilandirma dosyasi"
+        "--yapilandirma", default=VARSAYILAN_YAPILANDIRMA, help="YAML yapılandırma dosyası"
     )
     ayristirici.add_argument(
         "--canli",
         action="store_true",
-        help="GERCEK DONANIM: SCPI komutlari cihazlara gonderilir (varsayilan kuru calisma)",
+        help="GERÇEK DONANIM: SCPI komutları cihazlara gönderilir (varsayılan kuru çalışma)",
     )
     ayristirici.add_argument(
         "--deneme",
         action="store_true",
-        help="Deneme kipi: olcum alanlari simulatorden otomatik doldurulur",
+        help="Deneme kipi: ölçüm alanları simülatörden otomatik doldurulur",
     )
     ayristirici.add_argument(
-        "--devam", action="store_true", help="Yarim kalmis son calistirmadan devam et"
+        "--devam", action="store_true", help="Yarım kalmış son çalıştırmadan devam et"
     )
     ayristirici.add_argument(
-        "--kalibrasyon", default=None, help="Kayitli kalibrasyon JSON dosyasi (faz 1 atlanir)"
+        "--kalibrasyon", default=None, help="Kayıtlı kalibrasyon JSON dosyası (faz 1 atlanır)"
     )
     ayristirici.add_argument(
         "--tema",
         default=None,
-        help="Arayuz temasi: varsayilan | fosfor_yesil | fosfor_turuncu "
-        "(yapilandirmadaki degeri gecersiz kilar)",
+        help="Arayüz teması: varsayilan | fosfor_yesil | fosfor_turuncu "
+        "(yapılandırmadaki değeri geçersiz kılar)",
     )
     ayristirici.add_argument(
         "--otomatik",
         action="store_true",
-        help="Arayuzsuz calis: olcumler simulatorden alinir, akis bastan sona kosar",
+        help="Arayüzsüz çalış: ölçümler simülatörden alınır, akış baştan sona koşar",
     )
     return ayristirici
 
@@ -81,19 +81,19 @@ def _kaynak_grubu_kur(
 def calistir(argumanlar: argparse.Namespace) -> int:
     kfg = yapilandirma_yukle(argumanlar.yapilandirma)
 
-    # Guvenlik: gercek donanim yalnizca acik bayrakla.
+    # Güvenlik: gerçek donanım yalnızca açık bayrakla.
     canli = bool(argumanlar.canli)
     if kfg.genel.kip == "canli" and not canli:
         print(
-            "Yapilandirmada kip 'canli' ama --canli bayragi verilmedi; "
-            "kuru calismada devam ediliyor.",
+            "Yapılandırmada kip 'canli' ama --canli bayrağı verilmedi; "
+            "kuru çalışmada devam ediliyor.",
             file=sys.stderr,
         )
     if canli and argumanlar.deneme:
-        print("--canli ve --deneme birlikte kullanilamaz.", file=sys.stderr)
+        print("--canli ve --deneme birlikte kullanılamaz.", file=sys.stderr)
         return 2
     if canli and argumanlar.otomatik:
-        print("--canli ve --otomatik birlikte kullanilamaz.", file=sys.stderr)
+        print("--canli ve --otomatik birlikte kullanılamaz.", file=sys.stderr)
         return 2
 
     if argumanlar.tema:
@@ -101,7 +101,7 @@ def calistir(argumanlar: argparse.Namespace) -> int:
 
         if argumanlar.tema not in TEMALAR:
             print(
-                f"Bilinmeyen tema: {argumanlar.tema}; secenekler: {', '.join(TEMALAR)}",
+                f"Bilinmeyen tema: {argumanlar.tema}; seçenekler: {', '.join(TEMALAR)}",
                 file=sys.stderr,
             )
             return 2
@@ -112,7 +112,7 @@ def calistir(argumanlar: argparse.Namespace) -> int:
     konvansiyon = HarmonikKonvansiyonu(kfg.harmonikler)
     mod_bazi = ModBazi(kfg.modlar, kfg.miknatis)
 
-    # Olcum kaynagi: elle giris ya da simulator
+    # Ölçüm kaynağı: elle giriş ya da simülatör
     simulatorlu = argumanlar.deneme or argumanlar.otomatik
     if simulatorlu:
         simulator = Simulator(kfg.simulator, kfg.miknatis, kfg.harmonikler)
@@ -122,7 +122,7 @@ def calistir(argumanlar: argparse.Namespace) -> int:
 
     gunluk = KomutGunlugu()
 
-    # Arayuzsuz otomatik kosu
+    # Arayüzsüz otomatik koşu
     if argumanlar.otomatik:
         grup = _kaynak_grubu_kur(kfg, canli=False, gunluk=gunluk, bekle=lambda s: None)
         calistirma = Calistirma(kfg)
@@ -132,14 +132,14 @@ def calistir(argumanlar: argparse.Namespace) -> int:
         akis.basla()
         otomatik_yurut(akis, olcum_kaynagi)  # type: ignore[arg-type]
         ozet = akis.ozeti_yaz()
-        print(f"Akis tamamlandi: faz={akis.faz.value}, iterasyon={akis.iterasyon}")
+        print(f"Akış tamamlandı: faz={akis.faz.value}, iterasyon={akis.iterasyon}")
         if akis.son_y is not None:
             print(f"Son durum: {akis.son_y}")
-        print(f"Cikti klasoru: {calistirma.dizin}")
-        print(f"Ozet: {ozet}")
+        print(f"Çıktı klasörü: {calistirma.dizin}")
+        print(f"Özet: {ozet}")
         return 0
 
-    # Arayuzlu kosu
+    # Arayüzlü koşu
     from PyQt5.QtWidgets import QApplication
 
     from .arayuz import MerkezlemePencere, qt_bekle
@@ -154,10 +154,10 @@ def calistir(argumanlar: argparse.Namespace) -> int:
             kfg.genel.calistirma_kok_dizini, kfg.genel.durum_dosyasi_adi
         )
         if durum_yolu is None:
-            print("Yarim kalmis calistirma bulunamadi; yeni calistirma baslatiliyor.")
+            print("Yarım kalmış çalıştırma bulunamadı; yeni çalıştırma başlatılıyor.")
             calistirma = Calistirma(kfg)
         else:
-            print(f"Yarim kalmis calistirmadan devam ediliyor: {durum_yolu.parent}")
+            print(f"Yarım kalmış çalıştırmadan devam ediliyor: {durum_yolu.parent}")
             calistirma = Calistirma(kfg)
             import json
 
@@ -179,7 +179,7 @@ def calistir(argumanlar: argparse.Namespace) -> int:
         devam=devam_durumu is not None,
     )
 
-    print(f"Cikti klasoru: {calistirma.dizin}")
+    print(f"Çıktı klasörü: {calistirma.dizin}")
     pencere.resize(980, 900)
     pencere.show()
     return int(uygulama.exec_())

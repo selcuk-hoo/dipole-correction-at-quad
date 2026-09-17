@@ -1,7 +1,7 @@
 """pEDM air-core kuadrupol - elektriksel merkezleme.
 
-Mekanik ofsetten kaynaklanan dipol harmoniklerini, dort bobin akimina kucuk
-asimetriler uygulayarak sifirlar; gradyeni nominal degerinde tutar. Miknatis
+Mekanik ofsetten kaynaklanan dipol harmoniklerini, dört bobin akımına küçük
+asimetriler uygulayarak sıfırlar; gradyeni nominal değerinde tutar. Mıknatıs
 mekanik olarak hareket ettirilmez.
 """
 

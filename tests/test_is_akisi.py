@@ -107,7 +107,7 @@ def test_arka_plan_atlanirsa_son_gecerli_kullanilir_ve_kaydedilir(
     akis.basla()
     akis.olcum_gonder(kaynak.olcum_al(akis.mevcut_istek))  # ilk arka plan
     ilk_arka_plan = akis.son_arka_plan
-    akis.olcum_gonder(kaynak.olcum_al(akis.mevcut_istek))  # ilk olcum
+    akis.olcum_gonder(kaynak.olcum_al(akis.mevcut_istek))  # ilk ölçüm
 
     assert akis.bekleme is Bekleme.ARKA_PLAN_GIRISI
     akis.arka_plani_atla()

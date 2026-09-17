@@ -1,11 +1,11 @@
-"""Duzeltme dongusunun testleri.
+"""Düzeltme döngüsünün testleri.
 
-Gorevde istenen senaryolar burada dogrulanir:
-  * <= 3 iterasyonda toleransa yakinsama (rastgele ofsetlerden)
-  * g'nin tolerans icinde kalmasi
-  * gereken akim asimetrisinin ~ d / R_eff olmasi
-  * monopol bileseninin cok sayida iterasyonda buyumemesi
-  * SQ/G'nin pratikte degismemesi (yalnizca izleniyor)
+Görevde istenen senaryolar burada doğrulanır:
+  * <= 3 iterasyonda toleransa yakınsama (rastgele ofsetlerden)
+  * g'nin tolerans içinde kalması
+  * gereken akım asimetrisinin ~ d / R_eff olması
+  * monopol bileşeninin çok sayıda iterasyonda büyümemesi
+  * SQ/G'nin pratikte değişmemesi (yalnızca izleniyor)
 """
 from __future__ import annotations
 
@@ -25,14 +25,14 @@ from .conftest import kalibrasyonu_yurut, y_olc
 
 
 def rastgele_ofset(rng, en_buyuk_m: float = 500e-6) -> complex:
-    """Buyuklugu en_buyuk_m'yi gecmeyen rastgele yonlu ofset."""
+    """Büyüklüğü en_buyuk_m'yi geçmeyen rastgele yönlü ofset."""
     buyukluk = rng.uniform(0, en_buyuk_m)
     aci = rng.uniform(0, 2 * np.pi)
     return complex(buyukluk * np.cos(aci), buyukluk * np.sin(aci))
 
 
 def duzeltme_dongusu(akis, kaynak, simulator, konvansiyon, mod_bazi, kfg, max_iterasyon=None):
-    """Kalibrasyondan sonra duzeltme dongusunu kosar; gecmisi dondurur."""
+    """Kalibrasyondan sonra düzeltme döngüsünü koşar; geçmişi döndürür."""
     sinir = kfg.duzeltme.max_iterasyon if max_iterasyon is None else max_iterasyon
     hedef = akis.kalibrasyon.gradyen_hedefi_T_m
     akimlar = mod_bazi.nominal_akimlar
@@ -71,14 +71,14 @@ def test_rastgele_ofsetten_uc_iterasyonda_yakinsama(
     assert iterasyon <= 3, f"{iterasyon} iterasyon gerekti"
     durum = yakinsama_durumu(son_y, kfg.duzeltme)
     assert durum.merkez_tamam, f"merkez toleransa inmedi: {son_y}"
-    # g tolerans icinde kalmali
-    assert durum.g_tamam, f"g toleransin disinda: {son_y.g}"
+    # g tolerans içinde kalmalı
+    assert durum.g_tamam, f"g toleransın dışında: {son_y.g}"
     assert durum.yakinsadi
 
 
 @pytest.mark.parametrize("tohum", [11, 12, 13])
 def test_akim_asimetrisi_d_bolu_r_eff(kfg, konvansiyon, mod_bazi, simulator_uret, akis_uret, tohum):
-    """Gereken akim asimetrisi ~ d / R_eff olmali (kosegende en fazla sqrt(2) kat)."""
+    """Gereken akım asimetrisi ~ d / R_eff olmalı (köşegende en fazla sqrt(2) kat)."""
     rng = np.random.default_rng(tohum)
     ofset = rastgele_ofset(rng, 400e-6)
     sim = simulator_uret(ofset_m=ofset, tohum=tohum)
@@ -91,7 +91,7 @@ def test_akim_asimetrisi_d_bolu_r_eff(kfg, konvansiyon, mod_bazi, simulator_uret
     nominal = kfg.miknatis.nominal_akim_A
     olculen_asimetri = float(np.max(np.abs(akimlar - nominal)) / nominal)
     beklenen = abs(ofset) / abs(akis.kalibrasyon.r_eff_m)
-    # Tek eksende beklenen kadar, kosegende en fazla sqrt(2) kati
+    # Tek eksende beklenen kadar, köşegende en fazla sqrt(2) katı
     assert beklenen * 0.6 <= olculen_asimetri <= beklenen * np.sqrt(2) * 1.1 + 2e-4, (
         olculen_asimetri,
         beklenen,
@@ -101,7 +101,7 @@ def test_akim_asimetrisi_d_bolu_r_eff(kfg, konvansiyon, mod_bazi, simulator_uret
 def test_monopol_bileseni_cok_iterasyonda_buyumez(
     kfg, konvansiyon, mod_bazi, simulator_uret, akis_uret
 ):
-    """Yakinsadiktan sonra da surdurulen iterasyonlarda monopol birikmemeli."""
+    """Yakınsadıktan sonra da sürdürülen iterasyonlarda monopol birikmemeli."""
     sim = simulator_uret(ofset_m=complex(300e-6, -200e-6), tohum=21)
     akis, kaynak, _ = akis_uret(sim)
     kalibrasyonu_yurut(akis, kaynak)
@@ -109,7 +109,7 @@ def test_monopol_bileseni_cok_iterasyonda_buyumez(
     hedef = akis.kalibrasyon.gradyen_hedefi_T_m
     akimlar = mod_bazi.nominal_akimlar
     monopoller = []
-    for _ in range(40):  # yakinsama olsa da devam et
+    for _ in range(40):  # yakınsama olsa da devam et
         y = y_olc(sim, konvansiyon, akimlar, hedef)
         oneri = duzeltme_hesapla(
             akis.kalibrasyon.R, y, akimlar, mod_bazi, kfg.duzeltme, kfg.guvenlik
@@ -121,7 +121,7 @@ def test_monopol_bileseni_cok_iterasyonda_buyumez(
 
 
 def test_monopol_cikarma_kapatilinca_bileseni_gorunur(kfg, mod_bazi):
-    """monopol_cikar=False iken, disaridan gelen monopol bileseni temizlenmez."""
+    """monopol_cikar=False iken, dışarıdan gelen monopol bileşeni temizlenmez."""
     R = mod_bazi.response_matrisi(
         {
             "H": np.array([-0.0408, 0.0, 0.0]),
@@ -129,7 +129,7 @@ def test_monopol_cikarma_kapatilinca_bileseni_gorunur(kfg, mod_bazi):
             "Q": np.array([0.0, 0.0, 1.0]),
         }
     )
-    # Baslangic akimlarinda yapay bir monopol bileseni var
+    # Başlangıç akımlarında yapay bir monopol bileşeni var
     kirli = mod_bazi.akimlar(0.002 * mod_bazi.mod_vektoru("M"))
     y = KontrolVektoru(x_c=50e-6, y_c=0.0, g=0.0)
 
@@ -147,7 +147,7 @@ def test_monopol_cikarma_kapatilinca_bileseni_gorunur(kfg, mod_bazi):
 
 
 def test_sq_over_g_pratikte_degismez(kfg, konvansiyon, mod_bazi, simulator_uret, akis_uret):
-    """SQ/G hedeflenmez; duzeltme onunda anlamli bir degisiklik yapmamali."""
+    """SQ/G hedeflenmez; düzeltme önünde anlamlı bir değişiklik yapmamalı."""
     sim = simulator_uret(ofset_m=complex(350e-6, 250e-6), roll_rad=1e-3, tohum=31)
     akis, kaynak, _ = akis_uret(sim)
     kalibrasyonu_yurut(akis, kaynak)
@@ -159,12 +159,12 @@ def test_sq_over_g_pratikte_degismez(kfg, konvansiyon, mod_bazi, simulator_uret,
     sonra = konvansiyon.izleme(sim.olc(akimlar, gurultu=False)).sq_over_g
 
     assert once is not None and sonra is not None
-    # Roll'dan gelen SQ/G ~ -0.002; duzeltmenin etkisi bunun %1'inden kucuk olmali
+    # Roll'dan gelen SQ/G ~ -0.002; düzeltmenin etkisi bunun %1'inden küçük olmalı
     assert abs(sonra - once) < 0.01 * abs(once) + 1e-6, (once, sonra)
 
 
 def test_guvenlik_sinirlari_asilinca_uygulanmaz(kfg, mod_bazi):
-    """Cozum adim basi ya da toplam asimetri sinirini asiyorsa guvenli degil."""
+    """Çözüm adım başı ya da toplam asimetri sınırını aşıyorsa güvenli değil."""
     R = mod_bazi.response_matrisi(
         {
             "H": np.array([-0.0408, 0.0, 0.0]),
@@ -172,7 +172,7 @@ def test_guvenlik_sinirlari_asilinca_uygulanmaz(kfg, mod_bazi):
             "Q": np.array([0.0, 0.0, 1.0]),
         }
     )
-    # 2 mm'lik ofset: gereken asimetri ~%5, adim basi sinir %2
+    # 2 mm'lik ofset: gereken asimetri ~%5, adım başı sınır %2
     y = KontrolVektoru(x_c=2000e-6, y_c=0.0, g=0.0)
     oneri = duzeltme_hesapla(R, y, mod_bazi.nominal_akimlar, mod_bazi, kfg.duzeltme, kfg.guvenlik)
     assert not oneri.guvenlik.guvenli
@@ -181,7 +181,7 @@ def test_guvenlik_sinirlari_asilinca_uygulanmaz(kfg, mod_bazi):
 
 def test_maks_akim_siniri_kontrol_edilir(kfg, mod_bazi):
     R = mod_bazi.response_matrisi({"Q": np.array([0.0, 0.0, 1.0])})
-    # Cok buyuk bir gradyen hatasi -> Q modunda buyuk akim artisi
+    # Çok büyük bir gradyen hatası -> Q modunda büyük akım artışı
     y = KontrolVektoru(x_c=0.0, y_c=0.0, g=-0.5)
     guvenlik = dataclasses.replace(kfg.guvenlik, adim_basi_max_bagil_degisim=1.0,
                                    nominale_gore_max_asimetri=1.0)
@@ -203,12 +203,12 @@ def test_oneri_ozeti_beklenen_degisimi_gosterir(kfg, mod_bazi):
     metin = oneri.ozet_metni(kfg.miknatis.nominal_akim_A)
     assert "Beklenen merkez değişimi" in metin
     assert "Mod genlikleri" in metin
-    # alpha = 0.9 -> beklenen y, olculenin %10'una inmeli
+    # alpha = 0.9 -> beklenen y, ölçülenin %10'una inmeli
     assert oneri.beklenen_y.x_c == pytest.approx(y.x_c * (1 - kfg.duzeltme.alpha), rel=1e-6)
 
 
 def test_tekrarlanabilirlik_ve_tolerans_uyarisi(kfg, konvansiyon, mod_bazi, simulator_uret):
-    """Tolerans, olculen tekrarlanabilirligin katindan kucukse uyarilmali."""
+    """Tolerans, ölçülen tekrarlanabilirliğin katından küçükse uyarılmalı."""
     sim = simulator_uret(ofset_m=complex(100e-6, 0), tohum=41)
     hedef = sim.gradyen_T_m(mod_bazi.nominal_akimlar)
     olcumler = [

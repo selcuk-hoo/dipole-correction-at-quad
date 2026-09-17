@@ -1,4 +1,4 @@
-"""Kalibrasyon testleri: plan, fitler, R, tekil degerler, R_eff, JSON."""
+"""Kalibrasyon testleri: plan, fitler, R, tekil değerler, R_eff, JSON."""
 from __future__ import annotations
 
 import dataclasses
@@ -25,7 +25,7 @@ from .conftest import kalibrasyonu_yurut
     [(3, 1, 9, 18), (3, 3, 9, 12), (5, 1, 17, 34), (5, 3, 17, 23)],
 )
 def test_plan_giris_sayisi(kfg, nokta_sayisi, arka_plan_her_n, beklenen_nokta, beklenen_giris):
-    """Elle giris sayisi ve tahmini sure onceden bilinebilir olmali."""
+    """Elle giriş sayısı ve tahmini süre önceden bilinebilir olmalı."""
     ayar = dataclasses.replace(
         kfg.kalibrasyon, nokta_sayisi=nokta_sayisi, arka_plan_her_n_noktada=arka_plan_her_n
     )
@@ -39,19 +39,19 @@ def test_plan_giris_sayisi(kfg, nokta_sayisi, arka_plan_her_n, beklenen_nokta, b
 
 
 def test_ortak_sifir_noktasi_paylasilir(kfg):
-    """Ortak sifir noktasi yalnizca bir kez olculur."""
+    """Ortak sıfır noktası yalnızca bir kez ölçülür."""
     ayar = dataclasses.replace(kfg.kalibrasyon, ortak_sifir_noktasi=True)
     plan = plan_olustur(ayar)
     sifir_noktalari = [n for n in plan.noktalar if n.mod == ORTAK_SIFIR]
     assert len(sifir_noktalari) == 1
-    assert plan.noktalar[0].mod == ORTAK_SIFIR, "ortak sifir en basta olmali (G_hedef noktasi)"
-    # Paylasilmazsa her mod kendi sifirini olcer -> daha fazla nokta
+    assert plan.noktalar[0].mod == ORTAK_SIFIR, "ortak sıfır en başta olmalı (G_hedef noktası)"
+    # Paylaşılmazsa her mod kendi sıfırını ölçer -> daha fazla nokta
     paylasmasiz = plan_olustur(dataclasses.replace(ayar, ortak_sifir_noktasi=False))
     assert paylasmasiz.nokta_sayisi > plan.nokta_sayisi
 
 
 def test_global_epsilon_dizisi_monoton_degil(kfg):
-    """Suruklenmeyi egimden ayirmak icin sira monoton olmamali."""
+    """Sürüklenmeyi eğimden ayırmak için sıra monoton olmamalı."""
     plan = plan_olustur(kfg.kalibrasyon)
     dizi = [n.epsilon for n in plan.noktalar if n.mod != ORTAK_SIFIR]
     assert dizi != sorted(dizi)
@@ -59,7 +59,7 @@ def test_global_epsilon_dizisi_monoton_degil(kfg):
 
 
 def test_iki_noktali_modlarda_yon_degisir(kfg):
-    """3 nokta + ortak sifir -> mod basina 2 nokta; modlar arasi yon degismeli."""
+    """3 nokta + ortak sıfır -> mod başına 2 nokta; modlar arası yön değişmeli."""
     plan = plan_olustur(dataclasses.replace(kfg.kalibrasyon, nokta_sayisi=3))
     mod_sirasi: dict[str, list[float]] = {}
     for nokta in plan.noktalar:
@@ -71,7 +71,7 @@ def test_iki_noktali_modlarda_yon_degisir(kfg):
 
 @pytest.mark.parametrize("ortak_sifir", [True, False])
 def test_bes_noktali_sira_korelasyonu_en_kucuk(kfg, ortak_sifir):
-    """Secilen sira, zaman-epsilon korelasyonunu ulasilabilir minimuma indirmeli."""
+    """Seçilen sıra, zaman-epsilon korelasyonunu ulaşılabilir minimuma indirmeli."""
     ayar = dataclasses.replace(
         kfg.kalibrasyon, nokta_sayisi=5, ortak_sifir_noktasi=ortak_sifir
     )
@@ -85,7 +85,7 @@ def test_bes_noktali_sira_korelasyonu_en_kucuk(kfg, ortak_sifir):
     en_kucuk = min(korelasyon(p) for p in permutations(dizi))
     assert korelasyon(dizi) == pytest.approx(en_kucuk, abs=1e-15)
     if not ortak_sifir:
-        # Sifir noktasi da dahil oldugunda tam dekorelasyon mumkundur.
+        # Sıfır noktası da dahil olduğunda tam dekorelasyon mümkündür.
         assert en_kucuk == pytest.approx(0.0, abs=1e-15)
 
 
@@ -103,7 +103,7 @@ def test_m_modu_istege_bagli(kfg):
 def test_r_eff_simulator_geometrisiyle_tutarli(
     kfg, konvansiyon, mod_bazi, simulator_uret, kaynak_grubu_uret, tmp_path, nokta_sayisi
 ):
-    """3 ve 5 noktali kalibrasyondan cikan R_eff, simulator geometrisiyle uyumlu olmali."""
+    """3 ve 5 noktalı kalibrasyondan çıkan R_eff, simülatör geometrisiyle uyumlu olmalı."""
     import dataclasses as dc
 
     from merkezleme.is_akisi import IsAkisi
@@ -129,10 +129,10 @@ def test_r_eff_simulator_geometrisiyle_tutarli(
     assert not kal.supheli, kal.supheli_nedenleri
     assert kal.R.shape == (3, 4)
     assert len(kal.tekil_degerler) == 3
-    # M sutunu kucuk olmali (monopol dipol/gradyene katkisiz)
+    # M sütunu küçük olmalı (monopol dipol/gradyene katkısız)
     assert kal.m_sutunu_orani is not None
     assert kal.m_sutunu_orani < kfg.kalibrasyon.m_sutunu_esigi_bagil
-    # Olcekli kosul sayisi esigin altinda
+    # Ölçekli koşul sayısı eşiğin altında
     assert kal.kosul_sayisi_olcekli < kfg.kalibrasyon.kosul_sayisi_esigi
 
 
@@ -143,16 +143,16 @@ def test_fit_artiklari_ve_lineerlik_kaydedilir(kfg, konvansiyon, mod_bazi, simul
     kal = akis.kalibrasyon
     for mod, fit in kal.fitler.items():
         for ad, bilesen in fit.bilesenler.items():
-            assert bilesen.artiklar  # artiklar kaydedilmis
+            assert bilesen.artiklar  # artıklar kaydedilmiş
             assert bilesen.artik_rms >= 0
         assert fit.lineer_mi, (mod, fit.sozluk())
-    # Beklenen mod-bilesen eslesmesi: H -> x_c, V -> y_c, Q -> g
+    # Beklenen mod-bileşen eşleşmesi: H -> x_c, V -> y_c, Q -> g
     assert kal.fitler["H"].bilesenler["x_c"].tepki_veriyor
     assert not kal.fitler["H"].bilesenler["g"].tepki_veriyor
     assert kal.fitler["V"].bilesenler["y_c"].tepki_veriyor
     assert kal.fitler["Q"].bilesenler["g"].tepki_veriyor
-    # dg/deps_Q = 1 beklenir. Gurultulu fitte egim belirsizligi
-    # ~sigma_g / (delta * sqrt(2)) ~ %0.4 mertebesinde oldugu icin tolerans %2.
+    # dg/deps_Q = 1 beklenir. Gürültülü fitte eğim belirsizliği
+    # ~sigma_g / (delta * sqrt(2)) ~ %0.4 mertebesinde olduğu için tolerans %2.
     assert kal.fitler["Q"].bilesenler["g"].egim == pytest.approx(1.0, rel=2e-2)
 
 
@@ -172,7 +172,7 @@ def test_kalibrasyon_json_gidis_donus(kfg, simulator_uret, akis_uret, tmp_path):
 def test_kayitli_kalibrasyon_yuklenince_faz1_atlanir(
     kfg, simulator_uret, akis_uret
 ):
-    """Onceki oturumdan kalibrasyon yuklenirse dogrudan duzeltme fazi baslar."""
+    """Önceki oturumdan kalibrasyon yüklenirse doğrudan düzeltme fazı başlar."""
     sim = simulator_uret(ofset_m=complex(70e-6, 0), tohum=8)
     akis1, kaynak1, _ = akis_uret(sim)
     kalibrasyonu_yurut(akis1, kaynak1)
@@ -184,7 +184,7 @@ def test_kayitli_kalibrasyon_yuklenince_faz1_atlanir(
 
 
 def test_kotu_kalibrasyon_supheli_isaretlenir(kfg, mod_bazi):
-    """Kosul sayisi buyukse ya da M sutunu kucuk degilse kalibrasyon supheli."""
+    """Koşul sayısı büyükse ya da M sütunu küçük değilse kalibrasyon şüpheli."""
     from merkezleme.kalibrasyon import BilesenFiti, ModFiti, kalibrasyonu_kur
 
     def fit_uret(mod: str, egimler: tuple[float, float, float]) -> ModFiti:
@@ -203,7 +203,7 @@ def test_kotu_kalibrasyon_supheli_isaretlenir(kfg, mod_bazi):
             )
         return ModFiti(mod=mod, epsilonlar=(-0.005, 0.0, 0.005), bilesenler=bilesenler)
 
-    # M modu H kadar guclu tepki veriyor -> supheli olmali
+    # M modu H kadar güçlü tepki veriyor -> şüpheli olmalı
     fitler = {
         "H": fit_uret("H", (-0.04, 0.0, 0.0)),
         "V": fit_uret("V", (0.0, -0.04, 0.0)),
@@ -218,7 +218,7 @@ def test_kotu_kalibrasyon_supheli_isaretlenir(kfg, mod_bazi):
 
 
 def test_mod_bilesen_eslesmesi_ters_ise_uyarir(kfg, mod_bazi):
-    """H modu x_c yerine y_c'yi etkiliyorsa konvansiyon/numaralandirma uyarisi verilir."""
+    """H modu x_c yerine y_c'yi etkiliyorsa konvansiyon/numaralandırma uyarısı verilir."""
     from merkezleme.kalibrasyon import BilesenFiti, ModFiti, kalibrasyonu_kur
 
     def fit_uret(mod: str, egimler: tuple[float, float, float]) -> ModFiti:

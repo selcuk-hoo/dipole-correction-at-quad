@@ -1,4 +1,4 @@
-"""Tema testleri: palet tutarliligi, yapilandirma dogrulamasi ve arayuzde uygulama."""
+"""Tema testleri: palet tutarlılığı, yapılandırma doğrulaması ve arayüzde uygulama."""
 from __future__ import annotations
 
 import dataclasses
@@ -28,9 +28,9 @@ def test_bilinmeyen_tema_aciklayici_hata():
 def test_monokrom_paletleri_gecerli_renkler(tema):
     for ad in ("arka_plan", "panel_arka_plan", "on_plan", "parlak", "sonuk", "cok_sonuk"):
         deger = getattr(tema, ad)
-        assert RENK_DESENI.match(deger), f"{tema.ad}.{ad} = {deger!r} gecerli renk degil"
+        assert RENK_DESENI.match(deger), f"{tema.ad}.{ad} = {deger!r} geçerli renk değil"
     assert tema.monokrom is True
-    assert tema.font_yigini, "monokrom temada yazi tipi yigini tanimli olmali"
+    assert tema.font_yigini, "monokrom temada yazı tipi yığını tanımlı olmalı"
 
 
 @pytest.mark.parametrize("tema", [FOSFOR_YESIL, FOSFOR_TURUNCU], ids=["yesil", "turuncu"])
@@ -47,22 +47,22 @@ def test_monokrom_stil_sayfasi_temel_ogeleri_kapsar(tema):
         "QMessageBox",
         "QScrollBar",
     ):
-        assert secici in qss, f"{tema.ad}: {secici} stillenmemis"
-    # Zemin ve on plan gercekten paletten geliyor
+        assert secici in qss, f"{tema.ad}: {secici} stillenmemiş"
+    # Zemin ve ön plan gerçekten paletten geliyor
     assert tema.arka_plan in qss and tema.on_plan in qss
-    # Ters video: dugme uzerine gelindiginde zemin/on plan yer degistirir
+    # Ters video: düğme üzerine gelindiğinde zemin/ön plan yer değiştirir
     assert f"background-color: {tema.on_plan}" in qss
 
 
 def test_varsayilan_tema_stil_sayfasi_bos():
-    """Varsayilan tema sistem gorunumunu bozmamali."""
+    """Varsayılan tema sistem görünümünü bozmamalı."""
     assert VARSAYILAN.stil_sayfasi() == ""
     assert VARSAYILAN.monokrom is False
 
 
 @pytest.mark.parametrize("tema", list(TEMALAR.values()), ids=list(TEMALAR))
 def test_rol_stilleri_bos_degil(tema):
-    """Her tema, arayuzun ihtiyaci olan butun rol stillerini uretmeli."""
+    """Her tema, arayüzün ihtiyacı olan bütün rol stillerini üretmeli."""
     assert tema.kip_stili(canli=True)
     assert tema.kip_stili(canli=False)
     assert tema.deneme_stili()
@@ -76,7 +76,7 @@ def test_rol_stilleri_bos_degil(tema):
 
 @pytest.mark.parametrize("tema", [FOSFOR_YESIL, FOSFOR_TURUNCU], ids=["yesil", "turuncu"])
 def test_monokrom_temada_renkli_vurgu_kullanilmaz(tema):
-    """Monokrom temada kirmizi/mavi/sari gibi renkler sizmamali."""
+    """Monokrom temada kırmızı/mavi/sarı gibi renkler sızmamalı."""
     renkli = (tema.tehlike_zemin, tema.vurgu, tema.uyari_zemin, tema.iyi_zemin, tema.deneme_zemin)
     stiller = " ".join(
         [
@@ -93,8 +93,8 @@ def test_monokrom_temada_renkli_vurgu_kullanilmaz(tema):
         ]
     )
     for renk in renkli:
-        assert renk not in stiller, f"{tema.ad} icinde renkli vurgu kullanilmis: {renk}"
-    # DURDUR dugmesi ters videoya gecmeli (kirmizi yok)
+        assert renk not in stiller, f"{tema.ad} içinde renkli vurgu kullanılmış: {renk}"
+    # DURDUR düğmesi ters videoya geçmeli (kırmızı yok)
     assert tema.arka_plan in tema.durdur_stili()
     assert tema.on_plan in tema.durdur_stili()
 
@@ -114,7 +114,7 @@ def test_yapilandirma_temayi_dogrular(tmp_path):
 
 
 def test_yapilandirmada_tema_yoksa_varsayilan(tmp_path):
-    """Eski yapilandirma dosyalari (tema anahtari olmayan) da calismali."""
+    """Eski yapılandırma dosyaları (tema anahtarı olmayan) da çalışmalı."""
     kaynak = yapilandirma_yukle("yapilandirma.yaml").kaynak_dosya.read_text(encoding="utf-8")
     eski = tmp_path / "eski.yaml"
     eski.write_text(kaynak.replace("  tema: varsayilan\n", ""), encoding="utf-8")
@@ -122,10 +122,10 @@ def test_yapilandirmada_tema_yoksa_varsayilan(tmp_path):
 
 
 # ---------------------------------------------------------------------------
-# Arayuzde tema
+# Arayüzde tema
 # ---------------------------------------------------------------------------
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
-pytest.importorskip("PyQt5", reason="PyQt5 kurulu degil")
+pytest.importorskip("PyQt5", reason="PyQt5 kurulu değil")
 
 from PyQt5.QtWidgets import QApplication, QMessageBox  # noqa: E402
 
@@ -142,7 +142,7 @@ def pencere(kfg, simulator_uret, akis_uret, monkeypatch, qt_uygulama):
     p = MerkezlemePencere(kfg, akis, deneme_kipi=True)
     yield p
     akis.kaynaklar.acil_sifirla()
-    qt_uygulama.setStyleSheet("")  # sonraki testlere sizmasin
+    qt_uygulama.setStyleSheet("")  # sonraki testlere sızmasın
 
 
 def test_tema_secici_uc_secenek_sunar(pencere):
@@ -153,7 +153,7 @@ def test_tema_secici_uc_secenek_sunar(pencere):
 
 def test_tema_degistirince_stil_sayfasi_uygulanir(pencere):
     uygulama = QApplication.instance()
-    assert uygulama.styleSheet() == "", "varsayilan temada stil sayfasi bos olmali"
+    assert uygulama.styleSheet() == "", "varsayılan temada stil sayfası boş olmalı"
 
     for ad, beklenen_renk in (
         ("fosfor_yesil", FOSFOR_YESIL.on_plan),
@@ -168,13 +168,13 @@ def test_tema_degistirince_stil_sayfasi_uygulanir(pencere):
         assert beklenen_renk in pencere.durdur_dugmesi.styleSheet()
         assert pencere.tema.parlak in pencere.eylem_etiketi.styleSheet()
 
-    # Varsayilana donus stil sayfasini temizlemeli
+    # Varsayılana dönüş stil sayfasını temizlemeli
     pencere.tema_secici.setCurrentIndex(list(TEMALAR).index("varsayilan"))
     assert uygulama.styleSheet() == ""
 
 
 def test_tema_degisimi_akisi_bozmaz(pencere, kfg):
-    """Tema degistirmek olcum akisini etkilememeli."""
+    """Tema değiştirmek ölçüm akışını etkilememeli."""
     from merkezleme.duzeltme import yakinsama_durumu
     from merkezleme.is_akisi import Bekleme, Faz
 
@@ -182,7 +182,7 @@ def test_tema_degisimi_akisi_bozmaz(pencere, kfg):
     for adim in range(400):
         if pencere.akis.bitti_mi() or pencere.akis.bekleme is Bekleme.YOK:
             break
-        if adim == 5:  # akisin ortasinda tema degistir
+        if adim == 5:  # akışın ortasında tema değiştir
             pencere.tema_secici.setCurrentIndex(list(TEMALAR).index("fosfor_turuncu"))
         pencere._onayla()
     assert pencere.akis.faz is Faz.TAMAMLANDI, pencere.akis.durdurma_nedeni
@@ -192,7 +192,7 @@ def test_tema_degisimi_akisi_bozmaz(pencere, kfg):
 def test_canli_kipte_kip_etiketi_monokromda_ters_video(
     kfg, simulator_uret, akis_uret, monkeypatch, qt_uygulama
 ):
-    """Canli kip monokrom temada da dikkat cekmeli (renk yerine ters video)."""
+    """Canlı kip monokrom temada da dikkat çekmeli (renk yerine ters video)."""
     from merkezleme.arayuz import MerkezlemePencere
 
     monkeypatch.setattr(QMessageBox, "question", staticmethod(lambda *a, **k: QMessageBox.Yes))

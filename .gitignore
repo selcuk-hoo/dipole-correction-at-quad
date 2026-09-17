@@ -5,3 +5,6 @@ __pycache__/
 # Calistirma ciktilari (tarihli klasorler): olcumler.csv, kalibrasyon.json,
 # scpi_gunlugu.txt, durum.json, ozet.md
 calistirmalar/
+
+# Gelistirme sirasinda uretilen arayuz ekran goruntuleri
+ekran_goruntuleri/

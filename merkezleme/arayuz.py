@@ -257,10 +257,16 @@ class MerkezlemePencere(QWidget):
         self.arka_plan_etiketi = QLabel("-")
         self.izleme_etiketi = QLabel("-")
         self.izleme_etiketi.setStyleSheet("color: #555;")
+        # Onay kararinin dayandigi metin buraya yazilir (onerilen akimlar, mod
+        # genlikleri, beklenen degisim ve guvenlik satiri). Kullanicinin
+        # onaylayacagi seyi gormek icin KAYDIRMAK ZORUNDA KALMAMASI gerekir,
+        # bu yuzden 12 satirlik oneri metnini sigdiracak yukseklik verilir.
         self.oneri_metni = QPlainTextEdit()
         self.oneri_metni.setReadOnly(True)
-        self.oneri_metni.setMaximumHeight(170)
+        self.oneri_metni.setMinimumHeight(260)
         self.oneri_metni.setFont(QFont("monospace"))
+        self.oneri_metni.setLineWrapMode(QPlainTextEdit.NoWrap)
+        self.oneri_metni.setVisible(False)
         duzen.addWidget(self.sonuc_etiketi)
         duzen.addWidget(self.arka_plan_etiketi)
         duzen.addWidget(self.izleme_etiketi)
@@ -436,6 +442,7 @@ class MerkezlemePencere(QWidget):
     def _yorumu_yenile(self, giris: AlanGirisi) -> None:
         """Girisin fiziksel karsiligini (merkez ve g) canli gosterir."""
         if self.akis.bekleme is Bekleme.ARKA_PLAN_GIRISI:
+            self.yorum_etiketi.setVisible(True)
             self.yorum_etiketi.setText(
                 "Bu giris ARKA PLAN olarak kaydedilecek (akimlar sifirda, "
                 "olcumlerden kompleks olarak cikarilacak)."
@@ -443,7 +450,9 @@ class MerkezlemePencere(QWidget):
             return
         if self.akis.bekleme is not Bekleme.OLCUM_GIRISI:
             self.yorum_etiketi.setText("")
+            self.yorum_etiketi.setVisible(False)
             return
+        self.yorum_etiketi.setVisible(True)
         eksikler = [
             n for n in self.kfg.harmonikler.zorunlu_harmonikler
             if not giris.doldurulmus_mu(n, self.bicim)
@@ -493,6 +502,8 @@ class MerkezlemePencere(QWidget):
 
         if self.akis.son_y is not None:
             self.sonuc_etiketi.setText(str(self.akis.son_y))
+        else:
+            self.sonuc_etiketi.setText("Henuz islenmis bir olcum yok.")
         if self.akis.son_arka_plan is not None:
             c1 = self.akis.son_arka_plan.bilesenler.get(1, 0j)
             tazelik = "bu adimda taze" if panel["arka_plan_taze"] else "onceki adimdan"
@@ -501,7 +512,10 @@ class MerkezlemePencere(QWidget):
                 f"({self.kfg.harmonikler.birim}) - {tazelik}"
             )
         izleme = getattr(self.akis, "son_izleme", None)
-        if izleme is not None:
+        if izleme is None:
+            self.izleme_etiketi.setVisible(False)
+        else:
+            self.izleme_etiketi.setVisible(True)
             parcalar = []
             if izleme.sq_over_g is not None:
                 parcalar.append(f"SQ/G = {izleme.sq_over_g:+.5f}")
@@ -512,6 +526,8 @@ class MerkezlemePencere(QWidget):
                 if deger is not None:
                     parcalar.append(f"{ad} = {deger:.4g}")
             self.izleme_etiketi.setText("Izleme:  " + "   ".join(parcalar))
+        if self.akis.son_arka_plan is None:
+            self.arka_plan_etiketi.setText("Henuz arka plan olcumu girilmedi.")
 
         if self.akis.bekleyen_oneri is not None:
             self.oneri_metni.setPlainText(self.akis.bekleyen_oneri.ozet_metni(nominal))
@@ -520,6 +536,7 @@ class MerkezlemePencere(QWidget):
             self.oneri_metni.setPlainText(f"[{son.ad}]\n{son.metin}")
         elif self.akis.kalibrasyon is not None and self.akis.faz is not Faz.KALIBRASYON:
             self.oneri_metni.setPlainText(self.akis.kalibrasyon.ozet_metni())
+        self.oneri_metni.setVisible(bool(self.oneri_metni.toPlainText().strip()))
 
         self._dugmeleri_guncelle()
         if self.deneme_kipi and self.akis.bekleme in (

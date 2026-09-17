@@ -265,7 +265,7 @@ class IsAkisi:
         self.kuyruk.append(
             OlcumGorevi(
                 tur=ADIM_DUZELTME,
-                etiket=f"duzeltme iterasyonu {self.iterasyon}",
+                etiket=f"düzeltme iterasyonu {self.iterasyon}",
                 akimlar_A=hedef,
                 arka_plan_al=arka_plan_al,
                 modulator_acik=self.kfg.genel.modulator_acik,

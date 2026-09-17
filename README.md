@@ -326,7 +326,33 @@ python -m merkezleme --canli            # GERÇEK DONANIM (açık bayrak zorunlu
 **Varsayılan kip kuru çalışmadır:** SCPI komutları kaydedilir ama cihaza
 gönderilmez. Gerçek donanım için `--canli` zorunludur; yapılandırmada `kip: canli`
 yazsa bile bayrak verilmediyse kuru çalışmada devam edilir ve uyarı basılır.
-Arayüzde kip etiketi canlıda kırmızı, kuruda yeşil gösterilir.
+Arayüzde kip etiketi canlıda dikkat çekecek şekilde işaretlenir (renkli temada
+kırmızı, monokrom temalarda ters video).
+
+### Temalar
+
+Üç tema var; arayüzün sağ üstündeki seçiciden **çalışma sırasında** değiştirilebilir,
+başlangıç değeri `genel.tema` ya da `--tema` ile verilir:
+
+| Tema | Açıklama |
+|---|---|
+| `varsayilan` | Sistem teması (açık zemin, renkli vurgular) |
+| `fosfor_yesil` | P1 fosfor yeşili monokrom CRT |
+| `fosfor_turuncu` | P3 fosfor amber (turuncu) monokrom CRT |
+
+```bash
+python -m merkezleme --deneme --tema fosfor_yesil
+python -m merkezleme --deneme --tema fosfor_turuncu
+```
+
+Monokrom temalarda renk yerine **ters video** ve parlaklık kademeleri kullanılır
+(gerçek CRT'lerde vurgu böyle yapılıyordu); bu yüzden "tehlike" rengi yoktur,
+DURDUR düğmesi ters videoya geçer. Yazı tipi baştan sona monospace'tir.
+
+Arayüzdeki bütün renkler `merkezleme/tema.py` içindedir; `arayuz.py` hiçbir rengi
+kendi içinde tanımlamaz. Yeni bir tema eklemek için oraya bir `Tema` kaydı
+eklemek yeterlidir. Stil sayfası uygulama geneline verildiği için `QMessageBox`
+gibi ayrı pencereler de temalı görünür.
 
 ---
 
@@ -344,6 +370,7 @@ Arayüzde kip etiketi canlıda kırmızı, kuruda yeşil gösterilir.
 | `olcum_kaynagi.py` | Soyut ölçüm kaynağı (`ElleGiris` / `SimulatorGirisi`), alan dönüşümleri |
 | `is_akisi.py` | Adım sırası durum makinesi, görev kuyruğu, durum dosyası, rutinler |
 | `arayuz.py` | PyQt5 arayüzü |
+| `tema.py` | Arayüz temaları ve **bütün renkler** (varsayılan + iki fosfor CRT) |
 | `simulator.py` | 2D çizgi akımı mıknatıs modeli |
 | `kayit.py` | Tarihli çalıştırma klasörü, CSV/JSON/SCPI günlüğü/Markdown özeti |
 | `ana.py` | Komut satırı girişi |
@@ -400,6 +427,7 @@ Tüm yapılandırma tek dosyadadır: **`yapilandirma.yaml`**. Öne çıkan anaht
 |---|---|---|---|
 | `genel` | `kip` | `kuru` | `kuru` \| `canli` (canlı için `--canli` şart) |
 | | `modulator_acik` | `false` | 1 kHz modülatör durumu (yalnızca kaydedilir) |
+| | `tema` | `varsayilan` | `varsayilan` \| `fosfor_yesil` \| `fosfor_turuncu` |
 | `miknatis` | `nominal_akim_A` | `10.0` | Bobin başına nominal akım |
 | | `bobin_acilari_derece` | `[45,135,225,315]` | Bobin konumları |
 | | `nominal_polarite` | `[1,-1,1,-1]` | Nominal kuadrupol polaritesi |
@@ -462,7 +490,7 @@ plan ölçümünde akımlar sıfır olduğundan anlık değer sıfıra gider ve 
 anlamsızlaşır.
 
 ```bash
-python -m pytest tests/ -q                 # 144 test, ~2 s
+python -m pytest tests/ -q                 # 162 test, ~2 s
 QT_QPA_PLATFORM=offscreen python -m pytest tests/ -q   # arayüz testleri dahil
 ```
 

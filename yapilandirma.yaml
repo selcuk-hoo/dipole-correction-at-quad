@@ -16,6 +16,11 @@ genel:
   modulator_acik: false
   calistirma_kok_dizini: calistirmalar
   durum_dosyasi_adi: durum.json
+  # Arayuz temasi (arayuzden de degistirilebilir):
+  #   varsayilan     : sistem temasi
+  #   fosfor_yesil   : eskilerin fosfor yesili monokrom CRT'si
+  #   fosfor_turuncu : fosfor amber (turuncu) monokrom CRT
+  tema: varsayilan
 
 miknatis:
   nominal_akim_A: 10.0

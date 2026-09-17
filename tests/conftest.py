@@ -29,6 +29,25 @@ def kfg() -> Yapilandirma:
     return yapilandirma_yukle(YAPILANDIRMA_YOLU)
 
 
+@pytest.fixture(scope="session")
+def qt_uygulama():
+    """Butun arayuz testlerinin paylastigi QApplication.
+
+    Session kapsaminda tutulur: QApplication nesnesine referans kalmazsa
+    coplenip yok edilir ve sonrasinda QWidget olusturmak Qt'yi abort ettirir.
+    PyQt5 kurulu degilse ilgili testler atlanir.
+    """
+    import os
+
+    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+    pytest.importorskip("PyQt5", reason="PyQt5 kurulu degil")
+    from PyQt5.QtWidgets import QApplication
+
+    uygulama = QApplication.instance() or QApplication([])
+    yield uygulama
+    uygulama.setStyleSheet("")
+
+
 @pytest.fixture
 def konvansiyon(kfg: Yapilandirma) -> HarmonikKonvansiyonu:
     return HarmonikKonvansiyonu(kfg.harmonikler)

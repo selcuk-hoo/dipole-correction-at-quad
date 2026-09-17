@@ -22,10 +22,10 @@ from merkezleme.is_akisi import Bekleme, Faz  # noqa: E402
 from merkezleme.olcum_kaynagi import alanlardan_olcum  # noqa: E402
 
 
-@pytest.fixture(scope="module")
-def uygulama():
-    mevcut = QApplication.instance()
-    return mevcut if mevcut is not None else QApplication([])
+@pytest.fixture
+def uygulama(qt_uygulama):
+    """Ortak (session kapsamli) QApplication."""
+    return qt_uygulama
 
 
 @pytest.fixture

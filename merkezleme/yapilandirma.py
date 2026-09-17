@@ -55,6 +55,7 @@ class GenelYapilandirma:
     modulator_acik: bool
     calistirma_kok_dizini: str
     durum_dosyasi_adi: str
+    tema: str = "varsayilan"
 
 
 @dataclass(frozen=True)
@@ -228,7 +229,16 @@ class Yapilandirma:
 
 def _genel_yukle(veri: dict[str, Any]) -> GenelYapilandirma:
     yol = "genel"
+    # Tema adlari tema.py icinde tanimlidir; arayuz kurulu olmasa da dogrulanir.
+    from .tema import TEMALAR
+
+    tema = str(veri.get("tema", "varsayilan"))
+    if tema not in TEMALAR:
+        raise YapilandirmaHatasi(
+            f"{yol}.tema degeri {tema!r} gecersiz; secenekler: {', '.join(TEMALAR)}"
+        )
     return GenelYapilandirma(
+        tema=tema,
         kip=_dogrula_secenek(_zorunlu(veri, "kip", yol), ("kuru", "canli"), f"{yol}.kip"),
         modulator_acik=bool(_zorunlu(veri, "modulator_acik", yol)),
         calistirma_kok_dizini=str(_zorunlu(veri, "calistirma_kok_dizini", yol)),

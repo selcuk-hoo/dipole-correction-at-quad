@@ -50,6 +50,7 @@ from .olcum_kaynagi import (
     alanlardan_olcum,
     olcumden_alanlar,
 )
+from .tema import TEMALAR, Tema, tema_al
 from .yapilandirma import BOBIN_SAYISI, Yapilandirma
 
 BICIM_ETIKETLERI = {
@@ -92,11 +93,13 @@ class MerkezlemePencere(QWidget):
         self.akis = akis
         self.deneme_kipi = deneme_kipi
         self.bicim = yapilandirma.harmonikler.giris_bicimi
+        self.tema: Tema = tema_al(yapilandirma.genel.tema)
         self._mesgul = False
 
         baslik = "pEDM Kuadrupol - Elektriksel Merkezleme"
         self.setWindowTitle(baslik + (" (devam)" if devam else ""))
         self._arayuzu_kur()
+        self._temayi_uygula()
         if devam:
             self.akis.devam_ettir()
         else:
@@ -119,24 +122,28 @@ class MerkezlemePencere(QWidget):
 
     def _ust_seridi_kur(self) -> QWidget:
         kutu = QFrame()
+        kutu.setObjectName("ustSerit")
         kutu.setFrameShape(QFrame.StyledPanel)
         duzen = QHBoxLayout()
-        kip = self.kfg.genel.kip.upper()
-        self.kip_etiketi = QLabel(f"Kip: {kip}")
-        if self.kfg.genel.kip == "canli":
-            self.kip_etiketi.setStyleSheet("color: white; background: #b00020; padding: 2px 6px;")
-        else:
-            self.kip_etiketi.setStyleSheet("color: white; background: #2e7d32; padding: 2px 6px;")
+        self.kip_etiketi = QLabel(f"Kip: {self.kfg.genel.kip.upper()}")
         duzen.addWidget(self.kip_etiketi)
         duzen.addWidget(
             QLabel(f"Modulator: {'ACIK' if self.kfg.genel.modulator_acik else 'KAPALI'}")
         )
         duzen.addWidget(QLabel(f"Calistirma: {self.akis.calistirma.etiket}"))
-        if self.deneme_kipi:
-            deneme = QLabel("DENEME KIPI (simulator)")
-            deneme.setStyleSheet("color: white; background: #1565c0; padding: 2px 6px;")
-            duzen.addWidget(deneme)
+        self.deneme_etiketi = QLabel("DENEME KIPI (simulator)")
+        self.deneme_etiketi.setVisible(self.deneme_kipi)
+        duzen.addWidget(self.deneme_etiketi)
         duzen.addStretch(1)
+        duzen.addWidget(QLabel("Tema:"))
+        self.tema_secici = QComboBox()
+        for ad, tema in TEMALAR.items():
+            self.tema_secici.addItem(tema.baslik, ad)
+        self.tema_secici.setCurrentIndex(list(TEMALAR).index(self.tema.ad))
+        # Icerige gore boyutlan: tema adlari kesilmesin
+        self.tema_secici.setSizeAdjustPolicy(QComboBox.AdjustToContents)
+        self.tema_secici.currentIndexChanged.connect(self._tema_degisti)
+        duzen.addWidget(self.tema_secici)
         kutu.setLayout(duzen)
         return kutu
 
@@ -149,7 +156,6 @@ class MerkezlemePencere(QWidget):
         self.adim_etiketi.setFont(kalin)
         self.eylem_etiketi = QLabel("-")
         self.eylem_etiketi.setWordWrap(True)
-        self.eylem_etiketi.setStyleSheet("color: #0d47a1; font-size: 13pt;")
         duzen.addWidget(self.adim_etiketi)
         duzen.addWidget(self.eylem_etiketi)
         kutu.setLayout(duzen)
@@ -158,10 +164,11 @@ class MerkezlemePencere(QWidget):
     def _akim_panelini_kur(self) -> QWidget:
         kutu = QGroupBox("Akimlar")
         izgara = QGridLayout()
+        self.sutun_basliklari: list[QLabel] = []
         for sutun, baslik in enumerate(("Bobin", "ayar (A)", "olculen (A)", "nominale gore")):
             etiket = QLabel(baslik)
-            etiket.setStyleSheet("color: gray;")
             izgara.addWidget(etiket, 0, sutun)
+            self.sutun_basliklari.append(etiket)
         self.akim_etiketleri: list[tuple[QLabel, QLabel, QLabel]] = []
         for i in range(BOBIN_SAYISI):
             izgara.addWidget(QLabel(f"I{i + 1}"), i + 1, 0)
@@ -197,14 +204,15 @@ class MerkezlemePencere(QWidget):
 
         izgara = QGridLayout()
         self.alan_kutulari: dict[int, tuple[QLineEdit, QLineEdit]] = {}
+        self.satir_basliklari: dict[int, tuple[QLabel, bool]] = {}
         self.alan_basliklari: dict[int, tuple[QLabel, QLabel]] = {}
         self.turetilen_etiketleri: dict[int, QLabel] = {}
         satir = 0
         for n in self.kfg.harmonikler.tum_harmonikler:
             zorunlu = n in self.kfg.harmonikler.zorunlu_harmonikler
             baslik = QLabel(f"n = {n}" + ("  (zorunlu)" if zorunlu else "  (istege bagli)"))
-            baslik.setStyleSheet("color: gray;" if not zorunlu else "font-weight: bold;")
             izgara.addWidget(baslik, satir, 0)
+            self.satir_basliklari[n] = (baslik, zorunlu)
 
             birinci_baslik, ikinci_baslik = QLabel("-"), QLabel("-")
             birinci, ikinci = QLineEdit(), QLineEdit()
@@ -216,7 +224,6 @@ class MerkezlemePencere(QWidget):
             izgara.addWidget(ikinci_baslik, satir, 3)
             izgara.addWidget(ikinci, satir, 4)
             turetilen = QLabel("")
-            turetilen.setStyleSheet("color: #555;")
             izgara.addWidget(turetilen, satir, 5)
 
             self.alan_kutulari[n] = (birinci, ikinci)
@@ -240,23 +247,54 @@ class MerkezlemePencere(QWidget):
         # yalnizca "olasi yazim hatasi" uyarisinda cikar.)
         self.yorum_etiketi = QLabel("")
         self.yorum_etiketi.setWordWrap(True)
-        self.yorum_etiketi.setStyleSheet(
-            "background: #fff8e1; border: 1px solid #ffca28; padding: 6px; font-size: 12pt;"
-        )
         duzen.addWidget(self.yorum_etiketi)
 
         kutu.setLayout(duzen)
         self._alan_basliklarini_yenile()
         return kutu
 
+    # ==================================================================
+    # Tema
+    # ==================================================================
+    def _tema_degisti(self) -> None:
+        ad = self.tema_secici.currentData()
+        if ad == self.tema.ad:
+            return
+        self.tema = tema_al(ad)
+        self._temayi_uygula()
+
+    def _temayi_uygula(self) -> None:
+        """Tema stil sayfasini ve rol bazli stilleri uygular.
+
+        Stil sayfasi UYGULAMA genelinde verilir; boylece QMessageBox gibi ayri
+        ust seviye pencereler de temali gorunur.
+        """
+        uygulama = QApplication.instance()
+        if uygulama is not None:
+            uygulama.setStyleSheet(self.tema.stil_sayfasi())
+
+        self.kip_etiketi.setStyleSheet(self.tema.kip_stili(self.kfg.genel.kip == "canli"))
+        self.deneme_etiketi.setStyleSheet(self.tema.deneme_stili())
+        self.eylem_etiketi.setStyleSheet(self.tema.eylem_stili())
+        self.yorum_etiketi.setStyleSheet(self.tema.yorum_stili())
+        self.sonuc_etiketi.setStyleSheet(self.tema.sonuc_stili())
+        self.izleme_etiketi.setStyleSheet(self.tema.sonuk_stili())
+        self.durdur_dugmesi.setStyleSheet(self.tema.durdur_stili())
+        for etiket in self.sutun_basliklari:
+            etiket.setStyleSheet(self.tema.sonuk_stili())
+        for baslik, zorunlu in self.satir_basliklari.values():
+            baslik.setStyleSheet(
+                self.tema.zorunlu_stili() if zorunlu else self.tema.sonuk_stili()
+            )
+        for etiket in self.turetilen_etiketleri.values():
+            etiket.setStyleSheet(self.tema.sonuk_stili())
+
     def _sonuc_panelini_kur(self) -> QWidget:
         kutu = QGroupBox("Son sonuc")
         duzen = QVBoxLayout()
         self.sonuc_etiketi = QLabel("-")
-        self.sonuc_etiketi.setStyleSheet("font-size: 12pt;")
         self.arka_plan_etiketi = QLabel("-")
         self.izleme_etiketi = QLabel("-")
-        self.izleme_etiketi.setStyleSheet("color: #555;")
         # Onay kararinin dayandigi metin buraya yazilir (onerilen akimlar, mod
         # genlikleri, beklenen degisim ve guvenlik satiri). Kullanicinin
         # onaylayacagi seyi gormek icin KAYDIRMAK ZORUNDA KALMAMASI gerekir,
@@ -287,7 +325,6 @@ class MerkezlemePencere(QWidget):
         self.duraklat_dugmesi = QPushButton("Duraklat")
         self.duraklat_dugmesi.clicked.connect(self._duraklat_devam)
         self.durdur_dugmesi = QPushButton("DURDUR ve akimlari sifirla")
-        self.durdur_dugmesi.setStyleSheet("color: white; background: #b00020; font-weight: bold;")
         self.durdur_dugmesi.setMinimumHeight(44)
         self.durdur_dugmesi.clicked.connect(self._durdur)
         for dugme in (

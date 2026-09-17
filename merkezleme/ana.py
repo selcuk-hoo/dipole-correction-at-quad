@@ -13,6 +13,7 @@ gonderilmez. Gercek donanim icin `--canli` zorunludur.
 from __future__ import annotations
 
 import argparse
+import dataclasses
 import sys
 from pathlib import Path
 
@@ -54,6 +55,12 @@ def arguman_ayristirici() -> argparse.ArgumentParser:
         "--kalibrasyon", default=None, help="Kayitli kalibrasyon JSON dosyasi (faz 1 atlanir)"
     )
     ayristirici.add_argument(
+        "--tema",
+        default=None,
+        help="Arayuz temasi: varsayilan | fosfor_yesil | fosfor_turuncu "
+        "(yapilandirmadaki degeri gecersiz kilar)",
+    )
+    ayristirici.add_argument(
         "--otomatik",
         action="store_true",
         help="Arayuzsuz calis: olcumler simulatorden alinir, akis bastan sona kosar",
@@ -88,6 +95,19 @@ def calistir(argumanlar: argparse.Namespace) -> int:
     if canli and argumanlar.otomatik:
         print("--canli ve --otomatik birlikte kullanilamaz.", file=sys.stderr)
         return 2
+
+    if argumanlar.tema:
+        from .tema import TEMALAR
+
+        if argumanlar.tema not in TEMALAR:
+            print(
+                f"Bilinmeyen tema: {argumanlar.tema}; secenekler: {', '.join(TEMALAR)}",
+                file=sys.stderr,
+            )
+            return 2
+        kfg = dataclasses.replace(
+            kfg, genel=dataclasses.replace(kfg.genel, tema=argumanlar.tema)
+        )
 
     konvansiyon = HarmonikKonvansiyonu(kfg.harmonikler)
     mod_bazi = ModBazi(kfg.modlar, kfg.miknatis)

@@ -139,7 +139,7 @@ def test_gecersiz_giris_uyari_verir(pencere_uret, diyalog_yanitlari):
     birinci.setText("abc")
     pencere._onayla()
     assert diyalog_yanitlari["warning"], "gecersiz giris uyarisi beklenirdi"
-    assert "sayi degil" in diyalog_yanitlari["warning"][-1]
+    assert "sayı değil" in diyalog_yanitlari["warning"][-1]
 
 
 def test_zorunlu_alan_eksikse_yorum_bunu_soyler(pencere_uret):

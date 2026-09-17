@@ -1,7 +1,7 @@
-"""Yapilandirma katmani.
+"""Yapılandırma katmanı.
 
-`yapilandirma.yaml` dosyasini okur, tip acikmali dataclass'lara donusturur ve
-dogrular. Programin baska hicbir yerinde fiziksel sabit ya da sinir yoktur;
+`yapilandirma.yaml` dosyasını okur, tip açıklamalı dataclass'lara dönüştürür ve
+doğrular. Programın başka hiçbir yerinde fiziksel sabit ya da sınır yoktur;
 hepsi buradan gelir.
 """
 from __future__ import annotations
@@ -26,7 +26,7 @@ MOD_ADLARI = ("Q", "H", "V", "M")
 
 
 class YapilandirmaHatasi(ValueError):
-    """Yapilandirma dosyasi gecersiz."""
+    """Yapılandırma dosyası geçersiz."""
 
 
 def _zorunlu(sozluk: dict[str, Any], anahtar: str, yol: str) -> Any:
@@ -38,14 +38,14 @@ def _zorunlu(sozluk: dict[str, Any], anahtar: str, yol: str) -> Any:
 def _dogrula_secenek(deger: Any, secenekler: tuple[str, ...], yol: str) -> Any:
     if deger not in secenekler:
         raise YapilandirmaHatasi(
-            f"{yol} degeri {deger!r} gecersiz; secenekler: {', '.join(secenekler)}"
+            f"{yol} değeri {deger!r} geçersiz; seçenekler: {', '.join(secenekler)}"
         )
     return deger
 
 
 def _dogrula_dort_eleman(deger: Any, yol: str) -> list[float]:
     if not isinstance(deger, (list, tuple)) or len(deger) != BOBIN_SAYISI:
-        raise YapilandirmaHatasi(f"{yol} {BOBIN_SAYISI} elemanli bir liste olmalidir")
+        raise YapilandirmaHatasi(f"{yol} {BOBIN_SAYISI} elemanlı bir liste olmalıdır")
     return [float(x) for x in deger]
 
 
@@ -74,13 +74,13 @@ class MiknatisYapilandirmasi:
 
 @dataclass(frozen=True)
 class ModlarYapilandirmasi:
-    """Fiziksel akim genliklerine uygulanan mod desenleri."""
+    """Fiziksel akım genliklerine uygulanan mod desenleri."""
 
     desenler: dict[str, list[float]]
 
     def desen(self, mod: str) -> list[float]:
         if mod not in self.desenler:
-            raise YapilandirmaHatasi(f"modlar.{mod} tanimli degil")
+            raise YapilandirmaHatasi(f"modlar.{mod} tanımlı değil")
         return self.desenler[mod]
 
 
@@ -148,7 +148,7 @@ class KalibrasyonYapilandirmasi:
 
     @property
     def olculen_modlar(self) -> list[str]:
-        """Kalibrasyonda gercekten olculecek modlar (M istege bagli)."""
+        """Kalibrasyonda gerçekten ölçülecek modlar (M isteğe bağlı)."""
         modlar = list(self.modlar)
         if self.m_modu_kontrolu and "M" not in modlar:
             modlar.append("M")
@@ -202,8 +202,8 @@ class SimulatorYapilandirmasi:
     def beklenen_r_eff_m(self) -> float:
         """Analitik R_eff = a*sqrt(2) / (4*cos(alpha)).
 
-        Tek bobinin iki iletken demeti (theta +/- alpha) ve Hadamard mod bazi
-        icin turetilmistir; testlerde kalibrasyondan cikan R_eff ile karsilastirilir.
+        Tek bobinin iki iletken demeti (theta +/- alpha) ve Hadamard mod bazı
+        için türetilmiştir; testlerde kalibrasyondan çıkan R_eff ile karşılaştırılır.
         """
         return self.bobin_yaricapi_m * math.sqrt(2.0) / (4.0 * math.cos(self.demet_yari_acisi_rad))
 
@@ -229,13 +229,13 @@ class Yapilandirma:
 
 def _genel_yukle(veri: dict[str, Any]) -> GenelYapilandirma:
     yol = "genel"
-    # Tema adlari tema.py icinde tanimlidir; arayuz kurulu olmasa da dogrulanir.
+    # Tema adları tema.py içinde tanımlıdır; arayüz kurulu olmasa da doğrulanır.
     from .tema import TEMALAR
 
     tema = str(veri.get("tema", "varsayilan"))
     if tema not in TEMALAR:
         raise YapilandirmaHatasi(
-            f"{yol}.tema degeri {tema!r} gecersiz; secenekler: {', '.join(TEMALAR)}"
+            f"{yol}.tema değeri {tema!r} geçersiz; seçenekler: {', '.join(TEMALAR)}"
         )
     return GenelYapilandirma(
         tema=tema,
@@ -250,10 +250,10 @@ def _miknatis_yukle(veri: dict[str, Any]) -> MiknatisYapilandirmasi:
     yol = "miknatis"
     polarite = _dogrula_dort_eleman(_zorunlu(veri, "nominal_polarite", yol), f"{yol}.nominal_polarite")
     if any(p not in (1.0, -1.0) for p in polarite):
-        raise YapilandirmaHatasi(f"{yol}.nominal_polarite yalnizca +1 ve -1 icerebilir")
+        raise YapilandirmaHatasi(f"{yol}.nominal_polarite yalnızca +1 ve -1 içerebilir")
     nominal_akim = float(_zorunlu(veri, "nominal_akim_A", yol))
     if nominal_akim <= 0:
-        raise YapilandirmaHatasi(f"{yol}.nominal_akim_A pozitif olmalidir")
+        raise YapilandirmaHatasi(f"{yol}.nominal_akim_A pozitif olmalıdır")
     return MiknatisYapilandirmasi(
         nominal_akim_A=nominal_akim,
         bobin_acilari_derece=_dogrula_dort_eleman(
@@ -274,14 +274,14 @@ def _modlar_yukle(veri: dict[str, Any]) -> ModlarYapilandirmasi:
     desenler: dict[str, list[float]] = {}
     for mod in MOD_ADLARI:
         desenler[mod] = _dogrula_dort_eleman(_zorunlu(veri, mod, "modlar"), f"modlar.{mod}")
-    # Modlarin ortogonalligi, mod bazindan bobin bazina donusumun gecerliligi icin sart.
+    # Modların ortogonallığı, mod bazından bobin bazına dönüşümün geçerliliği için şart.
     for i, mod_a in enumerate(MOD_ADLARI):
         for mod_b in MOD_ADLARI[i + 1 :]:
             ic_carpim = sum(a * b for a, b in zip(desenler[mod_a], desenler[mod_b]))
             if abs(ic_carpim) > 1e-9:
                 raise YapilandirmaHatasi(
-                    f"modlar.{mod_a} ve modlar.{mod_b} ortogonal degil (ic carpim {ic_carpim:g}); "
-                    "mod bazindan bobin bazina donusum yalnizca ortogonal bazda gecerlidir"
+                    f"modlar.{mod_a} ve modlar.{mod_b} ortogonal değil (iç çarpım {ic_carpim:g}); "
+                    "mod bazından bobin bazına dönüşüm yalnızca ortogonal bazda geçerlidir"
                 )
     return ModlarYapilandirmasi(desenler=desenler)
 
@@ -292,7 +292,7 @@ def _harmonikler_yukle(veri: dict[str, Any]) -> HarmoniklerYapilandirmasi:
     feed_down_isareti = int(_zorunlu(veri, "feed_down_isareti", yol))
     for ad, deger in (("faz_isareti", faz_isareti), ("feed_down_isareti", feed_down_isareti)):
         if deger not in (1, -1):
-            raise YapilandirmaHatasi(f"{yol}.{ad} yalnizca +1 ya da -1 olabilir")
+            raise YapilandirmaHatasi(f"{yol}.{ad} yalnızca +1 ya da -1 olabilir")
     mutlak_gradyen = veri.get("units_mutlak_gradyen_T_m")
     return HarmoniklerYapilandirmasi(
         r_ref_mm=float(_zorunlu(veri, "r_ref_mm", yol)),
@@ -327,10 +327,10 @@ def _guc_kaynaklari_yukle(veri: dict[str, Any]) -> GucKaynaklariYapilandirmasi:
     yol = "guc_kaynaklari"
     adresler = _zorunlu(veri, "visa_adresleri", yol)
     if not isinstance(adresler, (list, tuple)) or len(adresler) != BOBIN_SAYISI:
-        raise YapilandirmaHatasi(f"{yol}.visa_adresleri {BOBIN_SAYISI} adres icermelidir")
+        raise YapilandirmaHatasi(f"{yol}.visa_adresleri {BOBIN_SAYISI} adres içermelidir")
     rampa_hizi = float(_zorunlu(veri, "rampa_hizi_A_s", yol))
     if rampa_hizi <= 0:
-        raise YapilandirmaHatasi(f"{yol}.rampa_hizi_A_s pozitif olmalidir")
+        raise YapilandirmaHatasi(f"{yol}.rampa_hizi_A_s pozitif olmalıdır")
     return GucKaynaklariYapilandirmasi(
         visa_adresleri=[str(a) for a in adresler],
         uyum_gerilimi_V=float(_zorunlu(veri, "uyum_gerilimi_V", yol)),
@@ -355,17 +355,17 @@ def _kalibrasyon_yukle(veri: dict[str, Any]) -> KalibrasyonYapilandirmasi:
     yol = "kalibrasyon"
     nokta_sayisi = int(_zorunlu(veri, "nokta_sayisi", yol))
     if nokta_sayisi not in (3, 5):
-        raise YapilandirmaHatasi(f"{yol}.nokta_sayisi yalnizca 3 ya da 5 olabilir")
+        raise YapilandirmaHatasi(f"{yol}.nokta_sayisi yalnızca 3 ya da 5 olabilir")
     modlar = [str(m) for m in _zorunlu(veri, "modlar", yol)]
     for mod in modlar:
         if mod not in MOD_ADLARI:
-            raise YapilandirmaHatasi(f"{yol}.modlar icinde bilinmeyen mod: {mod}")
+            raise YapilandirmaHatasi(f"{yol}.modlar içinde bilinmeyen mod: {mod}")
     for zorunlu_mod in ("H", "V", "Q"):
         if zorunlu_mod not in modlar:
-            raise YapilandirmaHatasi(f"{yol}.modlar icinde {zorunlu_mod} modu zorunludur")
+            raise YapilandirmaHatasi(f"{yol}.modlar içinde {zorunlu_mod} modu zorunludur")
     delta = float(_zorunlu(veri, "delta_bagil", yol))
     if delta <= 0:
-        raise YapilandirmaHatasi(f"{yol}.delta_bagil pozitif olmalidir")
+        raise YapilandirmaHatasi(f"{yol}.delta_bagil pozitif olmalıdır")
     return KalibrasyonYapilandirmasi(
         modlar=modlar,
         m_modu_kontrolu=bool(_zorunlu(veri, "m_modu_kontrolu", yol)),
@@ -386,7 +386,7 @@ def _duzeltme_yukle(veri: dict[str, Any]) -> DuzeltmeYapilandirmasi:
     yol = "duzeltme"
     alpha = float(_zorunlu(veri, "alpha", yol))
     if not 0.0 < alpha <= 1.0:
-        raise YapilandirmaHatasi(f"{yol}.alpha (0, 1] araliginda olmalidir")
+        raise YapilandirmaHatasi(f"{yol}.alpha (0, 1] aralığında olmalıdır")
     return DuzeltmeYapilandirmasi(
         alpha=alpha,
         max_iterasyon=int(_zorunlu(veri, "max_iterasyon", yol)),
@@ -406,10 +406,10 @@ def _dogrulama_yukle(veri: dict[str, Any]) -> DogrulamaYapilandirmasi:
     def aralik(anahtar: str) -> tuple[float, float]:
         deger = _zorunlu(veri, anahtar, yol)
         if not isinstance(deger, (list, tuple)) or len(deger) != 2:
-            raise YapilandirmaHatasi(f"{yol}.{anahtar} iki elemanli [alt, ust] olmalidir")
+            raise YapilandirmaHatasi(f"{yol}.{anahtar} iki elemanlı [alt, üst] olmalıdır")
         alt, ust = float(deger[0]), float(deger[1])
         if not 0 < alt < ust:
-            raise YapilandirmaHatasi(f"{yol}.{anahtar} icin 0 < alt < ust olmalidir")
+            raise YapilandirmaHatasi(f"{yol}.{anahtar} için 0 < alt < üst olmalıdır")
         return alt, ust
 
     return DogrulamaYapilandirmasi(
@@ -425,7 +425,7 @@ def _simulator_yukle(veri: dict[str, Any]) -> SimulatorYapilandirmasi:
     arka_plan = _zorunlu(veri, "arka_plan_T", yol)
     for ad, deger in (("miknatis_ofseti_mm", ofset), ("arka_plan_T", arka_plan)):
         if not isinstance(deger, (list, tuple)) or len(deger) != 2:
-            raise YapilandirmaHatasi(f"{yol}.{ad} iki elemanli olmalidir")
+            raise YapilandirmaHatasi(f"{yol}.{ad} iki elemanlı olmalıdır")
     return SimulatorYapilandirmasi(
         bobin_yaricapi_m=float(_zorunlu(veri, "bobin_yaricapi_m", yol)),
         demet_yari_acisi_derece=float(_zorunlu(veri, "demet_yari_acisi_derece", yol)),
@@ -453,14 +453,14 @@ def _simulator_yukle(veri: dict[str, Any]) -> SimulatorYapilandirmasi:
 
 
 def yapilandirma_yukle(dosya: str | Path) -> Yapilandirma:
-    """YAML dosyasini okuyup dogrulanmis Yapilandirma nesnesi dondurur."""
+    """YAML dosyasını okuyup doğrulanmış Yapılandırma nesnesi döndürür."""
     dosya_yolu = Path(dosya)
     if not dosya_yolu.exists():
-        raise YapilandirmaHatasi(f"Yapilandirma dosyasi bulunamadi: {dosya_yolu}")
+        raise YapilandirmaHatasi(f"Yapılandırma dosyası bulunamadı: {dosya_yolu}")
     with dosya_yolu.open(encoding="utf-8") as f:
         veri = yaml.safe_load(f)
     if not isinstance(veri, dict):
-        raise YapilandirmaHatasi(f"{dosya_yolu} bir YAML sozlugu icermiyor")
+        raise YapilandirmaHatasi(f"{dosya_yolu} bir YAML sözlüğü içermiyor")
 
     for bolum in (
         "genel",
@@ -475,7 +475,7 @@ def yapilandirma_yukle(dosya: str | Path) -> Yapilandirma:
         "simulator",
     ):
         if bolum not in veri:
-            raise YapilandirmaHatasi(f"Yapilandirmada '{bolum}' bolumu eksik")
+            raise YapilandirmaHatasi(f"Yapılandırmada '{bolum}' bölümü eksik")
 
     return Yapilandirma(
         genel=_genel_yukle(veri["genel"]),

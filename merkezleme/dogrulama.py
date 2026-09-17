@@ -1,16 +1,16 @@
-"""Girilen olcumun dogrulanmasi: mertebe kontrolu ve "olasi yazim hatasi".
+"""Girilen ölçümün doğrulanması: mertebe kontrolü ve "olası yazım hatası".
 
-Rotating coil baska bir bilgisayarda calistigi icin degerler ekrandan okunup
-elle yazilir; bu yuzden tek gercek hata kaynagi YAZIM HATASIDIR. Iki katmanli
-dogrulama uygulanir:
+Rotating coil başka bir bilgisayarda çalıştığı için değerler ekrandan okunup
+elle yazılır; bu yüzden tek gerçek hata kaynağı YAZIM HATASIDIR. İki katmanlı
+doğrulama uygulanır:
 
-1. Mertebe kontrolu: |C_1| ve |C_2| yapilandirilan makul araliklarda mi?
-   (C_1 icin alt sinir zorlanmaz; iyi merkezlenmis miknatiste sifira yakin
-   olmasi normaldir.)
-2. Kalibrasyon varken: olculen y, kalibrasyondan BEKLENEN y'den cok mu sapiyor?
-   Beklenen y, referans olcum ve R uzerinden hesaplanir; sapma, olculen
-   tekrarlanabilirligin (ya da tolerans olceginin) belirli bir katini gecerse
-   uyari verilir ve yeniden onay istenir.
+1. Mertebe kontrolü: |C_1| ve |C_2| yapılandırılan makul aralıklarda mı?
+   (C_1 için alt sınır zorlanmaz; iyi merkezlenmiş mıknatıste sıfıra yakın
+   olması normaldir.)
+2. Kalibrasyon varken: ölçülen y, kalibrasyondan BEKLENEN y'den çok mu sapıyor?
+   Beklenen y, referans ölçüm ve R üzerinden hesaplanır; sapma, ölçülen
+   tekrarlanabilirliğin (ya da tolerans ölçeğinin) belirli bir katını geçerse
+   uyarı verilir ve yeniden onay istenir.
 """
 from __future__ import annotations
 
@@ -24,7 +24,7 @@ from .yapilandirma import DogrulamaYapilandirmasi, DuzeltmeYapilandirmasi
 
 @dataclass(frozen=True)
 class DogrulamaSonucu:
-    """Girisin dogrulanmasi. `onay_gerekli` ise kullaniciya yeniden sorulur."""
+    """Girişin doğrulanması. `onay_gerekli` ise kullanıcıya yeniden sorulur."""
 
     gecerli: bool
     onay_gerekli: bool
@@ -36,14 +36,14 @@ class DogrulamaSonucu:
 
     def metin(self) -> str:
         if self.temiz:
-            return "Giris makul gorunuyor."
+            return "Giriş makul görünüyor."
         return "\n".join(self.uyarilar)
 
 
 def mertebe_kontrolu(
     olcum: HarmonikOlcumu, konvansiyon: HarmonikKonvansiyonu, ayar: DogrulamaYapilandirmasi
 ) -> list[str]:
-    """|C_1| ve |C_2| makul aralikta mi?"""
+    """|C_1| ve |C_2| makul aralıkta mı?"""
     uyarilar: list[str] = []
     for n, aralik in ((1, ayar.c1_makul_aralik), (2, ayar.c2_makul_aralik)):
         if n not in olcum.bilesenler:
@@ -51,8 +51,8 @@ def mertebe_kontrolu(
         c_n = olcum.bilesenler[n]
         if not konvansiyon.mertebe_makul_mu(n, c_n, aralik):
             uyarilar.append(
-                f"|C_{n}| = {abs(c_n):.4g} makul araligin ({aralik[0]:.3g} .. {aralik[1]:.3g}) "
-                f"disinda; birim ({konvansiyon.ayar.birim}) ya da basamak sayisi yanlis olabilir"
+                f"|C_{n}| = {abs(c_n):.4g} makul aralığın ({aralik[0]:.3g} .. {aralik[1]:.3g}) "
+                f"dışında; birim ({konvansiyon.ayar.birim}) ya da basamak sayısı yanlış olabilir"
             )
     return uyarilar
 
@@ -65,9 +65,9 @@ def beklenenden_sapma_kontrolu(
     merkez_sacilimi_m: float | None = None,
     g_sacilimi: float | None = None,
 ) -> list[str]:
-    """Olculen y, kalibrasyondan beklenenden cok mu sapiyor?
+    """Ölçülen y, kalibrasyondan beklenenden çok mu sapıyor?
 
-    Olcek olarak once olculen tekrarlanabilirlik, yoksa tolerans kullanilir.
+    Ölçek olarak önce ölçülen tekrarlanabilirlik, yoksa tolerans kullanılır.
     """
     uyarilar: list[str] = []
     carpan = dogrulama.yazim_hatasi_sapma_carpani
@@ -80,17 +80,17 @@ def beklenenden_sapma_kontrolu(
     )
     if merkez_sapmasi > carpan * merkez_olcegi:
         uyarilar.append(
-            f"OLASI YAZIM HATASI: olculen merkez, beklenenden {merkez_sapmasi * 1e6:.1f} um "
-            f"sapiyor (esik {carpan * merkez_olcegi * 1e6:.1f} um).\n"
-            f"  beklenen: {beklenen}\n  olculen : {olculen}"
+            f"OLASI YAZIM HATASI: ölçülen merkez, beklenenden {merkez_sapmasi * 1e6:.1f} um "
+            f"sapıyor (eşik {carpan * merkez_olcegi * 1e6:.1f} um).\n"
+            f"  beklenen: {beklenen}\n  ölçülen : {olculen}"
         )
 
     g_sapmasi = abs(olculen.g - beklenen.g)
     if g_sapmasi > carpan * g_olcegi:
         uyarilar.append(
-            f"OLASI YAZIM HATASI: olculen g, beklenenden {g_sapmasi:.5f} sapiyor "
-            f"(esik {carpan * g_olcegi:.5f}); beklenen g = {beklenen.g:+.5f}, "
-            f"olculen g = {olculen.g:+.5f}"
+            f"OLASI YAZIM HATASI: ölçülen g, beklenenden {g_sapmasi:.5f} sapıyor "
+            f"(eşik {carpan * g_olcegi:.5f}); beklenen g = {beklenen.g:+.5f}, "
+            f"ölçülen g = {olculen.g:+.5f}"
         )
     return uyarilar
 
@@ -105,7 +105,7 @@ def girisi_dogrula(
     merkez_sacilimi_m: float | None = None,
     g_sacilimi: float | None = None,
 ) -> DogrulamaSonucu:
-    """Iki katmanli dogrulamayi uygular."""
+    """İki katmanlı doğrulamayı uygular."""
     uyarilar = mertebe_kontrolu(olcum, konvansiyon, dogrulama)
     if olculen_y is not None and beklenen_y is not None:
         uyarilar += beklenenden_sapma_kontrolu(

@@ -31,7 +31,7 @@ def test_mertebe_hatasi_yakalanir(kfg, konvansiyon, carpan):
     bozuk = olcum_uret(kfg, gradyen=0.1 * carpan)
     uyarilar = mertebe_kontrolu(bozuk, konvansiyon, kfg.dogrulama)
     assert uyarilar, f"carpan {carpan} icin uyari beklenirdi"
-    assert "makul araligin" in uyarilar[0]
+    assert "makul aralığın" in uyarilar[0]
 
 
 def test_c1_sifira_yakin_olabilir(kfg, konvansiyon):
@@ -80,7 +80,7 @@ def test_g_icin_de_yazim_hatasi_uyarisi(kfg, konvansiyon):
         olculen_y=olculen, beklenen_y=beklenen
     )
     assert sonuc.onay_gerekli
-    assert any("olculen g" in u for u in sonuc.uyarilar)
+    assert any("ölçülen g" in u for u in sonuc.uyarilar)
 
 
 def test_bilerek_bozulmus_giris_akista_yakalanir(
@@ -119,13 +119,13 @@ def test_bilerek_bozulmus_giris_akista_yakalanir(
 # ---------------------------------------------------------------------------
 def test_bos_zorunlu_alan_hata_verir(konvansiyon):
     giris = AlanGirisi(alanlar={"C1_genlik": "", "C1_faz": "0"})
-    with pytest.raises(AlanHatasi, match="bos"):
+    with pytest.raises(AlanHatasi, match="boş"):
         alanlardan_olcum(giris, konvansiyon, "genlik_faz", zorunlu=(1,), opsiyonel=())
 
 
 def test_sayi_olmayan_alan_hata_verir(konvansiyon):
     giris = AlanGirisi(alanlar={"C1_genlik": "abc", "C1_faz": "0"})
-    with pytest.raises(AlanHatasi, match="sayi degil"):
+    with pytest.raises(AlanHatasi, match="sayı değil"):
         alanlardan_olcum(giris, konvansiyon, "genlik_faz", zorunlu=(1,), opsiyonel=())
 
 

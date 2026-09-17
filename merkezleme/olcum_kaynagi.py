@@ -1,12 +1,12 @@
-"""Olcum kaynagi: elle girisi soyutlayan katman.
+"""Ölçüm kaynağı: elle girişi soyutlayan katman.
 
-Arayuz (`ElleGiris`) ile simulator (`SimulatorGirisi`) ayni protokolu uygular;
-boylece butun akis donanimsiz ve elle girissiz sinanabilir, "deneme kipinde" de
-alanlar simulatorden otomatik doldurulur.
+Arayüz (`ElleGiris`) ile simülatör (`SimulatorGirisi`) aynı protokolü uygular;
+böylece bütün akış donanımsız ve elle girişsiz sınanabilir, "deneme kipinde" de
+alanlar simülatörden otomatik doldurulur.
 
-Alan donusumleri de burada: arayuzun metin kutulari ile `HarmonikOlcumu`
-arasindaki cevrim tek yerde toplanmistir (konvansiyonlarin kendisi
-`harmonikler.py` icindedir).
+Alan dönüşümleri de burada: arayüzün metin kutuları ile `HarmonikOlcumu`
+arasındaki çevrim tek yerde toplanmıştır (konvansiyonların kendisi
+`harmonikler.py` içindedir).
 """
 from __future__ import annotations
 
@@ -21,7 +21,7 @@ from .simulator import Simulator
 
 @dataclass(frozen=True)
 class OlcumIstegi:
-    """Programin kullanicidan (ya da simulatorden) bekledigi olcum."""
+    """Programın kullanıcıdan (ya da simülatörden) beklediği ölçüm."""
 
     tur: str  # "arka_plan" | "olcum"
     etiket: str
@@ -34,18 +34,18 @@ class OlcumIstegi:
     @property
     def metin(self) -> str:
         if self.tur == "arka_plan":
-            return "ARKA PLAN OLCUMUNU ALIN VE GIRIN (akimlar sifirda)"
-        return "OLCUMU ALIN VE GIRIN"
+            return "ARKA PLAN ÖLÇÜMÜNÜ ALIN VE GİRİN (akımlar sıfırda)"
+        return "ÖLÇÜMÜ ALIN VE GİRİN"
 
 
 class OlcumKaynagi(Protocol):
-    """Harmonik olcumu saglayan soyut kaynak."""
+    """Harmonik ölçümü sağlayan soyut kaynak."""
 
     def olcum_al(self, istek: OlcumIstegi) -> HarmonikOlcumu: ...
 
 
 # ---------------------------------------------------------------------------
-# Alan <-> olcum donusumu
+# Alan <-> ölçüm dönüşümü
 # ---------------------------------------------------------------------------
 def _alan_adlari(n: int, bicim: str) -> tuple[str, str]:
     if bicim == "genlik_faz":
@@ -55,7 +55,7 @@ def _alan_adlari(n: int, bicim: str) -> tuple[str, str]:
 
 @dataclass
 class AlanGirisi:
-    """Arayuzdeki metin kutularinin ham icerigi."""
+    """Arayüzdeki metin kutularının ham içeriği."""
 
     alanlar: dict[str, str] = field(default_factory=dict)
     mutlak_gradyen_T_m: str = ""
@@ -68,18 +68,18 @@ class AlanGirisi:
 
 
 class AlanHatasi(ValueError):
-    """Metin kutusu icerigi gecersiz."""
+    """Metin kutusu içeriği geçersiz."""
 
 
 def sayi_ayristir(metin: str, alan_adi: str) -> float:
-    """Metin kutusundan sayi okur. Ondalik ayraci olarak virgul de kabul edilir."""
+    """Metin kutusundan sayı okur. Ondalık ayracı olarak virgül de kabul edilir."""
     ham = str(metin).strip().replace(",", ".")
     if not ham:
-        raise AlanHatasi(f"{alan_adi} bos")
+        raise AlanHatasi(f"{alan_adi} boş")
     try:
         return float(ham)
     except ValueError as hata:
-        raise AlanHatasi(f"{alan_adi} sayi degil: {metin!r}") from hata
+        raise AlanHatasi(f"{alan_adi} sayı değil: {metin!r}") from hata
 
 
 def alanlardan_olcum(
@@ -90,7 +90,7 @@ def alanlardan_olcum(
     opsiyonel: Sequence[int] = (3, 4),
     zaman: float = 0.0,
 ) -> HarmonikOlcumu:
-    """Metin kutularindan `HarmonikOlcumu` uretir.
+    """Metin kutularından `HarmonikOlcumu` üretir.
 
     `bicim`: "genlik_faz" -> (|C_n|, faz);  "normal_skew" -> (B_n, A_n)
     """
@@ -131,10 +131,10 @@ def alanlardan_olcum(
 def olcumden_alanlar(
     olcum: HarmonikOlcumu, konvansiyon: HarmonikKonvansiyonu, bicim: str
 ) -> AlanGirisi:
-    """`HarmonikOlcumu` -> metin kutusu icerikleri (elle girisle ayni bicimde).
+    """`HarmonikOlcumu` -> metin kutusu içerikleri (elle girişle aynı biçimde).
 
-    Deneme kipinde simulator ciktisini arayuze doldurmak ve bicimler arasi
-    gecis yapmak icin kullanilir.
+    Deneme kipinde simülatör çıktısını arayüze doldurmak ve biçimler arası
+    geçiş yapmak için kullanılır.
     """
     alanlar: dict[str, str] = {}
     for n, c_n in sorted(olcum.bilesenler.items()):
@@ -159,7 +159,7 @@ def olcumden_alanlar(
 # Kaynaklar
 # ---------------------------------------------------------------------------
 class SimulatorGirisi:
-    """Olcumleri simulatorden alan kaynak (testler ve deneme kipi)."""
+    """Ölçümleri simülatörden alan kaynak (testler ve deneme kipi)."""
 
     def __init__(self, simulator: Simulator) -> None:
         self.simulator = simulator
@@ -168,17 +168,17 @@ class SimulatorGirisi:
 
     def olcum_al(self, istek: OlcumIstegi) -> HarmonikOlcumu:
         self.olcum_sayisi += 1
-        # Her olcum arasinda gecen sure; suruklenme terimleri icin.
+        # Her ölçüm arasında geçen süre; sürüklenme terimleri için.
         self.zaman += 1.0
         return self.simulator.olc(np.asarray(istek.akimlar_A, dtype=float), zaman=self.zaman)
 
 
 class ElleGiris:
-    """Arayuzun doldurdugu kaynak.
+    """Arayüzün doldurduğu kaynak.
 
-    Arayuz `olcumu_yerlestir()` ile sirada bekleyen olcumu koyar; is akisi
-    `olcum_al()` ile onu tuketir. Olcum hazir degilse `OlcumHazirDegil`
-    yukseltilir - arayuz olay tabanli calistigi icin bu normaldir.
+    Arayüz `olcumu_yerlestir()` ile sırada bekleyen ölçümü koyar; iş akışı
+    `olcum_al()` ile onu tüketir. Ölçüm hazır değilse `OlcumHazirDegil`
+    yükseltilir - arayüz olay tabanlı çalıştığı için bu normaldir.
     """
 
     def __init__(self) -> None:
@@ -189,10 +189,10 @@ class ElleGiris:
 
     def olcum_al(self, istek: OlcumIstegi) -> HarmonikOlcumu:
         if self._bekleyen is None:
-            raise OlcumHazirDegil(f"{istek.etiket} icin elle giris bekleniyor")
+            raise OlcumHazirDegil(f"{istek.etiket} için elle giriş bekleniyor")
         olcum, self._bekleyen = self._bekleyen, None
         return olcum
 
 
 class OlcumHazirDegil(RuntimeError):
-    """Elle giris henuz yapilmadi."""
+    """Elle giriş henüz yapılmadı."""

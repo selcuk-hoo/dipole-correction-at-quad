@@ -1,4 +1,4 @@
-"""Is akisi testleri: adim sirasi, arka plan politikasi, durum dosyasi, rutinler."""
+"""İş akışı testleri: adım sırası, arka plan politikası, durum dosyası, rutinler."""
 from __future__ import annotations
 
 import csv
@@ -17,27 +17,27 @@ from .conftest import kalibrasyonu_yurut, y_olc
 
 
 # ---------------------------------------------------------------------------
-# Adim sirasi
+# Adım sırası
 # ---------------------------------------------------------------------------
 def test_adim_sirasi_sifir_arka_plan_hedef_olcum(kfg, simulator_uret, akis_uret, mod_bazi):
-    """Once akimlar sifira iner ve arka plan istenir; sonra hedefe rampalanip olcum istenir."""
+    """Önce akımlar sıfıra iner ve arka plan istenir; sonra hedefe rampalanıp ölçüm istenir."""
     sim = simulator_uret(ofset_m=complex(150e-6, -100e-6), tohum=51)
     akis, kaynak, _ = akis_uret(sim)
     akis.basla()
 
     assert akis.bekleme is Bekleme.ARKA_PLAN_GIRISI
-    assert np.allclose(akis.mevcut_akimlar_A, 0), "arka plan olcumu akimlar sifirdayken alinir"
+    assert np.allclose(akis.mevcut_akimlar_A, 0), "arka plan ölçümü akımlar sıfırdayken alınır"
     assert "ARKA PLAN" in akis.sonraki_eylem_metni()
 
     akis.olcum_gonder(kaynak.olcum_al(akis.mevcut_istek))
     assert akis.bekleme is Bekleme.OLCUM_GIRISI
     assert np.allclose(akis.mevcut_akimlar_A, mod_bazi.nominal_akimlar)
-    # Olculen akimlar da gosterilir
+    # Ölçülen akımlar da gösterilir
     assert np.allclose(akis.olculen_akimlar_A, mod_bazi.nominal_akimlar, atol=0.02)
 
     akis.olcum_gonder(kaynak.olcum_al(akis.mevcut_istek))
     assert akis.son_y is not None
-    assert akis.gradyen_hedefi_T_m is not None, "ilk olcum G_hedef'i belirlemeli"
+    assert akis.gradyen_hedefi_T_m is not None, "ilk ölçüm G_hedef'i belirlemeli"
 
 
 def test_tam_akis_tamamlanir(kfg, simulator_uret, akis_uret):
@@ -48,19 +48,19 @@ def test_tam_akis_tamamlanir(kfg, simulator_uret, akis_uret):
 
     assert akis.faz is Faz.TAMAMLANDI, akis.durdurma_nedeni
     assert akis.iterasyon <= 3
-    # Olcut sartnamedeki gibi bilesen bazinda: |x_c| ve |y_c| ayri ayri tolerans altinda
+    # Ölçüt şartnamedeki gibi bileşen bazında: |x_c| ve |y_c| ayrı ayrı tolerans altında
     assert yakinsama_durumu(akis.son_y, kfg.duzeltme).yakinsadi, akis.son_y
     assert abs(akis.son_y.g) < kfg.duzeltme.g_toleransi
     assert akis.baslangic_y.merkez_normu_m > akis.son_y.merkez_normu_m
 
 
 # ---------------------------------------------------------------------------
-# Arka plan cikarma
+# Arka plan çıkarma
 # ---------------------------------------------------------------------------
 def test_arka_plan_cikarilmazsa_sonuc_arka_plan_kadar_kayar(
     kfg, konvansiyon, mod_bazi, simulator_uret
 ):
-    """Arka plan cikarilmadan merkez, arka planin getirdigi kadar kayar."""
+    """Arka plan çıkarılmadan merkez, arka planın getirdiği kadar kayar."""
     arka_plan_T = 1e-6 + 0j
     sim = simulator_uret(
         ofset_m=0j, roll_rad=0.0, arka_plan_T=arka_plan_T, harmonik_gurultu_bagil=0.0
@@ -73,11 +73,11 @@ def test_arka_plan_cikarilmazsa_sonuc_arka_plan_kadar_kayar(
     # Beklenen kayma: |z| = |C_1^arka_plan| / G
     beklenen_kayma = abs(arka_plan_T) / gradyen
     assert cikarmasiz.merkez_normu_m == pytest.approx(beklenen_kayma, rel=1e-6)
-    assert cikarmali.merkez_normu_m < 1e-12, "cikarma sonrasi merkez sifirlanmali"
+    assert cikarmali.merkez_normu_m < 1e-12, "çıkarma sonrası merkez sıfırlanmalı"
 
 
 def test_arka_plan_cikarma_akiste_de_calisir(kfg, konvansiyon, mod_bazi, simulator_uret, akis_uret):
-    """Tam akista, buyuk bir arka planla bile dogru merkeze yakinsanmali."""
+    """Tam akışta, büyük bir arka planla bile doğru merkeze yakınsanmalı."""
     sim = simulator_uret(
         ofset_m=complex(120e-6, 80e-6), arka_plan_T=complex(3e-6, -2e-6), tohum=53
     )
@@ -86,13 +86,13 @@ def test_arka_plan_cikarma_akiste_de_calisir(kfg, konvansiyon, mod_bazi, simulat
     otomatik_yurut(akis, kaynak)
 
     assert akis.faz is Faz.TAMAMLANDI
-    # Gercek (arka plansiz) merkez de toleransin altina inmeli
+    # Gerçek (arka plansız) merkez de toleransın altına inmeli
     gercek = sim.gercek_merkez_m(akis.mevcut_akimlar_A)
     assert abs(gercek) * 1e6 < 2 * kfg.duzeltme.merkez_toleransi_um, gercek
 
 
 def test_arka_plan_her_n_noktada_politikasi(kfg, simulator_uret, akis_uret, tmp_path):
-    """arka_plan_her_n_noktada = 3 ise arka plan sayisi belirgin azalmali."""
+    """arka_plan_her_n_noktada = 3 ise arka plan sayısı belirgin azalmalı."""
     from merkezleme.kalibrasyon import plan_olustur
 
     seyrek = dataclasses.replace(kfg.kalibrasyon, arka_plan_her_n_noktada=3)
@@ -113,7 +113,7 @@ def test_arka_plan_atlanirsa_son_gecerli_kullanilir_ve_kaydedilir(
     akis.arka_plani_atla()
     assert akis.bekleme is Bekleme.OLCUM_GIRISI
     assert akis.atlanan_arka_plan_sayisi == 1
-    assert akis.son_arka_plan is ilk_arka_plan, "son gecerli arka plan kullanilmali"
+    assert akis.son_arka_plan is ilk_arka_plan, "son geçerli arka plan kullanılmalı"
     assert any("atlandı" in n for n in akis.notlar)
 
     # CSV'de arka_plan_taze = 0 olarak kaydedilmis olmali
@@ -132,7 +132,7 @@ def test_ilk_arka_plan_atlanamaz(kfg, simulator_uret, akis_uret):
 
 
 # ---------------------------------------------------------------------------
-# Nokta tekrari, duraklatma, durdurma
+# Nokta tekrarı, duraklatma, durdurma
 # ---------------------------------------------------------------------------
 def test_noktayi_tekrarla_arka_plani_yeniden_ister(kfg, simulator_uret, akis_uret):
     sim = simulator_uret(tohum=56)
@@ -172,7 +172,7 @@ def test_durdur_akimlari_sifirlar(kfg, simulator_uret, akis_uret):
 def test_guvenlik_ihlalinde_duzeltme_uygulanmaz(
     kfg, konvansiyon, mod_bazi, simulator_uret, kaynak_grubu_uret, tmp_path
 ):
-    """Cozum adim basi siniri asiyorsa uygulanmaz; akis durur ve neden kaydedilir."""
+    """Çözüm adım başı sınırını aşıyorsa uygulanmaz; akış durur ve neden kaydedilir."""
     dar_guvenlik = dataclasses.replace(kfg.guvenlik, adim_basi_max_bagil_degisim=0.001)
     sim = simulator_uret(ofset_m=complex(400e-6, 0), tohum=59)
     kaynak = SimulatorGirisi(sim)
@@ -184,7 +184,7 @@ def test_guvenlik_ihlalinde_duzeltme_uygulanmaz(
         konvansiyon,
         mod_bazi,
     )
-    # Guvenlik degerlendirmesi is akisinin kendi yapilandirmasindan gelir.
+    # Güvenlik değerlendirmesi iş akışının kendi yapılandırmasından gelir.
     akis.kfg = dataclasses.replace(kfg, guvenlik=dar_guvenlik)
 
     akis.basla()
@@ -192,15 +192,15 @@ def test_guvenlik_ihlalinde_duzeltme_uygulanmaz(
 
     assert akis.faz is Faz.DURDURULDU
     assert "Güvenlik sınırı" in (akis.durdurma_nedeni or "")
-    assert akis.iterasyon == 0, "hicbir duzeltme uygulanmamis olmali"
+    assert akis.iterasyon == 0, "hiçbir düzeltme uygulanmamış olmalı"
 
 
 # ---------------------------------------------------------------------------
-# Durum dosyasi
+# Durum dosyası
 # ---------------------------------------------------------------------------
 def test_durum_dosyasindan_devam(kfg, konvansiyon, mod_bazi, simulator_uret, akis_uret,
                                  kaynak_grubu_uret):
-    """Kalibrasyonun ortasinda kesilen akis, durum dosyasindan devam edebilmeli."""
+    """Kalibrasyonun ortasında kesilen akış, durum dosyasından devam edebilmeli."""
     sim = simulator_uret(ofset_m=complex(200e-6, -140e-6), tohum=60)
     akis, kaynak, calistirma = akis_uret(sim)
     akis.basla()
@@ -214,13 +214,13 @@ def test_durum_dosyasindan_devam(kfg, konvansiyon, mod_bazi, simulator_uret, aki
     kalan_kuyruk = len(durum["kuyruk"])
     assert kalan_kuyruk > 0
 
-    # Yarim calistirma bulunabilmeli
+    # Yarım çalıştırma bulunabilmeli
     bulunan = Calistirma.yarim_calistirma_bul(
         calistirma.dizin.parent, kfg.genel.durum_dosyasi_adi
     )
     assert bulunan == calistirma.durum_json
 
-    # Yeni bir surecmis gibi devam et
+    # Yeni bir süreçmiş gibi devam et
     akis2 = IsAkisi(kfg, kaynak_grubu_uret(), kaynak, calistirma, konvansiyon, mod_bazi)
     akis2.durumu_uygula(durum)
     akis2.devam_ettir()
@@ -236,10 +236,10 @@ def test_durum_dosyasi_atomik_yazilir(kfg, simulator_uret, akis_uret):
     akis, kaynak, calistirma = akis_uret(sim)
     akis.basla()
     akis.durumu_kaydet()
-    # Gecici dosya kalmamis olmali
+    # Geçici dosya kalmamış olmalı
     assert not calistirma.durum_json.with_suffix(".json.tmp").exists()
     with calistirma.durum_json.open(encoding="utf-8") as f:
-        json.load(f)  # gecerli JSON
+        json.load(f)  # geçerli JSON
 
 
 # ---------------------------------------------------------------------------
@@ -262,16 +262,16 @@ def test_rutinler_calisir_ve_raporlanir(kfg, simulator_uret, akis_uret):
     assert adlar == {"tekrarlanabilirlik", "polarite", "modulator"}
     for rutin in akis.rutin_sonuclari:
         assert rutin.metin.strip()
-    # Polarite ve modulator rutinleri merkez farkini raporlar
+    # Polarite ve modülatör rutinleri merkez farkını raporlar
     for ad in ("polarite", "modulator"):
         sonuc = next(r for r in akis.rutin_sonuclari if r.ad == ad)
         assert "fark_buyukluk_um" in sonuc.veriler
-    # Tekrarlanabilirlik, dogrulama olceklerini besler
+    # Tekrarlanabilirlik, doğrulama ölçeklerini besler
     assert akis.merkez_sacilimi_m is not None and akis.merkez_sacilimi_m > 0
 
 
 def test_polarite_rutini_role_eylemi_ister(kfg, simulator_uret, akis_uret):
-    """Polarite rutini, ayni genliklerle ikinci olcumden once role degisimi ister."""
+    """Polarite rutini, aynı genliklerle ikinci ölçümden önce röle değişimi ister."""
     sim = simulator_uret(ofset_m=complex(80e-6, 0), tohum=63)
     akis, kaynak, _ = akis_uret(sim)
     akis.basla()
@@ -283,7 +283,7 @@ def test_polarite_rutini_role_eylemi_ister(kfg, simulator_uret, akis_uret):
         if akis.bekleme is Bekleme.KULLANICI_EYLEMI:
             eylem_gorulen = True
             assert "RÖLE" in akis.sonraki_eylem_metni().upper()
-            assert np.allclose(akis.mevcut_akimlar_A, 0), "role degisimi akimlar sifirdayken"
+            assert np.allclose(akis.mevcut_akimlar_A, 0), "röle değişimi akımlar sıfırdayken"
             akis.kullanici_eylemini_onayla()
         elif akis.bekleme in (Bekleme.ARKA_PLAN_GIRISI, Bekleme.OLCUM_GIRISI):
             akis.olcum_gonder(kaynak.olcum_al(akis.mevcut_istek))
@@ -293,7 +293,7 @@ def test_polarite_rutini_role_eylemi_ister(kfg, simulator_uret, akis_uret):
 
 
 # ---------------------------------------------------------------------------
-# Ciktilar
+# Çıktılar
 # ---------------------------------------------------------------------------
 def test_ciktilar_duz_metin_ve_eksiksiz(kfg, simulator_uret, akis_uret):
     sim = simulator_uret(ofset_m=complex(180e-6, -90e-6), tohum=64)
@@ -310,9 +310,9 @@ def test_ciktilar_duz_metin_ve_eksiksiz(kfg, simulator_uret, akis_uret):
     assert calistirma.scpi_gunlugu.exists()
     assert calistirma.durum_json.exists()
     assert ozet.exists()
-    assert (calistirma.dizin / "yapilandirma.yaml").exists(), "yapilandirma kopyalanmali"
+    assert (calistirma.dizin / "yapilandirma.yaml").exists(), "yapılandırma kopyalanmalı"
 
-    # CSV icerigi
+    # CSV içeriği
     with calistirma.olcumler_csv.open(encoding="utf-8") as f:
         satirlar = list(csv.DictReader(f))
     assert satirlar
@@ -322,7 +322,7 @@ def test_ciktilar_duz_metin_ve_eksiksiz(kfg, simulator_uret, akis_uret):
     turler = {s["adim_turu"] for s in satirlar}
     assert {"arka_plan", "kalibrasyon", "duzeltme", "tekrarlanabilirlik"} <= turler
 
-    # Markdown ozeti
+    # Markdown özeti
     metin = ozet.read_text(encoding="utf-8")
     for baslik in ("## Merkez", "## Son akımlar", "## Kalibrasyon",
                    "## Yalnızca izlenen büyüklükler", "## Arka plan", "## Tekrarlanabilirlik"):
@@ -334,6 +334,6 @@ def test_ciktilar_duz_metin_ve_eksiksiz(kfg, simulator_uret, akis_uret):
 def test_calistirma_klasoru_tarihli(kfg, tmp_path):
     calistirma = Calistirma(kfg, kok=tmp_path)
     assert calistirma.dizin.parent == tmp_path
-    # 2026-09-17_123456 bicimi
+    # 2026-09-17_123456 biçimi
     assert len(calistirma.etiket) == len("2026-09-17_123456")
     assert calistirma.etiket[4] == "-" and calistirma.etiket[10] == "_"

@@ -1,4 +1,4 @@
-"""Guc kaynagi katmani testleri (sahte kaynaklarla, kuru calisma)."""
+"""Güç kaynağı katmanı testleri (sahte kaynaklarla, kuru çalışma)."""
 from __future__ import annotations
 
 import dataclasses
@@ -27,7 +27,7 @@ def komutlar(grup: KaynakGrubu) -> list[str]:
 
 
 def test_uyum_gerilimi_akimdan_once_yazilir(grup):
-    """Sabit akim kipinde VOLT bir uyum sinirdir; CURR'den once yazilmali."""
+    """Sabit akım kipinde VOLT bir uyum sınırıdır; CURR'den önce yazılmalı."""
     kayitlar = komutlar(grup)
     ilk_volt = next(i for i, k in enumerate(kayitlar) if k.startswith("VOLT"))
     ilk_curr = next(i for i, k in enumerate(kayitlar) if k.startswith("CURR"))
@@ -35,7 +35,7 @@ def test_uyum_gerilimi_akimdan_once_yazilir(grup):
 
 
 def test_kullanilan_komut_kumesi_genisletilmemis(grup):
-    """Yalnizca izin verilen SCPI komutlari kullanilmali."""
+    """Yalnızca izin verilen SCPI komutları kullanılmalı."""
     grup.rampala(np.full(4, 1.0))
     grup.olcumleri_oku()
     izinli_onekler = (
@@ -56,7 +56,7 @@ def test_kullanilan_komut_kumesi_genisletilmemis(grup):
 
 
 def test_akim_tek_adimda_degismez(grup, kfg):
-    """Rampa: adim sayisi hiz ve adim suresiyle belirlenir, tek adim olamaz."""
+    """Rampa: adım sayısı hız ve adım süresiyle belirlenir, tek adım olamaz."""
     onceki = len(grup.gunluk.kayitlar)
     grup.rampala(np.full(4, 10.0))
     yeni_curr = [
@@ -73,7 +73,7 @@ def test_rampa_dort_kanali_es_zamanli_surer(grup):
     onceki = len(grup.gunluk.kayitlar)
     grup.rampala(np.array([10.05, 9.95, 9.95, 10.05]))
     curr_kayitlari = [k for k in grup.gunluk.kayitlar[onceki:] if k.komut.startswith("CURR")]
-    # Her adimda dort ayri adrese yazilmali
+    # Her adımda dört ayrı adrese yazılmalı
     ilk_adim_adresleri = {k.adres for k in curr_kayitlari[:4]}
     assert len(ilk_adim_adresleri) == 4
 
@@ -84,7 +84,7 @@ def test_rampa_sonunda_oturma_dogrulanir(grup):
 
 
 def test_oturmazsa_hata_verir(kaynak_grubu_uret, kfg):
-    """Tolerans saglanamazsa islem durdurulur."""
+    """Tolerans sağlanamazsa işlem durdurulur."""
     grup = KaynakGrubu.olustur(
         dataclasses.replace(kfg.guc_kaynaklari, akim_tolerans_A=1e-12),
         kfg.guvenlik,
@@ -104,13 +104,13 @@ def test_max_akim_asimi_reddedilir(grup, kfg):
 
 
 def test_negatif_akim_reddedilir(grup):
-    """Polarite role ile degisir; kaynaklar yalnizca pozitif akim surer."""
+    """Polarite röle ile değişir; kaynaklar yalnızca pozitif akım sürer."""
     with pytest.raises(GuvenlikHatasi, match="Negatif akım"):
         grup.rampala(np.array([-1.0, 10.0, 10.0, 10.0]))
 
 
 def test_akim_sifir_degilken_cikis_kapatilamaz(grup):
-    """Endüktif bobin: akim sifir degilken OUTP OFF yasak."""
+    """Endüktif bobin: akım sıfır değilken OUTP OFF yasak."""
     grup.rampala(np.full(4, 5.0))
     with pytest.raises(GuvenlikHatasi, match="OUTP OFF"):
         grup.kaynaklar[0].cikis_kapat(olculen_akim_A=5.0)

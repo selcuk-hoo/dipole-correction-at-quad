@@ -1,7 +1,7 @@
-"""Giris dogrulamasi testleri: mertebe kontrolu ve "olasi yazim hatasi".
+"""Giriş doğrulaması testleri: mertebe kontrolü ve "olası yazım hatası".
 
-Rotating coil baska bir bilgisayarda calistigi icin degerler ekrandan okunup
-elle yazilir; yazim hatasi tek gercek hata kaynagidir.
+Rotating coil başka bir bilgisayarda çalıştığı için değerler ekrandan okunup
+elle yazılır; yazım hatası tek gerçek hata kaynağıdır.
 """
 from __future__ import annotations
 
@@ -27,21 +27,21 @@ def test_makul_giris_temiz_gecer(kfg, konvansiyon):
 
 @pytest.mark.parametrize("carpan", [1e4, 1e-5])
 def test_mertebe_hatasi_yakalanir(kfg, konvansiyon, carpan):
-    """Birim karistirmasi (T yerine mT gibi) mertebe kontrolune takilmali."""
+    """Birim karıştırması (T yerine mT gibi) mertebe kontrolüne takılmalı."""
     bozuk = olcum_uret(kfg, gradyen=0.1 * carpan)
     uyarilar = mertebe_kontrolu(bozuk, konvansiyon, kfg.dogrulama)
-    assert uyarilar, f"carpan {carpan} icin uyari beklenirdi"
+    assert uyarilar, f"çarpan {carpan} için uyarı beklenirdi"
     assert "makul aralığın" in uyarilar[0]
 
 
 def test_c1_sifira_yakin_olabilir(kfg, konvansiyon):
-    """Iyi merkezlenmis miknatiste C_1 ~ 0 normaldir; alt sinir zorlanmamali."""
+    """İyi merkezlenmiş mıknatıste C_1 ~ 0 normaldir; alt sınır zorlanmamalı."""
     olcum = olcum_uret(kfg, c1=0j)
     assert not mertebe_kontrolu(olcum, konvansiyon, kfg.dogrulama)
 
 
 def test_beklenenden_buyuk_sapma_yazim_hatasi_uyarisi_verir(kfg, konvansiyon):
-    """Kalibrasyon varken, beklenenden cok sapan giris yeniden onay istemeli."""
+    """Kalibrasyon varken, beklenenden çok sapan giriş yeniden onay istemeli."""
     olculen = KontrolVektoru(x_c=500e-6, y_c=0.0, g=0.0)  # 500 um
     beklenen = KontrolVektoru(x_c=10e-6, y_c=0.0, g=0.0)  # 10 um bekleniyordu
     sonuc = girisi_dogrula(
@@ -86,18 +86,18 @@ def test_g_icin_de_yazim_hatasi_uyarisi(kfg, konvansiyon):
 def test_bilerek_bozulmus_giris_akista_yakalanir(
     kfg, konvansiyon, mod_bazi, simulator_uret, akis_uret
 ):
-    """Ondalik basamagi kaydirilmis (10 kat buyuk) bir giris uyari uretmeli."""
+    """Ondalık basamağı kaydırılmış (10 kat büyük) bir giriş uyarı üretmeli."""
     sim = simulator_uret(ofset_m=complex(150e-6, 0), tohum=71)
     akis, kaynak, _ = akis_uret(sim)
     kalibrasyonu_yurut(akis, kaynak)
 
-    # Duzeltme fazinda ilk olcum: once dogru degeri sinayalim
+    # Düzeltme fazında ilk ölçüm: önce doğru değeri sınayalım
     dogru = kaynak.olcum_al(akis.mevcut_istek)
-    assert akis.olcum_dogrula(dogru).temiz is True or True  # mertebe uyarisi olmamali
+    assert akis.olcum_dogrula(dogru).temiz is True or True  # mertebe uyarısı olmamalı
     akis.olcum_gonder(dogru)
 
-    # Simdi bilerek bozulmus bir giris: C_1'in ondalik basamagi kaydirilmis
-    if akis.mevcut_istek is None:  # duzeltme onayi bekleniyorsa uygula
+    # Şimdi bilerek bozulmuş bir giriş: C_1'in ondalık basamağı kaydırılmış
+    if akis.mevcut_istek is None:  # düzeltme onayı bekleniyorsa uygula
         akis.duzeltmeyi_onayla()
     while akis.mevcut_istek is not None and akis.mevcut_istek.tur == "arka_plan":
         akis.olcum_gonder(kaynak.olcum_al(akis.mevcut_istek))
@@ -110,12 +110,12 @@ def test_bilerek_bozulmus_giris_akista_yakalanir(
         mutlak_gradyen_T_m=temiz_olcum.mutlak_gradyen_T_m,
     )
     sonuc = akis.olcum_dogrula(bozuk)
-    assert sonuc.onay_gerekli, "10 kat buyutulmus C_1 uyari uretmeliydi"
+    assert sonuc.onay_gerekli, "10 kat büyütülmüş C_1 uyarı üretmeliydi"
     assert any("YAZIM HATASI" in u for u in sonuc.uyarilar)
 
 
 # ---------------------------------------------------------------------------
-# Alan ayristirma
+# Alan ayrıştırma
 # ---------------------------------------------------------------------------
 def test_bos_zorunlu_alan_hata_verir(konvansiyon):
     giris = AlanGirisi(alanlar={"C1_genlik": "", "C1_faz": "0"})
@@ -144,12 +144,12 @@ def test_opsiyonel_alanlar_bos_kalabilir(kfg, konvansiyon):
 
 
 def test_iki_bicim_arasinda_donusum_tutarli(kfg, konvansiyon, temiz_simulator, mod_bazi):
-    """Simulator ciktisi, her iki giris biciminde de ayni merkezi vermeli."""
+    """Simülatör çıktısı, her iki giriş biçiminde de aynı merkezi vermeli."""
     olcum = temiz_simulator.olc(mod_bazi.nominal_akimlar, gurultu=False)
     merkezler = []
     for bicim in ("genlik_faz", "normal_skew"):
         alanlar = olcumden_alanlar(olcum, konvansiyon, bicim)
         geri = alanlardan_olcum(alanlar, konvansiyon, bicim)
         merkezler.append(konvansiyon.merkez(geri))
-    # Alanlar ekran bicimine yuvarlandigi icin nanometre altinda fark kalabilir
+    # Alanlar ekran biçimine yuvarlandığı için nanometre altında fark kalabilir
     assert abs(merkezler[0] - merkezler[1]) < 1e-9

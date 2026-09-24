@@ -142,6 +142,17 @@ class Simulator:
         c2 = self.harmonik_ham_T(akimlar, 2)
         return -self.harmonikler_ayari.r_ref_m * c1 / c2
 
+    def _nominal_olcek_T(self) -> float:
+        """Nominal akımda |C_2| (T): gürültü ölçeği ve "units" normalizasyonu
+        için referans.
+
+        `nominal_gradyen_T_m` yapılandırma değeri serbest bir parametre değildir;
+        burada bütün bobinlere nominal akım uygulanınca geometri modelinden
+        çıkan gerçek alandan hesaplanır, elle senkronize edilmesi gerekmez.
+        """
+        nominal_akimlar = np.full(BOBIN_SAYISI, self.miknatis.nominal_akim_A)
+        return abs(self.harmonik_ham_T(nominal_akimlar, 2))
+
     # ------------------------------------------------------------------
     # Ölçüm (elle girişle aynı biçimde)
     # ------------------------------------------------------------------
@@ -161,11 +172,11 @@ class Simulator:
         ham[1] = ham[1] + self.arka_plan_T * (1.0 + self.ayar.arka_plan_surukleme_T_s * zaman)
 
         # Ölçüm gürültüsü ve yavaş sürüklenme.
-        # Ölçek SABİTTİR: nominal ana harmonik |C_2| = G_nominal * r_ref.
+        # Ölçek SABİTTİR: nominal ana harmonik |C_2|, nominal akımda hesaplanır.
         # Anlık |C_2| kullanılmaz; çünkü arka plan ölçümünde akımlar sıfır
         # olduğundan |C_2| ~ 0 olur ve gürültü ölçeği anlamsızlaşır (gerçek
         # ölçüm zincirinin gürültüsü de çalışma noktasından bağımsızdır).
-        olcek = self.miknatis.nominal_gradyen_T_m * self.harmonikler_ayari.r_ref_m
+        olcek = self._nominal_olcek_T()
         if gurultu and self.ayar.harmonik_gurultu_bagil > 0:
             sigma = self.ayar.harmonik_gurultu_bagil * olcek
             for n in n_listesi:
@@ -199,7 +210,7 @@ class Simulator:
 
         # "units": b_n = B_n / B_(referans) * 1e4  (normalize, mutlak ölçek yok)
         referans = ham_T.get(self.harmonikler_ayari.units_referans_n)
-        nominal_olcek = self.miknatis.nominal_gradyen_T_m * self.harmonikler_ayari.r_ref_m
+        nominal_olcek = self._nominal_olcek_T()
         if referans is None or abs(referans) < 1e-6 * nominal_olcek:
             raise ValueError(
                 'Birim "units" iken normalizasyon referansı '

@@ -31,7 +31,10 @@ miknatis:
   nominal_polarite: [1, -1, 1, -1]
   # Hedef gradyen: "ilk_olcum" ise nominal akımlardaki ilk ölçümden alınır.
   gradyen_hedefi_kaynagi: ilk_olcum
-  nominal_gradyen_T_m: 0.095         # gradyen_hedefi_kaynagi: yapilandirma ise kullanılır
+  nominal_gradyen_T_m: 0.095         # yalnızca gradyen_hedefi_kaynagi: yapilandirma ise
+                                      # kullanılır (kaba tahmin yeter); simülatör kendi
+                                      # geometrisinden nominal akımdaki gerçek |C_2|'yi
+                                      # hesaplar, bu değere bağımlı değildir
   endustans_mH: 6.5                 # yalnızca belgeleme/uyarı amaçlı
 
 modlar:

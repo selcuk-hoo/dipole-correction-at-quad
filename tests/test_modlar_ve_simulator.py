@@ -81,18 +81,15 @@ def test_R_kurulumu_ve_sifir_uzayi(mod_bazi: ModBazi):
 # ---------------------------------------------------------------------------
 # Simülatör fiziği
 # ---------------------------------------------------------------------------
-def test_nominal_desen_normal_kuadrupol_uretir(temiz_simulator, mod_bazi, kfg):
+def test_nominal_desen_normal_kuadrupol_uretir(temiz_simulator, mod_bazi):
     """Köşegen yerleşim + racetrack çifti -> nominal desen NORMAL kuadrupol."""
     c2 = temiz_simulator.harmonik_ham_T(mod_bazi.nominal_akimlar, 2)
     c1 = temiz_simulator.harmonik_ham_T(mod_bazi.nominal_akimlar, 1)
     assert abs(c2.imag) < 1e-12 * abs(c2.real), "C_2 saf normal değil"
     assert abs(c1) < 1e-15, "ofsetsiz durumda dipol olmamalı"
-    gradyen = c2.real / kfg.harmonikler.r_ref_m
-    assert gradyen == pytest.approx(kfg.miknatis.nominal_gradyen_T_m, rel=0.05)
 
 
-def test_H_modu_x_c_yi_V_modu_y_c_yi_hareket_ettirir(temiz_simulator, mod_bazi, konvansiyon, kfg):
-    hedef = kfg.miknatis.nominal_gradyen_T_m
+def test_H_modu_x_c_yi_V_modu_y_c_yi_hareket_ettirir(temiz_simulator, mod_bazi, konvansiyon):
     z_H = konvansiyon.merkez(temiz_simulator.olc(mod_bazi.mod_akimlari("H", 0.005), gurultu=False))
     z_V = konvansiyon.merkez(temiz_simulator.olc(mod_bazi.mod_akimlari("V", 0.005), gurultu=False))
     assert abs(z_H.imag) < 1e-9 * abs(z_H.real), "H modu y_c yi de oynatıyor"

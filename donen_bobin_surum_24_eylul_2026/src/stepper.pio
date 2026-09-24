@@ -1,0 +1,38 @@
+.program stepper
+
+; The step pin is bound as a SET pin.
+; We configure the state machine clock to run at 10 MHz (0.1 us per clock cycle).
+
+.wrap_target
+    pull block          ; Stall until CPU pushes a delay value (in 100ns units) to TX FIFO
+    set pins, 1 [18]    ; Set STEP pin high (1 cycle + 18 delay cycles = 19 cycles)
+    nop                 ; Delay 1 cycle (total high time: 20 cycles = 2.0 us)
+    set pins, 0         ; Set STEP pin low (1 cycle)
+    out x, 32           ; Move 32-bit delay value from OSR to X register (1 cycle)
+delay_loop:
+    jmp x-- delay_loop  ; Loop for X cycles (X * 0.1 us delay)
+.wrap
+
+% c-sdk {
+static inline void stepper_program_init(PIO pio, uint sm, uint offset, uint step_pin) {
+    pio_sm_config c = stepper_program_get_default_config(offset);
+
+    // Map the SET pin group to the STEP pin
+    sm_config_set_set_pins(&c, step_pin, 1);
+
+    // Configure the GPIO pin for PIO usage
+    pio_gpio_init(pio, step_pin);
+
+    // Set the pin direction to output in the PIO
+    pio_sm_set_consecutive_pindirs(pio, sm, step_pin, 1, true);
+
+    // Configure the clock divider: running at 10 MHz (0.1 us per cycle)
+    // Divisor = clk_sys / 10,000,000.0f
+    float div = (float)clock_get_hz(clk_sys) / 10000000.0f;
+    sm_config_set_clkdiv(&c, div);
+
+    // Load the configuration and start the state machine
+    pio_sm_init(pio, sm, offset, &c);
+    pio_sm_set_enabled(pio, sm, true);
+}
+%}

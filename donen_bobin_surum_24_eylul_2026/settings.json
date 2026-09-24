@@ -1,0 +1,7 @@
+{
+    "host": "169.254.1.177",
+    "port": 5000,
+    "data_mode": 1,
+    "rate": "14400 SPS",
+    "motor_speed": 20.0
+}

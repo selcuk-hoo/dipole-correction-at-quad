@@ -23,7 +23,7 @@ genel:
   tema: varsayilan
 
 miknatis:
-  nominal_akim_A: 10.0
+  nominal_akim_A: 9.5
   # Bobinler, çerçevedeki etiketlere göre (etiketli taraftan bakıldığında):
   #   1 sağ üst, 2 sol üst, 3 sol alt, 4 sağ alt
   bobin_acilari_derece: [45.0, 135.0, 225.0, 315.0]
@@ -31,7 +31,7 @@ miknatis:
   nominal_polarite: [1, -1, 1, -1]
   # Hedef gradyen: "ilk_olcum" ise nominal akımlardaki ilk ölçümden alınır.
   gradyen_hedefi_kaynagi: ilk_olcum
-  nominal_gradyen_T_m: 0.1          # gradyen_hedefi_kaynagi: yapilandirma ise kullanılır
+  nominal_gradyen_T_m: 0.095         # gradyen_hedefi_kaynagi: yapilandirma ise kullanılır
   endustans_mH: 6.5                 # yalnızca belgeleme/uyarı amaçlı
 
 modlar:
@@ -96,7 +96,7 @@ guc_kaynaklari:
   oturma_dogrulama_denemesi: 5
 
 guvenlik:
-  bobin_basi_max_akim_A: 10.5
+  bobin_basi_max_akim_A: 10.0
   adim_basi_max_bagil_degisim: 0.02      # bobin başına, her iterasyonda
   nominale_gore_max_asimetri: 0.05       # bobin başına, toplam
 

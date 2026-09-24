@@ -71,7 +71,7 @@ def test_akim_tek_adimda_degismez(grup, kfg):
 
 def test_rampa_dort_kanali_es_zamanli_surer(grup):
     onceki = len(grup.gunluk.kayitlar)
-    grup.rampala(np.array([10.05, 9.95, 9.95, 10.05]))
+    grup.rampala(np.array([9.55, 9.45, 9.45, 9.55]))
     curr_kayitlari = [k for k in grup.gunluk.kayitlar[onceki:] if k.komut.startswith("CURR")]
     # Her adımda dört ayrı adrese yazılmalı
     ilk_adim_adresleri = {k.adres for k in curr_kayitlari[:4]}
@@ -79,8 +79,8 @@ def test_rampa_dort_kanali_es_zamanli_surer(grup):
 
 
 def test_rampa_sonunda_oturma_dogrulanir(grup):
-    olculen = grup.rampala(np.array([10.05, 9.95, 9.95, 10.05]))
-    assert np.allclose(olculen, [10.05, 9.95, 9.95, 10.05], atol=0.02)
+    olculen = grup.rampala(np.array([9.55, 9.45, 9.45, 9.55]))
+    assert np.allclose(olculen, [9.55, 9.45, 9.45, 9.55], atol=0.02)
 
 
 def test_oturmazsa_hata_verir(kaynak_grubu_uret, kfg):

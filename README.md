@@ -465,7 +465,7 @@ Tüm yapılandırma tek dosyadadır: **`yapilandirma.yaml`**. Öne çıkan anaht
 | `genel` | `kip` | `kuru` | `kuru` \| `canli` (canlı için `--canli` şart) |
 | | `modulator_acik` | `false` | 1 kHz modülatör durumu (yalnızca kaydedilir) |
 | | `tema` | `varsayilan` | `varsayilan` \| `fosfor_yesil` \| `fosfor_turuncu` |
-| `miknatis` | `nominal_akim_A` | `10.0` | Bobin başına nominal akım |
+| `miknatis` | `nominal_akim_A` | `9.5` | Bobin başına nominal akım |
 | | `bobin_acilari_derece` | `[45,135,225,315]` | Bobin konumları |
 | | `nominal_polarite` | `[1,-1,1,-1]` | Nominal kuadrupol polaritesi |
 | | `gradyen_hedefi_kaynagi` | `ilk_olcum` | `G_hedef` ilk ölçümden mi, yapılandırmadan mı |
@@ -480,7 +480,7 @@ Tüm yapılandırma tek dosyadadır: **`yapilandirma.yaml`**. Öne çıkan anaht
 | | `uyum_gerilimi_V` | `20.0` | Sabit akım kipinde uyum sınırı |
 | | `rampa_hizi_A_s` | `0.5` | Rampa hızı |
 | | `akim_tolerans_A` | `0.02` | Oturma doğrulama toleransı |
-| `guvenlik` | `bobin_basi_max_akim_A` | `10.5` | Asla aşılmaz |
+| `guvenlik` | `bobin_basi_max_akim_A` | `10.0` | Asla aşılmaz (güç kaynağı donanım tavanı) |
 | | `adim_basi_max_bagil_degisim` | `0.02` | Bobin başına, her iterasyonda |
 | | `nominale_gore_max_asimetri` | `0.05` | Bobin başına, toplam |
 | `kalibrasyon` | `nokta_sayisi` | `3` | `3` \| `5` |

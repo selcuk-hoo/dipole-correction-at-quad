@@ -16,6 +16,7 @@ from PySide6.QtCore import QTimer, Slot, Qt
 from .control_panel import CollapsibleSection
 
 from .. import protocol
+from .. import merkezleme_koprusu
 
 # Pre-defined built-in macro templates
 PRESETS = {
@@ -131,6 +132,19 @@ PRESETS = {
         "# Ramp down motor\n"
         "SET_MOTOR_SPEED 0.0\n"
         "SET_SERVO off\n"
+    ),
+
+    "Merkezleme Kuadrupol Olcumu": (
+        "# Preset: Merkezleme Kuadrupol Olcumu\n"
+        "# Regular A bobinden (duz sargi) n=1/n=2 harmonikleri okur ve\n"
+        "# merkezleme programinin bekledigi veri_kilidi/.kilit dosyasina yazar.\n"
+        "# merkezleme --dosyadan calisirken bu makroyu tekrar tekrar calistirin.\n\n"
+        "SET_CHANNEL AIN2-AIN3\n"
+        "SET_SERVO on\n"
+        "SET_MOTOR_SPEED 25.0\n"
+        "WAIT_SPEED 25.0 0.5\n"
+        "WAIT 2.5\n"
+        "MERKEZLEME_OLCUM\n"
     )
 }
 
@@ -320,7 +334,13 @@ class MacroSystemWidget(QWidget):
             "<b>Recording & Streaming:</b><br>"
             "&bull; <code>START_RECORDING</code><br>"
             "&bull; <code>STOP_RECORDING</code><br>"
-            "&bull; <code>PAUSE_STREAM</code> / <code>RESUME_STREAM</code>"
+            "&bull; <code>PAUSE_STREAM</code> / <code>RESUME_STREAM</code><br>"
+            "<br>"
+            "<b>Merkezleme Bridge (quad-magnet centering):</b><br>"
+            "&bull; <code>MERKEZLEME_OLCUM</code> (reads last 2s of Regular-coil "
+            "buffer, computes n=1/n=2 harmonics, writes veri_kilidi/.kilit - "
+            "use WAIT_SPEED then WAIT 2.0+ beforehand so the buffer holds "
+            "stable-speed data)"
         )
         lbl_cheat = QLabel(cheat_text)
         lbl_cheat.setTextFormat(Qt.RichText)
@@ -555,7 +575,8 @@ class MacroSystemWidget(QWidget):
             "WAIT", "WAIT_SPEED", "CLEAR_ALL_SLOTS", "ALIGNMENT_SCAN", "CAPTURE_SLOT",
             "APPLY_OFFSET", "CALIBRATE_SELF_OFFSET", "CALIBRATE_SYS_OFFSET", 
             "CALIBRATE_SYS_GAIN", "RESET_CALIBRATION", "START_RECORDING", "STOP_RECORDING",
-            "PAUSE_STREAM", "RESUME_STREAM", "FFT_CLEAR_ALL_SLOTS", "FFT_CAPTURE_SLOT"
+            "PAUSE_STREAM", "RESUME_STREAM", "FFT_CLEAR_ALL_SLOTS", "FFT_CAPTURE_SLOT",
+            "MERKEZLEME_OLCUM"
         }
         
         for idx, line in enumerate(lines, 1):
@@ -869,7 +890,23 @@ class MacroSystemWidget(QWidget):
                 
             elif cmd == "RESUME_STREAM":
                 cp._send(protocol.CMD_RESUME_STREAM, 0)
-                
+
+            elif cmd == "MERKEZLEME_OLCUM":
+                settings = getattr(self.window(), "settings", None)
+                if settings is None:
+                    self.log_to_console("WARN", "Settings not available; using default coil geometry.")
+                    turns, length_mm, width_mm, duyarlilik, kilit_yolu = 100.0, 50.0, 20.0, 1.0, None
+                else:
+                    turns = settings.coil_turns
+                    length_mm = settings.coil_length_mm
+                    width_mm = settings.coil_width_mm
+                    duyarlilik = settings.merkezleme_duyarlilik_n2
+                    kilit_yolu = settings.merkezleme_kilit_yolu
+                veri = merkezleme_koprusu.kuadrupol_olcumu_yaz(
+                    self.engine, turns, length_mm, width_mm, duyarlilik, kilit_yolu
+                )
+                self.log_to_console("INFO", f"Merkezleme olcumu yazildi: {veri}")
+
         except Exception as e:
             self.log_to_console("ERROR", f"Failed to execute command '{cmd}': {e}")
             self.abort_macro()

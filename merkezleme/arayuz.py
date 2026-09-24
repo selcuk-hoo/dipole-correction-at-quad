@@ -49,6 +49,7 @@ from .is_akisi import Bekleme, Faz, IsAkisi
 from .olcum_kaynagi import (
     AlanGirisi,
     AlanHatasi,
+    DosyaGirisi,
     SimulatorGirisi,
     alanlardan_olcum,
     olcumden_alanlar,
@@ -87,14 +88,23 @@ class MerkezlemePencere(QWidget):
         yapilandirma: Yapilandirma,
         akis: IsAkisi,
         deneme_kipi: bool = False,
+        otomatik_kaynak_etiketi: str | None = None,
         devam: bool = False,
     ) -> None:
         """`devam=True` ise akış `basla()` yerine `devam_ettir()` ile kurulur
-        (durum dosyasından geri yüklenmiş bir akış için)."""
+        (durum dosyasından geri yüklenmiş bir akış için).
+
+        `otomatik_kaynak_etiketi`: `deneme_kipi` DIŞINDA, alanların
+        `akis.olcum_kaynagi`'ndan (örn. `DosyaGirisi`) otomatik doldurulmasını
+        istiyorsanız üst şeritte gösterilecek etiketi verin (örn.
+        "OTOMATİK ÖLÇÜM (dosya)"); yarı otomatik çalışma içindir - onay
+        düğmelerine yine kullanıcı basar."""
         super().__init__()
         self.kfg = yapilandirma
         self.akis = akis
         self.deneme_kipi = deneme_kipi
+        self.otomatik_kaynak_etiketi = otomatik_kaynak_etiketi
+        self._otomatik_doldur = deneme_kipi or otomatik_kaynak_etiketi is not None
         self.bicim = yapilandirma.harmonikler.giris_bicimi
         self.tema: Tema = tema_al(yapilandirma.genel.tema)
         self._mesgul = False
@@ -134,8 +144,10 @@ class MerkezlemePencere(QWidget):
             QLabel(f"Modülatör: {'AÇIK' if self.kfg.genel.modulator_acik else 'KAPALI'}")
         )
         duzen.addWidget(QLabel(f"Çalıştırma: {self.akis.calistirma.etiket}"))
-        self.deneme_etiketi = QLabel("DENEME KİPİ (simülatör)")
-        self.deneme_etiketi.setVisible(self.deneme_kipi)
+        self.deneme_etiketi = QLabel(
+            "DENEME KİPİ (simülatör)" if self.deneme_kipi else (self.otomatik_kaynak_etiketi or "")
+        )
+        self.deneme_etiketi.setVisible(self._otomatik_doldur)
         duzen.addWidget(self.deneme_etiketi)
         duzen.addStretch(1)
         duzen.addWidget(QLabel("Tema:"))
@@ -199,8 +211,9 @@ class MerkezlemePencere(QWidget):
         self.bicim_secici.currentIndexChanged.connect(self._bicim_degisti)
         ust.addWidget(self.bicim_secici)
         ust.addStretch(1)
-        if self.deneme_kipi:
-            self.doldur_dugmesi = QPushButton("Simülatörden doldur")
+        if self._otomatik_doldur:
+            etiket = "Simülatörden doldur" if self.deneme_kipi else "Kaynaktan doldur"
+            self.doldur_dugmesi = QPushButton(etiket)
             self.doldur_dugmesi.clicked.connect(self._simulatorden_doldur)
             ust.addWidget(self.doldur_dugmesi)
         duzen.addLayout(ust)
@@ -579,7 +592,7 @@ class MerkezlemePencere(QWidget):
         self.oneri_metni.setVisible(bool(self.oneri_metni.toPlainText().strip()))
 
         self._dugmeleri_guncelle()
-        if self.deneme_kipi and self.akis.bekleme in (
+        if self._otomatik_doldur and self.akis.bekleme in (
             Bekleme.ARKA_PLAN_GIRISI,
             Bekleme.OLCUM_GIRISI,
         ):
@@ -722,12 +735,21 @@ class MerkezlemePencere(QWidget):
         QMessageBox.information(self, "Özet yazıldı", f"Özet dosyası:\n{yol}")
 
     def _simulatorden_doldur(self) -> None:
-        """Deneme kipinde alanları simülatör çıktısıyla doldurur."""
+        """Alanları otomatik kaynaktan (simülatör ya da `DosyaGirisi`) doldurur.
+
+        Kaynak `DosyaGirisi` ise bu çağrı, veri gelene kadar (yoklama +
+        zaman aşımı ile) BLOKE olabilir; bu yüzden yalnızca kullanıcı
+        düğmeye bastığında ya da bekleme başladığında çağrılır.
+        """
         kaynak = self.akis.olcum_kaynagi
         istek = self.akis.mevcut_istek
-        if not isinstance(kaynak, SimulatorGirisi) or istek is None:
+        if not isinstance(kaynak, (SimulatorGirisi, DosyaGirisi)) or istek is None:
             return
-        olcum = kaynak.olcum_al(istek)
+        try:
+            olcum = kaynak.olcum_al(istek)
+        except Exception as hata:  # pragma: no cover - dosya kaynağı hata yolu
+            self._hatayi_isle(hata)
+            return
         self._alanlari_doldur(olcumden_alanlar(olcum, self.akis.konvansiyon, self.bicim))
 
     # ==================================================================

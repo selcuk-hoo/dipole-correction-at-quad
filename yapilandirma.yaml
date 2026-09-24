@@ -156,3 +156,12 @@ simulator:
   yerlesim_hatasi_acisal_mrad: [0.0, 0.0, 0.0, 0.0]
   sarim_hatasi_bagil: [0.0, 0.0, 0.0, 0.0]
   tohum: 12345
+
+# İsteğe bağlı bölüm: dönen bobin programıyla aynı bilgisayarda, paylaşımlı bir
+# dosya/kilit üzerinden otomatik ölçüm alışverişi (--dosyadan bayrağı ile).
+# Bölüm YAML'da yoksa aşağıdaki varsayımlarla çalışılır.
+dosya_girisi:
+  kilit_dosyasi: veri_kilidi/.kilit      # yok = "ölç" (sıra dönen bobinde)
+                                          # var = "veri hazır" (sıra bu programda)
+  zaman_asimi_s: 30.0                    # bu sürede veri gelmezse hata ver, akımları sıfırla
+  yoklama_araligi_s: 0.2                 # kilit dosyasını bu aralıkla yokla

@@ -1,8 +1,9 @@
 """Ölçüm kaynağı: elle girişi soyutlayan katman.
 
-Arayüz (`ElleGiris`) ile simülatör (`SimulatorGirisi`) aynı protokolü uygular;
-böylece bütün akış donanımsız ve elle girişsiz sınanabilir, "deneme kipinde" de
-alanlar simülatörden otomatik doldurulur.
+Arayüz (`ElleGiris`), simülatör (`SimulatorGirisi`) ve paylaşımlı dosya
+(`DosyaGirisi`) aynı protokolü uygular; böylece bütün akış donanımsız ve elle
+girişsiz sınanabilir, "deneme kipinde" alanlar simülatörden, dosya kipinde ise
+ayrı bir dönen bobin programından otomatik doldurulur.
 
 Alan dönüşümleri de burada: arayüzün metin kutuları ile `HarmonikOlcumu`
 arasındaki çevrim tek yerde toplanmıştır (konvansiyonların kendisi
@@ -10,13 +11,17 @@ arasındaki çevrim tek yerde toplanmıştır (konvansiyonların kendisi
 """
 from __future__ import annotations
 
+import json
+import time
 from dataclasses import dataclass, field
-from typing import Protocol, Sequence
+from pathlib import Path
+from typing import Callable, Protocol, Sequence
 
 import numpy as np
 
 from .harmonikler import HarmonikKonvansiyonu, HarmonikOlcumu
 from .simulator import Simulator
+from .yapilandirma import DosyaGirisiYapilandirmasi
 
 
 @dataclass(frozen=True)
@@ -196,3 +201,114 @@ class ElleGiris:
 
 class OlcumHazirDegil(RuntimeError):
     """Elle giriş henüz yapılmadı."""
+
+
+class DosyaGirisiHatasi(RuntimeError):
+    """Kilit dosyasının içeriği okunamadı ya da geçersiz."""
+
+
+class DosyaGirisiZamanAsimi(RuntimeError):
+    """Dönen bobin programından beklenen sürede veri gelmedi."""
+
+
+class DosyaGirisi:
+    """Paylaşımlı bir kilit dosyası üzerinden, aynı bilgisayarda çalışan ayrı
+    bir dönen bobin programıyla otomatik ölçüm alışverişi.
+
+    Protokol (kilit dosyasının VARLIĞI/YOKLUĞU tek sinyaldir, iki taraf da
+    aynı bilgisayardaki paylaşımlı bir klasörü kullanır):
+
+    * kilit YOK  -> "ölç" sinyali: sıra dönen bobin programındadır.
+    * kilit VAR  -> "veri hazır" sinyali: sıra bu programdadır; dosyanın
+      içeriği ölçülen harmonikleri taşır.
+
+    Her `olcum_al()` çağrısı önce eski kilidi (varsa) SİLER - bu, "yeni akım
+    hazır, ölç" demektir (`IsAkisi` bu çağrıdan önce akımları zaten rampalayıp
+    oturmasını doğrulamış olur). Ardından yeni bir kilit belirene kadar
+    yoklar, içeriğini okur ve döner; kilidi HEMEN silmez - silme, akımlar bir
+    sonraki nokta için değiştirildikten sonra, bir SONRAKİ `olcum_al()`
+    çağrısının başında olur. Böylece dönen bobin programı, kendi ölçtüğü
+    akım durumu değişmeden yeniden ölçmeye başlamaz.
+
+    Dönen bobin tarafı kendi verisini önce geçici bir dosyaya yazıp ardından
+    ATOMİK olarak kilit dosyasının adına TAŞIMALIDIR (`os.rename`); böylece bu
+    program hiçbir zaman yarım yazılmış bir dosya okumaz.
+
+    Dosya içeriği (JSON), dipol ve kuadrupolün normal/skew bileşenleridir:
+
+        {"b0": ..., "a0": ..., "b1": ..., "a1": ...}
+
+    `b`: normal, `a`: skew; `0` = dipol (bu programın n=1'i), `1` = kuadrupol
+    (n=2). Değerler, yapılandırmadaki `harmonikler.birim` biriminde kabul
+    edilir (elle giriş kutularıyla aynı sözleşme).
+    """
+
+    #: dosyadaki 0-tabanlı harmonik indeksi -> bu programın 1-tabanlı n'i.
+    _ZORUNLU_INDEKSLER = (0, 1)
+
+    def __init__(
+        self,
+        ayar: DosyaGirisiYapilandirmasi,
+        konvansiyon: HarmonikKonvansiyonu,
+        bekle: Callable[[float], None] = time.sleep,
+    ) -> None:
+        self.ayar = ayar
+        self.konvansiyon = konvansiyon
+        self.bekle = bekle
+        self.kilit_yolu = Path(ayar.kilit_dosyasi)
+        self.kilit_yolu.parent.mkdir(parents=True, exist_ok=True)
+        self.olcum_sayisi = 0
+        self._baslangic = time.time()
+
+    def olcum_al(self, istek: OlcumIstegi) -> HarmonikOlcumu:
+        # 1) Önceki turdan kalan kilidi sil: "yeni akım hazır, ölç" sinyali.
+        if self.kilit_yolu.exists():
+            self.kilit_yolu.unlink()
+
+        # 2) Dönen bobin taze veriyi yazıp kilidi oluşturana kadar yokla.
+        gecen_s = 0.0
+        while not self.kilit_yolu.exists():
+            if gecen_s >= self.ayar.zaman_asimi_s:
+                raise DosyaGirisiZamanAsimi(
+                    f"{istek.etiket}: {self.ayar.zaman_asimi_s:.0f} s içinde "
+                    f"'{self.kilit_yolu}' oluşmadı (dönen bobin programı çalışıyor mu?)"
+                )
+            self.bekle(self.ayar.yoklama_araligi_s)
+            gecen_s += self.ayar.yoklama_araligi_s
+
+        # 3) Oku ve HarmonikOlcumu'na çevir. Kilit BURADA silinmez (bkz. sınıf
+        #    docstring'i) - bir sonraki olcum_al() çağrısının başında silinir.
+        try:
+            with self.kilit_yolu.open(encoding="utf-8") as f:
+                ham = json.load(f)
+        except json.JSONDecodeError as hata:
+            raise DosyaGirisiHatasi(
+                f"'{self.kilit_yolu}' geçerli JSON değil: {hata}. Dönen bobin "
+                "tarafı veriyi geçici bir dosyaya yazıp ardından ATOMİK olarak "
+                "(os.rename) kilit dosyasına taşımalı."
+            ) from hata
+
+        bilesenler: dict[int, complex] = {}
+        eksik: list[str] = []
+        for indeks in self._ZORUNLU_INDEKSLER:
+            b_anahtari, a_anahtari = f"b{indeks}", f"a{indeks}"
+            if b_anahtari not in ham or a_anahtari not in ham:
+                eksik.extend(a for a in (b_anahtari, a_anahtari) if a not in ham)
+                continue
+            try:
+                b = float(ham[b_anahtari])
+                a = float(ham[a_anahtari])
+            except (TypeError, ValueError) as hata:
+                raise DosyaGirisiHatasi(
+                    f"'{self.kilit_yolu}' içinde {b_anahtari}/{a_anahtari} sayı değil: {hata}"
+                ) from hata
+            bilesenler[indeks + 1] = self.konvansiyon.normal_skewden(b, a)
+        if eksik:
+            raise DosyaGirisiHatasi(f"'{self.kilit_yolu}' içinde eksik alan(lar): {', '.join(eksik)}")
+
+        self.olcum_sayisi += 1
+        return HarmonikOlcumu(
+            bilesenler=bilesenler,
+            zaman=time.time() - self._baslangic,
+            ham_giris={"kaynak": "dosya", **{str(k): v for k, v in ham.items()}},
+        )

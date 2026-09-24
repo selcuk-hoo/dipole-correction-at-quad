@@ -318,6 +318,9 @@ pip install pytest                      # testler için
 python -m merkezleme                    # KURU ÇALIŞMA, elle giriş (varsayılan)
 python -m merkezleme --deneme           # deneme kipi: alanlar simülatörden dolar
 python -m merkezleme --otomatik         # arayüzsüz, simülatörle baştan sona
+python -m merkezleme --dosyadan         # yarı otomatik: alanlar dönen bobin
+                                         # programından dolar, onay yine kullanıcıda
+python -m merkezleme --otomatik --dosyadan --canli   # TAM OTOMATİK, gerçek donanım
 python -m merkezleme --devam            # yarım kalmış son çalıştırmadan devam
 python -m merkezleme --kalibrasyon calistirmalar/<tarih>/kalibrasyon.json
 python -m merkezleme --canli            # GERÇEK DONANIM (açık bayrak zorunlu)
@@ -354,6 +357,40 @@ kendi içinde tanımlamaz. Yeni bir tema eklemek için oraya bir `Tema` kaydı
 eklemek yeterlidir. Stil sayfası uygulama geneline verildiği için `QMessageBox`
 gibi ayrı pencereler de temalı görünür.
 
+### Dosyadan otomatik ölçüm (`--dosyadan`)
+
+Dönen bobin programı **aynı bilgisayarda** ayrı bir süreç olarak çalışıyorsa,
+elle girişin yerini paylaşımlı bir kilit dosyası alabilir. Protokol, dosyanın
+VARLIĞI/YOKLUĞUnu tek sinyal olarak kullanır:
+
+* kilit **yok** → "ölç" sinyali: sıra dönen bobin programındadır.
+* kilit **var** → "veri hazır" sinyali: sıra bu programdadır; dosyanın
+  içeriği ölçülen harmonikleri taşır.
+
+Bu program her ölçüm isteğinde önce eski kilidi siler (akımlar zaten
+rampalanıp oturmuş olur - "yeni akım hazır, ölç"), sonra yeni kilit belirene
+kadar yoklar. Dönen bobin tarafı kendi verisini önce geçici bir dosyaya yazıp
+ardından **atomik olarak** (`os.rename`) kilit dosyasının adına taşımalıdır;
+böylece hiçbir zaman yarım yazılmış bir dosya okunmaz. Dosya içeriği JSON'dur:
+
+```json
+{"b0": 1.2e-06, "a0": -4.8e-07, "b1": 2.4941e-03, "a1": -5.0e-06}
+```
+
+`b`: normal, `a`: skew; `0` = dipol, `1` = kuadrupol (bu programın n=1/n=2'si).
+Değerler `harmonikler.birim` biriminde kabul edilir (elle giriş kutularıyla
+aynı sözleşme). Dosya yolu ve zamanlamalar `dosya_girisi` bölümünde
+(bkz. §7) ayarlanır.
+
+`--dosyadan` tek başına **yarı otomatik** çalışır: arayüz açık kalır, alanlar
+dosyadan otomatik dolar, ama "Onayla" ve "Önerilen akımları UYGULA" düğmelerine
+yine kullanıcı basar. `--otomatik --dosyadan` ile birleşince **tam otomatik**
+olur (arayüzsüz, `otomatik_yurut` onayları da kendisi verir); bu kombinasyon
+`--canli` ile gerçek donanımda da kullanılabilir — `--otomatik` tek başına
+(`--dosyadan` olmadan) yalnızca simülatörle çalıştığı için `--canli` ile
+birlikte reddedilir. Beklenmeyen bir hata ya da zaman aşımında (dönen bobin
+programı yanıt vermezse) akımlar güvenli şekilde sıfıra indirilir.
+
 ---
 
 ## 5. Modüller
@@ -367,7 +404,7 @@ gibi ayrı pencereler de temalı görünür.
 | `kalibrasyon.py` | Nokta planı, fitler, `R`, SVD, `R_eff`, şüphe bayrakları, JSON |
 | `duzeltme.py` | `pinv` düzeltmesi, güvenlik değerlendirmesi, yakınsama, tekrarlanabilirlik |
 | `dogrulama.py` | Mertebe kontrolü ve "olası yazım hatası" |
-| `olcum_kaynagi.py` | Soyut ölçüm kaynağı (`ElleGiris` / `SimulatorGirisi`), alan dönüşümleri |
+| `olcum_kaynagi.py` | Soyut ölçüm kaynağı (`ElleGiris` / `SimulatorGirisi` / `DosyaGirisi`), alan dönüşümleri |
 | `is_akisi.py` | Adım sırası durum makinesi, görev kuyruğu, durum dosyası, rutinler |
 | `arayuz.py` | PyQt5 arayüzü |
 | `tema.py` | Arayüz temaları ve **bütün renkler** (varsayılan + iki fosfor CRT) |
@@ -456,6 +493,9 @@ Tüm yapılandırma tek dosyadadır: **`yapilandirma.yaml`**. Öne çıkan anaht
 | | `monopol_cikar` | `true` | Her adımda monopol bileşenini at |
 | `dogrulama` | `yazim_hatasi_sapma_carpani` | `5.0` | Beklenenden kaç kat sapma uyarı verir |
 | `simulator` | `bobin_yaricapi_m`, `demet_yari_acisi_derece` | `0.10`, `30.0` | `R_eff`'i belirler |
+| `dosya_girisi` *(isteğe bağlı)* | `kilit_dosyasi` | `veri_kilidi/.kilit` | `--dosyadan` kilit/veri dosyasının yolu |
+| | `zaman_asimi_s` | `30.0` | Bu sürede veri gelmezse hata (akımlar sıfırlanır) |
+| | `yoklama_araligi_s` | `0.2` | Kilit dosyasının yoklanma aralığı |
 
 ---
 

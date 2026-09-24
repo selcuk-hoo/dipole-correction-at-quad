@@ -209,6 +209,29 @@ class SimulatorYapilandirmasi:
 
 
 @dataclass(frozen=True)
+class DosyaGirisiYapilandirmasi:
+    """Paylaşımlı dosya üzerinden otomatik ölçüm alışverişi.
+
+    Aynı bilgisayarda çalışan ayrı bir dönen bobin programıyla elle girişsiz
+    koordinasyon içindir. `kilit_dosyasi` YOK ise "ölç" sinyalidir (sıra dönen
+    bobinde); VAR ise "veri hazır" sinyalidir (sıra bu programda). Dönen bobin
+    tarafı veriyi geçici bir dosyaya yazıp ATOMİK olarak `kilit_dosyasi`'na
+    taşımalıdır (`os.rename`), böylece yarım yazılmış bir dosya asla okunmaz.
+    """
+
+    kilit_dosyasi: str
+    zaman_asimi_s: float
+    yoklama_araligi_s: float
+
+
+VARSAYILAN_DOSYA_GIRISI = DosyaGirisiYapilandirmasi(
+    kilit_dosyasi="veri_kilidi/.kilit",
+    zaman_asimi_s=30.0,
+    yoklama_araligi_s=0.2,
+)
+
+
+@dataclass(frozen=True)
 class Yapilandirma:
     genel: GenelYapilandirma
     miknatis: MiknatisYapilandirmasi
@@ -220,6 +243,9 @@ class Yapilandirma:
     duzeltme: DuzeltmeYapilandirmasi
     dogrulama: DogrulamaYapilandirmasi
     simulator: SimulatorYapilandirmasi
+    dosya_girisi: DosyaGirisiYapilandirmasi = field(
+        default_factory=lambda: VARSAYILAN_DOSYA_GIRISI
+    )
     kaynak_dosya: Path | None = field(default=None)
 
     @property
@@ -452,6 +478,15 @@ def _simulator_yukle(veri: dict[str, Any]) -> SimulatorYapilandirmasi:
     )
 
 
+def _dosya_girisi_yukle(veri: dict[str, Any]) -> DosyaGirisiYapilandirmasi:
+    v = VARSAYILAN_DOSYA_GIRISI
+    return DosyaGirisiYapilandirmasi(
+        kilit_dosyasi=str(veri.get("kilit_dosyasi", v.kilit_dosyasi)),
+        zaman_asimi_s=float(veri.get("zaman_asimi_s", v.zaman_asimi_s)),
+        yoklama_araligi_s=float(veri.get("yoklama_araligi_s", v.yoklama_araligi_s)),
+    )
+
+
 def yapilandirma_yukle(dosya: str | Path) -> Yapilandirma:
     """YAML dosyasını okuyup doğrulanmış Yapılandırma nesnesi döndürür."""
     dosya_yolu = Path(dosya)
@@ -488,5 +523,6 @@ def yapilandirma_yukle(dosya: str | Path) -> Yapilandirma:
         duzeltme=_duzeltme_yukle(veri["duzeltme"]),
         dogrulama=_dogrulama_yukle(veri["dogrulama"]),
         simulator=_simulator_yukle(veri["simulator"]),
+        dosya_girisi=_dosya_girisi_yukle(veri.get("dosya_girisi", {})),
         kaynak_dosya=dosya_yolu,
     )

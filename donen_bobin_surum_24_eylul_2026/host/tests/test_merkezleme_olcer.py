@@ -125,7 +125,7 @@ def test_parametreler_ve_tutarlilik(p, tmp_path):
     assert p.bobin.sarim_sayisi == 5 and p.bobin.eksene_uzaklik_m == pytest.approx(0.02)
     assert p.kanallar[p.varsayilan_kanal] == (0, 1)
     assert p.kazanc == 32 and p.ornekleme_sps == 7200 and p.filtre == "Sinc4"
-    assert p.gecikme_s == 0.0 and p.artik_esigi == pytest.approx(5e-3) and p.sicrama_esigi == 0.6
+    assert p.gecikme_s == 0.0 and p.artik_esigi == pytest.approx(2e-2) and p.sicrama_esigi == 0.6
     assert mk.tutarlilik_uyarilari(p) == []
 
     kfg = tmp_path / "y.yaml"
@@ -506,7 +506,9 @@ def test_makro_yolu(p):
     assert json.loads(p.kilit_dosyasi.read_text()) == s.dosya_verisi()
     assert s.c2 == pytest.approx(dunya.c2, rel=1e-4)
 
-    # Artığı yüksek ölçüm yazılmaz
+    # Artığı yüksek ölçüm yazılmaz (sahte açıda merdiven yok, saat sıçraması
+    # ölçülemez; red akışı için eşik sıkılaştırılır)
+    p = dataclasses.replace(p, artik_esigi=5e-3)
     p.kilit_dosyasi.unlink()
     dunya.kayip = 3
     with pytest.raises(RuntimeError, match="yazılmadı"):
@@ -638,6 +640,7 @@ def test_merkezlemeye_yazarken_cerceve_kilitli(kurulum):
 def test_artigi_yuksek_olcum_merkezlemeye_yazilmaz(kurulum, p):
     dunya, dongu, gunluk = kurulum
     dunya.kayip = 30  # örnek kaybı: akı integrali bozulur
+    dongu.p = dataclasses.replace(dongu.p, artik_esigi=5e-3)  # sahte açıda saat sıçraması yok
     dongu.baglan()
     dongu.baslat()
     calistir(dunya, dongu, 6.0 + 2.1 * 3)

@@ -137,7 +137,7 @@ Akı integrali ise örneklerin zamanda düzgün ve kayıpsız olduğunu varsayar
 
 | Ölçüt | Sağlıklı | 1 kayıp | 3 kayıp | Eşik |
 |---|---|---|---|---|
-| Uydurma artığı (rms artık / rms harmonik) | 2·10⁻⁴ | 1,1–1,4·10⁻² | 1,6–1,7·10⁻² | 5·10⁻³ |
+| Uydurma artığı (rms artık / rms harmonik) | 2·10⁻⁴ | 1,1–1,4·10⁻² | 1,6–1,7·10⁻² | 2·10⁻² |
 | Okuma saati sıçraması (örnek) | ~0,2 | 0,98–1,00 | 1,5–1,9 | 0,6 |
 
 - **Okuma saati sıçraması:** enkoder okumaları düzenli saatle geldiğinden, kaybolan bir ADC örneği sonraki bütün okumaları bir örnek erken gösterir. Okuma saati uydurmasının artığının kayan medyanındaki tepe-tepe değişim bunu ölçer.

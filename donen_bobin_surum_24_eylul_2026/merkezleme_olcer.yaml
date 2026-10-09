@@ -48,9 +48,11 @@ olcum:
   # değeri buraya yazın. Bilinmezse 0: sabit hızda yalnızca bir açı ofsetidir
   # (referansla giderilir) ama hız dalgalanırken n=2'yi n=1/n=3'e karıştırır.
   gecikme_ms: 0.0
-  # Akı uydurmasının artığı / harmonik içerik (rms). Sağlıklı ölçümde ~1e-4..1e-3.
-  # Bunu aşan ölçüm merkezleme'ye yazılmaz (örnek kaybı, açı hatası, doyma).
-  artik_esigi: 5.0e-3
+  # Akı uydurmasının artığı / harmonik içerik (rms). Sağlıklı ölçümde ~1e-4..1e-3;
+  # mıknatısın 1 kHz %1 modülasyonu açıksa ~6e-3 (merkezi etkilemez). Bunu aşan
+  # ölçüm merkezleme'ye yazılmaz: yanlış kanal, doyma, açı bozukluğu. (Tek örnek
+  # kaybını ~1e-2 ile sınırda bırakır; onu sicrama_esigi doğrudan yakalar.)
+  artik_esigi: 2.0e-2
   # Enkoder okumaları stator saatine bağlı düzenli aralıklarla gelir; bir ADC
   # örneği kaybolursa sonraki okumalar bir örnek kayar. Bu kaymanın (örnek
   # cinsinden) eşiği: sağlıklı veride ~0.2, tek kayıpta ~1.

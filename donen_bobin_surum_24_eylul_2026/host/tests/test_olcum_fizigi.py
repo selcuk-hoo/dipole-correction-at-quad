@@ -197,7 +197,8 @@ def test_ornek_kaybi_artikla_yakalanir(model):
     saglam = olc(model, bobin(), gecikme_s=NET_GECIKME_S)
     kayipli = olc(model, bobin(), kayip=3, gecikme_s=NET_GECIKME_S)
     assert saglam.artik_orani < p.artik_esigi / 10
-    assert kayipli.artik_orani > p.artik_esigi
+    assert kayipli.artik_orani > 30 * saglam.artik_orani
+    assert mk.saglik_sorunlari(saglam, p) == [] and mk.saglik_sorunlari(kayipli, p)
 
 
 def test_gurultu_ve_sure(model):

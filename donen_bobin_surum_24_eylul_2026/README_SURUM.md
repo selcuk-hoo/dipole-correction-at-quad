@@ -46,6 +46,8 @@ Bütün sayılar `merkezleme_olcer.yaml`'dadır. Açılışta `r_ref` ve birimin
 
 Büyük arayüzün makro sisteminde `MERKEZLEME_OLCUM` komutu aynı hesabı tek seferlik yapar ("Merkezleme Kuadrupol Olcumu" hazır makrosu). Sürekli otomatik ölçüm için minimal pencere tercih edilmelidir.
 
+Hangi sistematik hatanın nasıl ve ne kadar düzeltildiği: [`SISTEMATIK_HATALAR_RAPORU.md`](SISTEMATIK_HATALAR_RAPORU.md).
+
 ### Lab doğrulama planı
 
 1. **Tekrarlanabilirlik:** sürekli ölçümde x_c, y_c saçılımı; ölçüm süresini 2 → 8 s yapınca ~2 kat azalmalı.

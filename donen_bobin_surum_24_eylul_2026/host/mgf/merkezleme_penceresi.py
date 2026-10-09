@@ -10,6 +10,8 @@ from __future__ import annotations
 import time
 from datetime import datetime
 
+import numpy as np
+import pyqtgraph as pg
 from PySide6.QtCore import Qt, QTimer
 from PySide6.QtWidgets import (
     QApplication,
@@ -24,12 +26,16 @@ from PySide6.QtWidgets import (
     QMainWindow,
     QPlainTextEdit,
     QPushButton,
+    QTabWidget,
     QVBoxLayout,
     QWidget,
 )
 
-from .merkezleme_koprusu import Parametreler, tutarlilik_uyarilari
+from .merkezleme_koprusu import HARMONIK_SAYISI, Parametreler, tutarlilik_uyarilari
 from .olcum_dongusu import Durum, OlcumDongusu
+
+_CUBUK_GENISLIGI = 0.34
+_HAM_NOKTA_SAYISI = 4000  # ham sinyal grafiğinde gösterilen en fazla örnek
 
 TEMALAR = {
     "acik": {
@@ -152,7 +158,15 @@ class MerkezlemePenceresi(QMainWindow):
         self.chk_yaz = QCheckBox("Merkezleme'ye yaz (otomatik)")
         self.chk_yaz.setChecked(True)
         self.chk_yaz.toggled.connect(self._otomatik_yaz)
+        self.chk_yaz.setToolTip(
+            "Kapalıyken merkezleme'ye yazılmaz; her ölçüm penceresinde bir sürekli ölçüm alınır."
+        )
         satir.addWidget(self.chk_yaz)
+        self.chk_csv = QCheckBox("CSV'ye kaydet")
+        self.chk_csv.setChecked(True)
+        self.chk_csv.toggled.connect(lambda acik: setattr(self.dongu, "csv_kaydet", acik))
+        self.chk_csv.setToolTip(f"Her oturum ayrı dosya: {self.p.kayit_dizini}")
+        satir.addWidget(self.chk_csv)
         satir.addStretch()
         kok.addLayout(satir)
 
@@ -187,9 +201,13 @@ class MerkezlemePenceresi(QMainWindow):
         self.lbl_sayac = self._deger_etiketi(g, 1, 2, "Yazılan ölçüm")
         self.lbl_faz = self._deger_etiketi(g, 2, 0, "Faz ofseti")
         self.lbl_tepe = self._deger_etiketi(g, 2, 2, "Sinyal tepesi")
+        g.addWidget(QLabel("Kayıt:"), 3, 0)
+        self.lbl_kayit = QLabel("—")
+        self.lbl_kayit.setTextInteractionFlags(Qt.TextSelectableByMouse)
+        g.addWidget(self.lbl_kayit, 3, 1, 1, 3)
         self.lbl_uyari = QLabel()
         self.lbl_uyari.setWordWrap(True)
-        g.addWidget(self.lbl_uyari, 3, 0, 1, 4)
+        g.addWidget(self.lbl_uyari, 4, 0, 1, 4)
         kok.addWidget(kutu)
 
         # Son ölçüm
@@ -205,11 +223,119 @@ class MerkezlemePenceresi(QMainWindow):
         self.lbl_yc = self._deger_etiketi(g, 3, 2, "y_c")
         kok.addWidget(kutu)
 
+        # Sekmeler: çok kutuplar, ham sinyal, günlük
+        self.sekmeler = QTabWidget()
+        self._grafikleri_kur()
         self.gunluk = QPlainTextEdit()
         self.gunluk.setReadOnly(True)
         self.gunluk.setMaximumBlockCount(500)
-        kok.addWidget(self.gunluk, 1)
-        self.resize(760, 620)
+        self.sekmeler.addTab(self.gunluk, "Günlük")
+        kok.addWidget(self.sekmeler, 1)
+        self._cizilen = None
+        self.resize(800, 840)
+
+    def _grafikleri_kur(self) -> None:
+        sayfa = QWidget()
+        dikey = QVBoxLayout(sayfa)
+        ust = QHBoxLayout()
+        self.lbl_cok_kutup = QLabel()
+        self.lbl_cok_kutup.setTextFormat(Qt.RichText)
+        ust.addWidget(self.lbl_cok_kutup, 1)
+        btn = QPushButton("Ortalamayı sıfırla")
+        btn.clicked.connect(self._ortalamayi_sifirla)
+        ust.addWidget(btn)
+        dikey.addLayout(ust)
+        self.grafik_cok = pg.PlotWidget()
+        self.grafik_cok.setMenuEnabled(False)
+        self.grafik_cok.getAxis("bottom").setTicks(
+            [[(n, f"{n}") for n in range(1, HARMONIK_SAYISI + 1)]]
+        )
+        self.grafik_cok.setXRange(0.4, HARMONIK_SAYISI + 0.6, padding=0)
+        sifir = np.zeros(HARMONIK_SAYISI)
+        x = np.arange(1, HARMONIK_SAYISI + 1)
+        self.cubuk_b = pg.BarGraphItem(x=x - _CUBUK_GENISLIGI / 2, height=sifir, width=_CUBUK_GENISLIGI)
+        self.cubuk_a = pg.BarGraphItem(x=x + _CUBUK_GENISLIGI / 2, height=sifir, width=_CUBUK_GENISLIGI)
+        self.hata_b = pg.ErrorBarItem(x=x - _CUBUK_GENISLIGI / 2, y=sifir, top=sifir, bottom=sifir, beam=0.12)
+        self.hata_a = pg.ErrorBarItem(x=x + _CUBUK_GENISLIGI / 2, y=sifir, top=sifir, bottom=sifir, beam=0.12)
+        self.sifir_cizgisi = pg.InfiniteLine(pos=0, angle=0)
+        self.ana_alan_yazisi = pg.TextItem("ana alan", anchor=(0.5, 1.0))
+        self.ana_alan_yazisi.setPos(2, 0)
+        for oge in (self.sifir_cizgisi, self.cubuk_b, self.cubuk_a, self.hata_b, self.hata_a,
+                    self.ana_alan_yazisi):
+            self.grafik_cok.addItem(oge)
+        dikey.addWidget(self.grafik_cok)
+        self.sekmeler.addTab(sayfa, "Çok kutuplar")
+
+        self.grafik_ham = pg.PlotWidget()
+        self.grafik_ham.setMenuEnabled(False)
+        self.grafik_ham.setXRange(0, 360, padding=0.01)
+        self.grafik_ham.getAxis("bottom").setTicks([[(a, f"{a}") for a in range(0, 361, 45)]])
+        self.ham_noktalar = self.grafik_ham.plot([], [], pen=None, symbol="o", symbolSize=2)
+        self.ham_uydurma = self.grafik_ham.plot([], [])
+        self.ham_noktalar.setZValue(1)  # sapmalar uydurma eğrisinin üstünde görünsün
+        self.sekmeler.addTab(self.grafik_ham, "Ham sinyal")
+
+    def _grafik_temasi(self) -> None:
+        t = TEMALAR[self.tema]
+        for grafik in (self.grafik_cok, self.grafik_ham):
+            grafik.setBackground(t["panel"])
+            grafik.showGrid(x=False, y=True, alpha=0.25)
+            for kenar in ("left", "bottom"):
+                eksen = grafik.getAxis(kenar)
+                eksen.setPen(pg.mkPen(t["soluk"]))
+                eksen.setTextPen(pg.mkPen(t["yazi"]))
+        self.grafik_cok.setLabel("left", "birim (10⁻⁴ · |C₂|, r_ref'te)", color=t["yazi"])
+        self.grafik_cok.setLabel("bottom", "n (1 dipol, 2 kuadrupol, 3 sekstupol, ...)", color=t["yazi"])
+        self.grafik_ham.setLabel("left", "Bobin gerilimi (mV)", color=t["yazi"])
+        self.grafik_ham.setLabel("bottom", "Açı (°, faz ofsetli)", color=t["yazi"])
+        self.sifir_cizgisi.setPen(pg.mkPen(t["soluk"], width=1))
+        self.ana_alan_yazisi.setColor(t["soluk"])
+        self.cubuk_b.setOpts(brush=pg.mkBrush(t["vurgu"]), pen=pg.mkPen(None))
+        self.cubuk_a.setOpts(brush=pg.mkBrush(t["uyari"]), pen=pg.mkPen(None))
+        self.hata_b.setData(pen=pg.mkPen(t["yazi"], width=1))
+        self.hata_a.setData(pen=pg.mkPen(t["yazi"], width=1))
+        self.ham_noktalar.setSymbolBrush(pg.mkBrush(t["soluk"]))
+        self.ham_noktalar.setSymbolPen(None)
+        self.ham_uydurma.setPen(pg.mkPen(t["vurgu"], width=1.5))
+
+    def _ortalamayi_sifirla(self) -> None:
+        self.dongu.gecmisi_sifirla()
+        self._grafikleri_ciz()
+
+    def _grafikleri_ciz(self) -> None:
+        d = self.dongu
+        t = TEMALAR[self.tema]
+        n_olcum, b, a, sigma = d.birim_istatistigi()
+        gosterilen = np.arange(1, HARMONIK_SAYISI + 1) != 2  # n=2 ana alan: 10⁴, gösterilmez
+        b, a = np.where(gosterilen, b, 0.0), np.where(gosterilen, a, 0.0)
+        sb, sa = np.where(gosterilen, sigma.real, 0.0), np.where(gosterilen, sigma.imag, 0.0)
+        x = np.arange(1, HARMONIK_SAYISI + 1)
+        self.cubuk_b.setOpts(height=b)
+        self.cubuk_a.setOpts(height=a)
+        self.hata_b.setData(x=x - _CUBUK_GENISLIGI / 2, y=b, top=sb, bottom=sb)
+        self.hata_a.setData(x=x + _CUBUK_GENISLIGI / 2, y=a, top=sa, bottom=sa)
+        sutun = (
+            f"<span style='color:{t['vurgu']}'>■</span> b<sub>n</sub> normal &nbsp; "
+            f"<span style='color:{t['uyari']}'>■</span> a<sub>n</sub> skew"
+        )
+        if n_olcum == 0:
+            self.lbl_cok_kutup.setText(f"Henüz ölçüm yok &nbsp;&nbsp; {sutun}")
+        else:
+            s = d.son_sonuc
+            self.lbl_cok_kutup.setText(
+                f"Son {n_olcum} ölçüm: ortalama ± σ &nbsp;·&nbsp; |C<sub>2</sub>| = "
+                f"{abs(s.c2):.4e} T &nbsp;&nbsp; {sutun}"
+            )
+
+        s = d.son_sonuc
+        if s is None or not len(s.aci_derece):
+            self.ham_noktalar.setData([], [])
+            self.ham_uydurma.setData([], [])
+            return
+        adim = max(1, len(s.aci_derece) // _HAM_NOKTA_SAYISI)
+        self.ham_noktalar.setData(s.aci_derece[::adim], s.gerilim_V[::adim] * 1e3)
+        izgara = np.linspace(0.0, 360.0, 721)
+        self.ham_uydurma.setData(izgara, s.uydurma(izgara) * 1e3)
 
     @staticmethod
     def _deger_etiketi(g: QGridLayout, satir: int, sutun: int, ad: str) -> QLabel:
@@ -224,6 +350,9 @@ class MerkezlemePenceresi(QMainWindow):
     def _temayi_uygula(self, anahtar: str) -> None:
         self.tema = anahtar
         QApplication.instance().setStyleSheet(_stil(TEMALAR[anahtar]))
+        if hasattr(self, "grafik_cok"):
+            self._grafik_temasi()
+            self._grafikleri_ciz()
         self._yenile()
 
     def _renk(self, ad: str) -> str:
@@ -302,8 +431,15 @@ class MerkezlemePenceresi(QMainWindow):
         self.lbl_hiz.setText(f"{d.engine.motor_speed:.2f} Hz" if bagli else "—")
         self.lbl_sayac.setText(str(d.olcum_sayisi))
         self.lbl_faz.setText(f"{d.faz_ofseti_derece:.2f}°")
+        if d.kayit.yol is not None:
+            self.lbl_kayit.setText(f"{d.kayit.yol.name} ({d.kayit.satir_sayisi} satır)")
+        else:
+            self.lbl_kayit.setText("henüz yok" if d.csv_kaydet else "kapalı")
 
         s = d.son_sonuc
+        if s is not self._cizilen:
+            self._cizilen = s
+            self._grafikleri_ciz()
         if s is None:
             return
         oran = s.tepe_V / self.p.tam_olcek_V

@@ -34,7 +34,9 @@ from __future__ import annotations
 
 import json
 import math
-from dataclasses import dataclass
+import csv
+from dataclasses import dataclass, field
+from datetime import datetime
 from pathlib import Path
 
 import numpy as np
@@ -52,7 +54,7 @@ HIZ_INDEKSI = {
 }
 FILTRE_INDEKSI = {"Sinc1": 0, "Sinc2": 1, "Sinc3": 2, "Sinc4": 3, "FIR": 4}
 
-_UYDURMA_MAX_N = 6
+HARMONIK_SAYISI = 6  # uydurulan ve raporlanan en yüksek mertebe
 
 
 class ParametreHatasi(ValueError):
@@ -102,6 +104,7 @@ class Parametreler:
     faz_ofseti_derece: float
     r_ref_m: float
     kilit_dosyasi: Path
+    kayit_dizini: Path
     merkezleme_yapilandirmasi: Path
     tema: str
     kaynak: Path
@@ -148,6 +151,7 @@ def parametreleri_yukle(yol: Path | str | None = None) -> Parametreler:
             faz_ofseti_derece=float(o["faz_ofseti_derece"]),
             r_ref_m=float(o["r_ref_mm"]) * 1e-3,
             kilit_dosyasi=_repo_yolu(o["kilit_dosyasi"]),
+            kayit_dizini=_repo_yolu(o["kayit_dizini"]),
             merkezleme_yapilandirmasi=_repo_yolu(o["merkezleme_yapilandirmasi"]),
             tema=str(v.get("arayuz", {}).get("tema", "koyu")),
             kaynak=yol,
@@ -195,15 +199,39 @@ def tutarlilik_uyarilari(p: Parametreler) -> list[str]:
 # ---------------------------------------------------------------------------
 # Fizik
 # ---------------------------------------------------------------------------
-@dataclass(frozen=True)
+@dataclass(frozen=True, eq=False)
 class OlcumSonucu:
-    c1: complex  # T, merkezleme konvansiyonunda (r_ref'te)
-    c2: complex
+    harmonikler: tuple[complex, ...]  # C_1..C_N (T), merkezleme konvansiyonunda (r_ref'te)
     hiz_hz: float
     tur_sayisi: int
     ornek_sayisi: int
     tepe_V: float
     r_ref_m: float
+    # Çizim için: pencerenin (ofsetli) açısı, sürüklenmesi çıkarılmış gerilim
+    # ve uydurmanın Fourier katsayıları [sabit, a_1, b_1, ..., a_N, b_N]
+    aci_derece: np.ndarray = field(repr=False, default_factory=lambda: np.empty(0))
+    gerilim_V: np.ndarray = field(repr=False, default_factory=lambda: np.empty(0))
+    fourier: np.ndarray = field(repr=False, default_factory=lambda: np.empty(0))
+
+    @property
+    def c1(self) -> complex:
+        return self.harmonikler[0]
+
+    @property
+    def c2(self) -> complex:
+        return self.harmonikler[1]
+
+    def birim(self, n: int) -> complex:
+        """C_n / |C_2| * 1e4 ("units"): b_n + i*a_n, ana alana göre."""
+        return self.harmonikler[n - 1] / abs(self.c2) * 1e4
+
+    def uydurma(self, aci_derece: np.ndarray) -> np.ndarray:
+        """Uydurulan eğri (sürüklenmesiz), verilen açılarda."""
+        teta = np.radians(aci_derece)
+        v = np.full_like(teta, self.fourier[0], dtype=float)
+        for n in range(1, len(self.harmonikler) + 1):
+            v += self.fourier[2 * n - 1] * np.cos(n * teta) + self.fourier[2 * n] * np.sin(n * teta)
+        return v
 
     def dosya_verisi(self) -> dict[str, float]:
         return {"b0": self.c1.real, "a0": self.c1.imag, "b1": self.c2.real, "a1": self.c2.imag}
@@ -238,7 +266,7 @@ def olcum_hesapla(
     r_ref_m: float,
     faz_ofseti_derece: float = 0.0,
 ) -> OlcumSonucu:
-    """Bobin gerilimi ve enkoder açısından C_1, C_2'yi (Tesla) hesaplar."""
+    """Bobin gerilimi ve enkoder açısından C_1..C_6'yı (Tesla) hesaplar."""
     aci = np.asarray(aci_derece, dtype=np.float64)
     v = np.asarray(gerilim_V, dtype=np.float64)
     if len(v) < 100 or len(v) != len(aci):
@@ -255,25 +283,28 @@ def olcum_hesapla(
     # büyük olduğundan pencere sınırındaki tek örneklik kayma bile n=1'e
     # belirgin sızıntı yapar. Uydurmada sızıntı yoktur; sabit ve doğrusal
     # sürüklenme terimleri ile üst harmonikler de modele dahildir.
-    sutunlar = [np.ones_like(teta), np.linspace(-1.0, 1.0, len(teta))]
-    for n in range(1, _UYDURMA_MAX_N + 1):
+    surukleme = np.linspace(-1.0, 1.0, len(teta))
+    sutunlar = [np.ones_like(teta), surukleme]
+    for n in range(1, HARMONIK_SAYISI + 1):
         sutunlar += [np.cos(n * teta), np.sin(n * teta)]
     katsayi, *_ = np.linalg.lstsq(np.column_stack(sutunlar), v, rcond=None)
     omega = 2 * math.pi * abs(hiz_hz)
-    c: dict[int, complex] = {}
-    for n in (1, 2):
+    harmonikler = []
+    for n in range(1, HARMONIK_SAYISI + 1):
         a_n, b_n = katsayi[2 * n], katsayi[2 * n + 1]
         v_n = complex(a_n, -b_n)
         k_n = bobin.duyarlilik(n, r_ref_m)
-        c[n] = 1j * v_n / (n * omega * bobin.sarim_sayisi * bobin.uzunluk_m * k_n)
+        harmonikler.append(1j * v_n / (n * omega * bobin.sarim_sayisi * bobin.uzunluk_m * k_n))
     return OlcumSonucu(
-        c1=c[1],
-        c2=c[2],
+        harmonikler=tuple(harmonikler),
         hiz_hz=hiz_hz,
         tur_sayisi=tur,
         ornek_sayisi=len(v),
         tepe_V=float(np.max(np.abs(v))),
         r_ref_m=r_ref_m,
+        aci_derece=np.degrees(teta) % 360.0,
+        gerilim_V=v - katsayi[1] * surukleme,
+        fourier=np.delete(katsayi, 1),
     )
 
 
@@ -292,6 +323,38 @@ def kilide_yaz(sonuc: OlcumSonucu, kilit_yolu: Path) -> None:
     gecici = kilit_yolu.with_suffix(".tmp")
     gecici.write_text(json.dumps(sonuc.dosya_verisi()), encoding="utf-8")
     gecici.replace(kilit_yolu)
+
+
+class OlcumKaydi:
+    """Oturum başına bir CSV; dosya ilk satırda oluşturulur. Her satır bir
+    ölçüm: koşullar ve C_1..C_N'nin normal/skew bileşenleri (Tesla)."""
+
+    def __init__(self, dizin: Path) -> None:
+        self.dizin = Path(dizin)
+        self.yol: Path | None = None
+        self.satir_sayisi = 0
+
+    def ekle(self, sonuc: OlcumSonucu, tur: str, kanal: str, faz_ofseti_derece: float) -> None:
+        yeni = self.yol is None
+        if yeni:
+            self.dizin.mkdir(parents=True, exist_ok=True)
+            self.yol = self.dizin / f"olcum_{datetime.now():%Y-%m-%d_%H%M%S}.csv"
+        with open(self.yol, "a", newline="", encoding="utf-8") as f:
+            yazici = csv.writer(f)
+            if yeni:
+                yazici.writerow(
+                    ["zaman", "tur", "kanal", "hiz_hz", "tur_sayisi", "tepe_mV", "faz_ofseti_derece",
+                     "G_T_m", "x_c_um", "y_c_um"]
+                    + [f"{ad}{n}_T" for n in range(1, len(sonuc.harmonikler) + 1) for ad in ("b", "a")]
+                )
+            z = sonuc.merkez_m * 1e6
+            yazici.writerow(
+                [datetime.now().isoformat(timespec="seconds"), tur, kanal, f"{sonuc.hiz_hz:.4f}",
+                 sonuc.tur_sayisi, f"{sonuc.tepe_V * 1e3:.4f}", f"{faz_ofseti_derece:.3f}",
+                 f"{sonuc.gradyen_T_m:.6g}", f"{z.real:.3f}", f"{z.imag:.3f}"]
+                + [f"{x:.6e}" for c in sonuc.harmonikler for x in (c.real, c.imag)]
+            )
+        self.satir_sayisi += 1
 
 
 def kuadrupol_olcumu_yaz(engine, p: Parametreler) -> OlcumSonucu:

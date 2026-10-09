@@ -45,6 +45,7 @@ olcum:
   faz_ofseti_derece: 0.0       # enkoder açısından çıkarılır; "Referans" düğmesiyle ayarlanır
   r_ref_mm: 25.0               # merkezleme yapilandirma.yaml -> harmonikler.r_ref_mm ile AYNI olmalı
   kilit_dosyasi: veri_kilidi/.kilit
+  kayit_dizini: donen_bobin_surum_24_eylul_2026/olcumler   # her oturum ayrı CSV
   merkezleme_yapilandirmasi: yapilandirma.yaml   # açılışta r_ref/birim tutarlılık kontrolü
 
 arayuz:

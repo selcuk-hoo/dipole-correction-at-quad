@@ -19,16 +19,20 @@ SPS = 7200.0
 @pytest.fixture
 def p(tmp_path) -> mk.Parametreler:
     return dataclasses.replace(
-        mk.parametreleri_yukle(), kilit_dosyasi=tmp_path / "veri_kilidi" / ".kilit"
+        mk.parametreleri_yukle(),
+        kilit_dosyasi=tmp_path / "veri_kilidi" / ".kilit",
+        kayit_dizini=tmp_path / "olcumler",
     )
 
 
-def bobin_gerilimi(teta, hiz_hz, c1, c2, bobin, r_ref):
-    """İleri model: V = -omega * dPhi/dtheta (merkezleme_koprusu docstring'i)."""
+def bobin_gerilimi(teta, hiz_hz, c1, c2, bobin, r_ref, ust=None):
+    """İleri model: V = -omega * dPhi/dtheta (merkezleme_koprusu docstring'i).
+    `ust`: n >= 3 harmonikleri {n: C_n}."""
     w = 2 * math.pi * hiz_hz
+    harmonikler = {1: c1, 2: c2, **(ust or {})}
     toplam = sum(
         1j * n * c * bobin.duyarlilik(n, r_ref) * np.exp(1j * n * teta)
-        for n, c in ((1, c1), (2, c2))
+        for n, c in harmonikler.items()
     )
     return -w * bobin.sarim_sayisi * bobin.uzunluk_m * np.real(toplam)
 
@@ -79,6 +83,23 @@ def test_dipol_buyuk_arayuzun_formuluyle_ayni(p):
 
     assert s.c1.real == pytest.approx(by, rel=1e-3)
     assert s.c1.imag == pytest.approx(bx, rel=1e-3)
+
+
+def test_ust_harmonikler_ve_birimler(p):
+    c1, c2 = complex(3e-6, 1e-6), complex(2.4e-3, 1e-5)
+    ust = {3: complex(2e-6, -1e-6), 4: complex(-1.5e-6, 4e-7), 5: complex(6e-7, 0), 6: complex(0, -8e-7)}
+    t = np.arange(int(2.0 * SPS)) / SPS
+    teta = 2 * math.pi * 23.0 * t + 1.1
+    v = bobin_gerilimi(teta, 23.0, c1, c2, p.bobin, p.r_ref_m, ust) + 5e-4 + 3e-4 * t
+    s = mk.olcum_hesapla(np.degrees(teta) % 360, v, 23.0, p.bobin, p.r_ref_m)
+
+    assert len(s.harmonikler) == mk.HARMONIK_SAYISI == 6
+    for n, c in ust.items():
+        assert s.harmonikler[n - 1] == pytest.approx(c, rel=1e-5), n
+    assert s.birim(3) == pytest.approx(ust[3] / abs(c2) * 1e4, rel=1e-5)
+    assert abs(s.birim(2)) == pytest.approx(1e4)
+    # Uydurma eğrisi, sürüklenmesi çıkarılmış ham veriyi birebir izlemeli
+    assert np.max(np.abs(s.uydurma(s.aci_derece) - s.gerilim_V)) < 1e-9
 
 
 @pytest.mark.parametrize("yon", [1, -1])
@@ -135,6 +156,9 @@ class SahteDunya:
         self.p = p
         self.t = 0.0
         self.c1, self.c2 = complex(2e-6, -1e-6), complex(1.9e-3, 2e-5)
+        self.ust: dict[int, complex] = {}  # n >= 3
+        self.gurultu_V = 0.0
+        self.rng = np.random.default_rng(3)
         self.servo = False
         self.hedef = 0.0
         self.hiz = 0.0
@@ -160,9 +184,11 @@ class SahteDunya:
         w = 2 * math.pi * hizlar
         toplam = sum(
             1j * k * c * self.p.bobin.duyarlilik(k, self.p.r_ref_m) * np.exp(1j * k * tetalar)
-            for k, c in ((1, self.c1), (2, self.c2))
+            for k, c in {1: self.c1, 2: self.c2, **self.ust}.items()
         )
         v = -w * self.p.bobin.sarim_sayisi * self.p.bobin.uzunluk_m * np.real(toplam)
+        if self.gurultu_V:
+            v = v + self.rng.normal(0.0, self.gurultu_V, n)
         self.hiz, self.teta = float(hizlar[-1]), float(tetalar[-1])
         self.aci.extend((np.degrees(tetalar) % 360).tolist())
         self.gerilim.extend(v.tolist())
@@ -294,6 +320,44 @@ def test_otomatik_yazma_kapaliyken_dosyaya_dokunulmaz(kurulum, p):
     assert dongu.son_sonuc is not None and not p.kilit_dosyasi.exists()
 
 
+def test_surekli_olcum_csv_ve_istatistik(kurulum, p):
+    import csv
+
+    dunya, dongu, _ = kurulum
+    dunya.ust = {3: complex(2e-6, -1e-6)}
+    dunya.gurultu_V = 2e-6
+    dongu.otomatik_yaz = False
+    dongu.baglan()
+    dongu.baslat()
+    calistir(dunya, dongu, 4.5)  # hızlanma (~1.2 s) + oturma (3 s)
+    assert dongu.durum is Durum.DONUYOR
+    calistir(dunya, dongu, 10.1)
+    n_olcum, b, a, sigma = dongu.birim_istatistigi()
+    assert n_olcum == 5  # 2 s'lik örtüşmeyen pencereler
+    assert b[2] == pytest.approx(2e-6 / abs(dunya.c2) * 1e4, rel=0.05)
+    assert a[2] == pytest.approx(-1e-6 / abs(dunya.c2) * 1e4, rel=0.05)
+    assert 0 < sigma[2].real < 0.1 * abs(b[2])  # gürültü var ama küçük
+    assert not p.kilit_dosyasi.exists()
+
+    satirlar = list(csv.reader(dongu.kayit.yol.open(encoding="utf-8")))
+    assert satirlar[0][:3] == ["zaman", "tur", "kanal"] and satirlar[0][-1] == "a6_T"
+    assert len(satirlar) == 1 + 5 and {s[1] for s in satirlar[1:]} == {"surekli"}
+    assert dongu.kayit.yol.parent == p.kayit_dizini
+
+    dongu.kanal_sec("Düz bobin 2 (AIN4-AIN5)")
+    assert dongu.birim_istatistigi()[0] == 0  # kanal değişince ortalama sıfırlanır
+
+
+def test_csv_kapaliyken_dosya_yazilmaz(kurulum, p):
+    dunya, dongu, _ = kurulum
+    dongu.csv_kaydet = False
+    dongu.baglan()
+    dongu.baslat()
+    calistir(dunya, dongu, 9.0)
+    assert dongu.olcum_sayisi >= 1 and dongu.kayit.yol is None
+    assert not p.kayit_dizini.exists()
+
+
 def test_referans_dugmesi_faz_ofsetini_ayarlar(kurulum):
     dunya, dongu, _ = kurulum
     dunya.c1, dunya.c2 = 3e-4 * np.exp(1j * math.radians(-120.0)), 0j
@@ -383,6 +447,7 @@ def test_pencere_duman(kurulum, p, monkeypatch):
 
     uygulama = QApplication.instance() or QApplication([])
     dunya, _, _ = kurulum
+    dunya.ust = {3: complex(2e-6, -1e-6)}
     p = dataclasses.replace(p, durma_zaman_asimi_s=0.3)
     pencere = MerkezlemePenceresi(p, SahteBaglanti(dunya), SahteMotor(dunya))
     pencere.dongu.saat = lambda: dunya.t
@@ -397,6 +462,17 @@ def test_pencere_duman(kurulum, p, monkeypatch):
         pencere._tick()
     assert pencere.dongu.olcum_sayisi >= 1
     assert pencere.lbl_b1.text().endswith(" T")
+    # Grafikler doldu: n=3 çubuğu sıfır değil, n=2 (ana alan) gösterilmiyor
+    yukseklik = pencere.cubuk_b.opts["height"]
+    assert yukseklik[2] > 1 and yukseklik[1] == 0
+    x, y = pencere.ham_noktalar.getData()
+    assert len(x) > 1000 and len(pencere.ham_uydurma.getData()[0]) == 721
+    assert "satır" in pencere.lbl_kayit.text()
+    pencere.chk_yaz.setChecked(False)
+    for _ in range(100):
+        dunya.ilerle(0.05)
+        pencere._tick()
+    assert pencere.dongu.durum is Durum.DONUYOR
     # Kapanışta gerçek saatle beklenir; sahte motor yavaşlamasa da zaman
     # aşımından sonra servo kapatılmalı.
     import time as _time

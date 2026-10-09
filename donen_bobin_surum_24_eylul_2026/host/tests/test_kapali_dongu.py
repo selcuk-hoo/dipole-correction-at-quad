@@ -35,7 +35,10 @@ def test_kapali_dongu_merkezi_sifirlar(tmp_path):
             kfg.dosya_girisi, kilit_dosyasi=str(kilit), zaman_asimi_s=20.0, yoklama_araligi_s=0.002
         ),
     )
-    p = dataclasses.replace(mk.parametreleri_yukle(), kilit_dosyasi=kilit, oturma_suresi_s=0.5)
+    p = dataclasses.replace(
+        mk.parametreleri_yukle(), kilit_dosyasi=kilit, kayit_dizini=tmp_path / "olcumler",
+        oturma_suresi_s=0.5,
+    )
 
     sim = Simulator(kfg.simulator, kfg.miknatis, kfg.harmonikler)
     sim.ofset_m = complex(180e-6, -110e-6)

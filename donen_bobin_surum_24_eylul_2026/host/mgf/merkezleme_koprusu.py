@@ -221,10 +221,6 @@ class OlcumSonucu:
     def c2(self) -> complex:
         return self.harmonikler[1]
 
-    def birim(self, n: int) -> complex:
-        """C_n / |C_2| * 1e4 ("units"): b_n + i*a_n, ana alana göre."""
-        return self.harmonikler[n - 1] / abs(self.c2) * 1e4
-
     def uydurma(self, aci_derece: np.ndarray) -> np.ndarray:
         """Uydurulan eğri (sürüklenmesiz), verilen açılarda."""
         teta = np.radians(aci_derece)

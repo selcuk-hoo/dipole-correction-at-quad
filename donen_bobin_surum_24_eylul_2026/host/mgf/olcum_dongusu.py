@@ -107,7 +107,7 @@ class OlcumDongusu:
 
     def genlik_istatistigi(self) -> tuple[int, np.ndarray, np.ndarray]:
         """Geçmişteki ölçümlerden (N, genlik, σ), n = 1..HARMONIK_SAYISI için,
-        ana alana göre birim (1e-4 |C_2|).
+        Tesla cinsinden (r_ref'te).
 
         Genlik, karmaşık değerlerin ortalamasının mutlak değeridir: harmoniğin
         fazı kararlı olduğundan gürültü √N ile azalır (genliklerin ortalaması
@@ -116,9 +116,9 @@ class OlcumDongusu:
         bos = np.zeros(HARMONIK_SAYISI)
         if not self.gecmis:
             return 0, bos, bos
-        b = np.array([[s.birim(n) for n in range(1, HARMONIK_SAYISI + 1)] for s in self.gecmis])
-        sigma = np.hypot(b.real.std(axis=0), b.imag.std(axis=0)) if len(b) > 1 else bos
-        return len(b), np.abs(b.mean(axis=0)), sigma
+        c = np.array([s.harmonikler for s in self.gecmis])
+        sigma = np.hypot(c.real.std(axis=0), c.imag.std(axis=0)) if len(c) > 1 else bos
+        return len(c), np.abs(c.mean(axis=0)), sigma
 
     def gecmisi_sifirla(self) -> None:
         self.gecmis.clear()

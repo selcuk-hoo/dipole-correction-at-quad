@@ -35,6 +35,12 @@ from .merkezleme_koprusu import HARMONIK_SAYISI, Parametreler, tutarlilik_uyaril
 from .olcum_dongusu import Durum, OlcumDongusu
 
 _CUBUK_GENISLIGI = 0.6
+# Çok kutup grafiğinin dikey ekseni: (seçenek adı, genliği 1 yapılan mertebe, eksen etiketi)
+OLCEKLER = {
+    "gercek": ("Gerçek alan (T)", None, "|C_n| (T, r_ref'te)"),
+    "n1": ("n = 1'e göre", 1, "|C_n| / |C₁|"),
+    "n2": ("n = 2'ye göre", 2, "|C_n| / |C₂|"),
+}
 _HAM_NOKTA_SAYISI = 4000  # ham sinyal grafiğinde gösterilen en fazla örnek
 
 TEMALAR = {
@@ -241,6 +247,15 @@ class MerkezlemePenceresi(QMainWindow):
         self.lbl_cok_kutup = QLabel()
         self.lbl_cok_kutup.setTextFormat(Qt.RichText)
         ust.addWidget(self.lbl_cok_kutup, 1)
+        ust.addWidget(QLabel("Ölçek:"))
+        self.olcek = "gercek"
+        self.cb_olcek = QComboBox()
+        for anahtar, (ad, _, _) in OLCEKLER.items():
+            self.cb_olcek.addItem(ad, anahtar)
+        self.cb_olcek.currentIndexChanged.connect(
+            lambda i: self._olcek_sec(self.cb_olcek.itemData(i))
+        )
+        ust.addWidget(self.cb_olcek)
         btn = QPushButton("Ortalamayı sıfırla")
         btn.clicked.connect(self._ortalamayi_sifirla)
         ust.addWidget(btn)
@@ -251,6 +266,7 @@ class MerkezlemePenceresi(QMainWindow):
         # Log eksen: BarGraphItem/ErrorBarItem log kipini kendileri uygulamadığı
         # için bunlara log10 değerler verilir; eksen yalnızca 10^k etiketler.
         self.grafik_cok.setLogMode(x=False, y=True)
+        self.grafik_cok.getAxis("left").enableAutoSIPrefix(False)  # "(x0.001)" çarpanı log'da yanıltıcı
         self.grafik_cok.getAxis("bottom").setTicks(
             [[(n, f"{n}") for n in range(1, HARMONIK_SAYISI + 1)]]
         )
@@ -283,7 +299,7 @@ class MerkezlemePenceresi(QMainWindow):
                 eksen = grafik.getAxis(kenar)
                 eksen.setPen(pg.mkPen(t["soluk"]))
                 eksen.setTextPen(pg.mkPen(t["yazi"]))
-        self.grafik_cok.setLabel("left", "|C_n| (birim: 10⁻⁴ · |C₂|, r_ref'te)", color=t["yazi"])
+        self.grafik_cok.setLabel("left", OLCEKLER[self.olcek][2], color=t["yazi"])
         self.grafik_cok.setLabel("bottom", "n (1 dipol, 2 kuadrupol, 3 sekstupol, ...)", color=t["yazi"])
         self.grafik_ham.setLabel("left", "Bobin gerilimi (mV)", color=t["yazi"])
         self.grafik_ham.setLabel("bottom", "Açı (°, faz ofsetli)", color=t["yazi"])
@@ -299,35 +315,55 @@ class MerkezlemePenceresi(QMainWindow):
         self.dongu.gecmisi_sifirla()
         self._grafikleri_ciz()
 
+    def _olcek_sec(self, anahtar: str) -> None:
+        self.olcek = anahtar
+        self.grafik_cok.setLabel("left", OLCEKLER[anahtar][2], color=self._renk("yazi"))
+        self._grafikleri_ciz()
+
+    def _cok_kutup_temizle(self, metin: str) -> None:
+        sifir = np.zeros(HARMONIK_SAYISI)
+        self.lbl_cok_kutup.setText(metin)
+        self.cubuk.setOpts(y0=sifir, y1=sifir)
+        self.hata.setData(x=np.arange(1, HARMONIK_SAYISI + 1), y=sifir, top=sifir, bottom=sifir)
+        for yazi in self.deger_yazilari:
+            yazi.setText("")
+
     def _grafikleri_ciz(self) -> None:
         d = self.dongu
-        n_olcum, genlik, sigma = d.genlik_istatistigi()
+        n_olcum, genlik, sigma = d.genlik_istatistigi()  # Tesla
         x = np.arange(1, HARMONIK_SAYISI + 1)
+        referans = OLCEKLER[self.olcek][1]
         if n_olcum == 0:
-            self.lbl_cok_kutup.setText("Henüz ölçüm yok")
-            self.cubuk.setOpts(y0=np.zeros_like(genlik), y1=np.zeros_like(genlik))
-            self.hata.setData(x=x, y=np.zeros_like(genlik), top=np.zeros_like(genlik),
-                              bottom=np.zeros_like(genlik))
-            for yazi in self.deger_yazilari:
-                yazi.setText("")
+            self._cok_kutup_temizle("Henüz ölçüm yok")
+        elif referans is not None and genlik[referans - 1] <= 0:
+            self._cok_kutup_temizle(f"n = {referans} genliği sıfır; bu ölçek kullanılamıyor")
         else:
-            # Taban: en küçük genliğin bir alt onluğu (1e-4..1 birim arası)
+            baslik = (
+                f"Son {n_olcum} ölçüm: |ortalama C<sub>n</sub>| ± σ (tek ölçüm saçılımı)"
+                f" &nbsp;·&nbsp; |C<sub>1</sub>| = {genlik[0]:.3e} T, |C<sub>2</sub>| = {genlik[1]:.3e} T"
+            )
+            if referans is not None:
+                genlik, sigma = genlik / genlik[referans - 1], sigma / genlik[referans - 1]
+            # Taban: en küçük genliğin onluğu; en fazla 9 onluk aralık gösterilir
+            en_buyuk = float((genlik + sigma).max())
             pozitif = genlik[genlik > 0]
-            taban = 10.0 ** np.clip(np.floor(np.log10(pozitif.min())) if len(pozitif) else -2, -4, 0)
+            taban_us = np.floor(np.log10(pozitif.min())) if len(pozitif) else np.log10(en_buyuk) - 3
+            taban_us = max(taban_us, np.floor(np.log10(en_buyuk)) - 9)
+            taban = 10.0 ** taban_us
             ust = np.log10(np.maximum(genlik, taban))
             alt = np.log10(np.maximum(genlik - sigma, taban))
             tepe = np.log10(np.maximum(genlik + sigma, taban))
-            self.cubuk.setOpts(y0=np.full_like(ust, np.log10(taban)), y1=ust)
+            self.cubuk.setOpts(y0=np.full_like(ust, taban_us), y1=ust)
             self.hata.setData(x=x, y=ust, top=tepe - ust, bottom=ust - alt)
             for n, yazi in enumerate(self.deger_yazilari, start=1):
                 g = genlik[n - 1]
-                yazi.setText(f"{g:.0f}" if g >= 100 else f"{g:.3g}")
+                if referans is None:
+                    yazi.setText(f"{g:.2e}")
+                else:
+                    yazi.setText(f"{g:.0f}" if g >= 100 else f"{g:.3g}")
                 yazi.setPos(n, tepe[n - 1])
-            self.grafik_cok.setYRange(np.log10(taban), np.log10(4e4), padding=0)
-            self.lbl_cok_kutup.setText(
-                f"Son {n_olcum} ölçüm: |ortalama C<sub>n</sub>| ± σ (tek ölçüm saçılımı)"
-                f" &nbsp;·&nbsp; |C<sub>2</sub>| = {abs(d.son_sonuc.c2):.4e} T"
-            )
+            self.grafik_cok.setYRange(taban_us, np.log10(en_buyuk) + 0.6, padding=0)
+            self.lbl_cok_kutup.setText(baslik)
 
         s = d.son_sonuc
         if s is None or not len(s.aci_derece):

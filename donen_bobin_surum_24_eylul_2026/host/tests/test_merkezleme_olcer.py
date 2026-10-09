@@ -96,8 +96,6 @@ def test_ust_harmonikler_ve_birimler(p):
     assert len(s.harmonikler) == mk.HARMONIK_SAYISI == 6
     for n, c in ust.items():
         assert s.harmonikler[n - 1] == pytest.approx(c, rel=1e-5), n
-    assert s.birim(3) == pytest.approx(ust[3] / abs(c2) * 1e4, rel=1e-5)
-    assert abs(s.birim(2)) == pytest.approx(1e4)
     # Uydurma eğrisi, sürüklenmesi çıkarılmış ham veriyi birebir izlemeli
     assert np.max(np.abs(s.uydurma(s.aci_derece) - s.gerilim_V)) < 1e-9
 
@@ -332,10 +330,10 @@ def test_surekli_olcum_csv_ve_istatistik(kurulum, p):
     calistir(dunya, dongu, 4.5)  # hızlanma (~1.2 s) + oturma (3 s)
     assert dongu.durum is Durum.DONUYOR
     calistir(dunya, dongu, 10.1)
-    n_olcum, genlik, sigma = dongu.genlik_istatistigi()
+    n_olcum, genlik, sigma = dongu.genlik_istatistigi()  # Tesla
     assert n_olcum == 5  # 2 s'lik örtüşmeyen pencereler
-    assert genlik[1] == pytest.approx(1e4)  # ana alan
-    assert genlik[2] == pytest.approx(abs(complex(2e-6, -1e-6)) / abs(dunya.c2) * 1e4, rel=0.05)
+    assert genlik[1] == pytest.approx(abs(dunya.c2), rel=1e-4)
+    assert genlik[2] == pytest.approx(abs(complex(2e-6, -1e-6)), rel=0.05)
     assert 0 < sigma[2] < 0.1 * genlik[2]  # gürültü var ama küçük
     assert genlik[4] < 0.1 * genlik[2]  # alan yok: yalnızca gürültü tabanı
     assert not p.kilit_dosyasi.exists()
@@ -463,10 +461,23 @@ def test_pencere_duman(kurulum, p, monkeypatch):
         pencere._tick()
     assert pencere.dongu.olcum_sayisi >= 1
     assert pencere.lbl_b1.text().endswith(" T")
-    # Grafikler doldu (log10 değerler): n=2 ana alan 10⁴, n=3 ~ 10 birim
+    # Grafikler doldu (log10 değerler). Üç ölçek: gerçek alan, n=1'e, n=2'ye göre
+    from mgf.merkezleme_penceresi import OLCEKLER
+
+    assert pencere.cb_olcek.count() == len(OLCEKLER) == 3
+    assert pencere.olcek == "gercek"
     ust = pencere.cubuk.opts["y1"]
-    assert ust[1] == pytest.approx(4.0) and 0.5 < ust[2] < 2.0
-    assert pencere.deger_yazilari[1].textItem.toPlainText() == "10000"
+    assert ust[1] == pytest.approx(np.log10(abs(dunya.c2)), abs=1e-3)
+    assert ust[2] == pytest.approx(np.log10(abs(dunya.ust[3])), abs=0.05)
+    pencere.cb_olcek.setCurrentIndex(list(OLCEKLER).index("n2"))
+    ust = pencere.cubuk.opts["y1"]
+    assert ust[1] == pytest.approx(0.0, abs=1e-9)
+    assert pencere.deger_yazilari[1].textItem.toPlainText() == "1"
+    assert pencere.grafik_cok.getAxis("left").labelText == "|C_n| / |C₂|"
+    pencere.cb_olcek.setCurrentIndex(list(OLCEKLER).index("n1"))
+    ust = pencere.cubuk.opts["y1"]
+    assert ust[0] == pytest.approx(0.0, abs=1e-9)
+    assert ust[1] == pytest.approx(np.log10(abs(dunya.c2) / abs(dunya.c1)), abs=0.01)
     x, y = pencere.ham_noktalar.getData()
     assert len(x) > 1000 and len(pencere.ham_uydurma.getData()[0]) == 721
     assert "satır" in pencere.lbl_kayit.text()

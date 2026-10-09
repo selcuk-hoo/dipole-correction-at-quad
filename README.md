@@ -7,9 +7,11 @@ yazılım. Mıknatıs mekanik olarak hareket ettirilmez; gradyen nominal değeri
 tutulur.
 
 Donanım: dört bobin, her biri ayrı bir **ITECH IT-M3233** DC güç kaynağıyla
-(sabit akım kipi, nominal 10 A) beslenir. Alan, ayrı bir bilgisayarda çalışan
+(sabit akım kipi, nominal 9.5 A) beslenir. Alan, ayrı bir bilgisayarda çalışan
 rotating coil yazılımıyla ölçülür; sonuçlar bu programın arayüzüne **elle**
-girilir. Polarite her enjeksiyondan önce ayrı röle donanımıyla değiştirilir;
+girilebilir, ya da aynı bilgisayarda çalışan dönen bobin programı bir kilit
+dosyası üzerinden otomatik besleyebilir (`--dosyadan`, bkz. §4 ve
+`donen_bobin_surum_24_eylul_2026/README_SURUM.md`). Polarite her enjeksiyondan önce ayrı röle donanımıyla değiştirilir;
 mıknatıs ayrıca ayrı bir modülatör kartıyla 1 kHz'de %1 derinlikle modüle edilir
 (program bu ikisini kontrol etmez, yalnızca durumu kaydeder ve gerektiğinde
 kullanıcıdan değiştirmesini ister).
@@ -121,8 +123,9 @@ ile birlikte). Nedeni [Bölüm 10](#10-bırakılan-yaklaşım-ve-nedenleri)'da.
 
 ### 1.6 Giriş biçimleri ve birimler
 
-Rotating coil ayrı bir bilgisayarda çalıştığı için değerler elle girilir. İki
-biçim de desteklenir, arayüzden anında geçiş yapılabilir:
+Rotating coil ayrı bir bilgisayarda çalıştığı için değerler elle girilir (ya da
+`--dosyadan` ile dosyadan otomatik doldurulur, bkz. §4). İki biçim de
+desteklenir, arayüzden anında geçiş yapılabilir:
 
 | Biçim | Alanlar | Dönüşüm |
 |---|---|---|
@@ -252,7 +255,7 @@ R_eff = a·√2 / (4·cos α)
 | `δI/I` (d = 100 µm) | **%0.245** | `d / R_eff` |
 | 1 µT arka plan @ 0.2 T/m | **5.0 µm** | `ΔC_1 / G` |
 | Tek adımda düzeltilebilir ofset | **≈ 577 µm** | `R_eff · sınır / √2` (sınır %2) |
-| Nominal gradyen (72 sarım, 10 A) | **0.0998 T/m** | simülatör |
+| Nominal gradyen (72 sarım, 9.5 A) | **0.0948 T/m** | simülatör |
 
 ---
 
@@ -525,12 +528,13 @@ sayısı hataları; mıknatıs ofseti `(dx, dy)` ve roll; yavaş değişebilen u
 arka plan; her harmoniğe ölçüm gürültüsü ve sürüklenme. Çıktısı, elle girişle
 **aynı biçimdedir**.
 
-Gürültü ölçeği sabittir (nominal `|C_2|`); anlık `|C_2|` kullanılmaz, çünkü arka
-plan ölçümünde akımlar sıfır olduğundan anlık değer sıfıra gider ve ölçek
-anlamsızlaşır.
+Gürültü ölçeği sabittir (nominal akımda geometri modelinden hesaplanan `|C_2|`;
+`nominal_gradyen_T_m` yapılandırma değerine bağımlı değildir); anlık `|C_2|`
+kullanılmaz, çünkü arka plan ölçümünde akımlar sıfır olduğundan anlık değer
+sıfıra gider ve ölçek anlamsızlaşır.
 
 ```bash
-python -m pytest tests/ -q                 # 162 test, ~2 s
+python -m pytest tests/ -q                 # 169 test, ~3 s
 QT_QPA_PLATFORM=offscreen python -m pytest tests/ -q   # arayüz testleri dahil
 ```
 

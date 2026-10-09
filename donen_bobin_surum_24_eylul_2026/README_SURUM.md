@@ -58,6 +58,10 @@ Hangi sistematik hatanın nasıl ve ne kadar düzeltildiği: [`SISTEMATIK_HATALA
 6. **Referans:** referans sonrası referans mıknatıs b0 > 0, a0 ≈ 0 vermeli; bobin 1 ve bobin 2 (dik) aynı C_n'leri vermeli.
 7. **Sağlık ölçütleri:** sağlıklı ölçümlerde pencerede görünen "Artık / saat sıçr." ne düzeyde? Eşikler (5e-3 ve 0.6) gerçek gürültüye göre ayarlanabilir. Reddedilen ölçüm sık geliyorsa günlükte RS485 uyarısı olup olmadığına bakın.
 
+**Bağlantı kopması:** firmware TCP bağlantısı kopunca motoru durdurmaz; motor son hızında dönmeye devam eder. Program yeniden bağlanınca normal durdurmadaki gibi önce hızı sıfırlar, motor durunca (ya da zaman aşımında) servoyu kapatır. Firmware'e bağlantı kopunca motoru rampalı durduran bir bekçi eklenmesi önerilir.
+
+**Gecikme ve referans güvenilirliği:** fazın artıktan tahmin edilen belirsizliği büyükse (gecikmede ±2 µs, referansta ±0,05° üstü; mıknatıs yok, yanlış kanal ya da sinyal çok zayıf) ölçülen değer uygulanmaz, günlüğe nedeni yazılır.
+
 **Bilinen sınırlama (firmware):** örneklerde sıra numarası yok; stator ADC sağlama toplamı tutmayan örnekleri sessizce atıyor (yalnızca durum paketindeki sayaç artıyor) ve PC tarafında kuyruk dolarsa paket düşüyor. Akı integrali kayıpsız örnek varsayar; tek kayıp merkezde birkaç µm hata yapabilir. Okuma saati sıçraması bunu yakalar ve ölçüm reddedilir (onarılmaz). Kesin çözüm firmware'de örnek sayacı (ve tercihen enkoder okumasının zaman damgası).
 
 ### Testler

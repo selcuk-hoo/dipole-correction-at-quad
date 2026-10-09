@@ -155,6 +155,7 @@ def test_cift_yon_gecikmeyi_olcer(model, dipol):
     )
     assert s.cift_yon
     assert s.gecikme_s == pytest.approx(NET_GECIKME_S, abs=3e-6)
+    assert s.gecikme_belirsizligi_s < 1e-7  # güçlü sinyal: belirsizlik µs'nin çok altında
 
 
 def test_cift_yon_birlesik_olcum_dogru(model):

@@ -248,12 +248,24 @@ class OlcumSonucu:
     # ADC örnek sayısındaki kalıcı kayma. Kaybolan her örnek ~1 ekler;
     # sağlıklı veride ~0.2. Merdiven yoksa ölçülemez (nan).
     saat_sicramasi: float = math.nan
+    artik_rms_Vs: float = 0.0  # akı uydurmasının artığının rms'i (faz belirsizliği için)
+    # Çift yönde: ölçülen gecikmenin belirsizliği (1σ, artıktan tahmin)
+    gecikme_belirsizligi_s: float = math.nan
     # Çizim için: pencerenin (ofsetli) açısı, sürüklenmesi çıkarılmış akı
     # ve uydurmanın Fourier katsayıları [sabit, a_1, b_1, ..., a_M, b_M]
     # (M = UYDURMA_HARMONIK_SAYISI >= raporlanan harmonik sayısı)
     aci_derece: np.ndarray = field(repr=False, default_factory=lambda: np.empty(0))
     aki_Vs: np.ndarray = field(repr=False, default_factory=lambda: np.empty(0))
     fourier: np.ndarray = field(repr=False, default_factory=lambda: np.empty(0))
+
+    def faz_belirsizligi(self, n: int) -> float:
+        """n. harmoniğin fazının belirsizliği (radyan, 1σ). Artık beyaz gürültü
+        sayılarak en küçük karelerden tahmin edilir: σ_φ ≈ √(2/N)·σ_artık/|Φ_n|.
+        Sinyal yoksa ya da çok zayıfsa büyüktür (π'ye kadar)."""
+        genlik = math.hypot(self.fourier[2 * n - 1], self.fourier[2 * n])
+        if genlik == 0 or self.ornek_sayisi == 0:
+            return math.pi
+        return min(math.pi, math.sqrt(2.0 / self.ornek_sayisi) * self.artik_rms_Vs / genlik)
 
     @property
     def c1(self) -> complex:
@@ -456,6 +468,7 @@ def olcum_hesapla(
         hiz_hz=hiz_hz,
         tur_sayisi=tur,
         ornek_sayisi=len(v),
+        artik_rms_Vs=math.sqrt(artik_kare / len(teta)),
         tepe_V=float(np.max(np.abs(v))),
         r_ref_m=r_ref_m,
         artik_orani=artik_orani,
@@ -492,6 +505,7 @@ def cift_yon_birlestir(ileri: OlcumSonucu, geri: OlcumSonucu) -> OlcumSonucu:
         key=lambda n: n * min(aki_genligi(ileri, n), aki_genligi(geri, n)),
     )
     psi = float(np.angle(geri.harmonikler[n_faz - 1] / ileri.harmonikler[n_faz - 1])) / (2 * n_faz)
+    sigma_psi = math.hypot(ileri.faz_belirsizligi(n_faz), geri.faz_belirsizligi(n_faz)) / (2 * n_faz)
     harmonikler = tuple(
         0.5 * (a * np.exp(1j * n * psi) + b * np.exp(-1j * n * psi))
         for n, (a, b) in enumerate(zip(ileri.harmonikler, geri.harmonikler), start=1)
@@ -505,6 +519,7 @@ def cift_yon_birlestir(ileri: OlcumSonucu, geri: OlcumSonucu) -> OlcumSonucu:
         artik_orani=max(ileri.artik_orani, geri.artik_orani),
         saat_sicramasi=float(np.fmax(ileri.saat_sicramasi, geri.saat_sicramasi)),
         gecikme_s=psi / (2 * math.pi * abs(ileri.hiz_hz)),
+        gecikme_belirsizligi_s=sigma_psi / (2 * math.pi * abs(ileri.hiz_hz)),
         cift_yon=True,
     )
 

@@ -57,6 +57,13 @@ KANAL_GECIS_S = 0.25  # kanal değişiminden sonra atılan veri süresi
 GECMIS_UZUNLUGU = 20  # ortalama ± σ için tutulan son ölçüm sayısı
 MIN_PENCERE_S = 0.5
 MAX_ARDISIK_RED = 3  # sağlıksız bu kadar ölçümden sonra durdurulur
+# Durma kararı için en az bu kadar beklenir: hız, saniyede bir gelen durum
+# paketinden okunur; daha önce okunan değer durdurma komutundan eski olabilir.
+MIN_DURMA_BEKLEMESI_S = 1.2
+# Gecikme ve referans, ancak bu kadar kesin ölçülmüşse uygulanır (1σ). Gecikme
+# hatası 2 µs: 23 Hz'de 0.017° faz; merkez 150 µm'deyken yön değişiminde 0.09 µm.
+GECIKME_BELIRSIZLIK_SINIRI_S = 2e-6
+REFERANS_FAZ_SINIRI_DERECE = 0.05
 
 
 class Durum(enum.Enum):
@@ -318,10 +325,14 @@ class OlcumDongusu:
         if not self.conn.connected:
             return
         self.conn.send_command(protocol.CMD_SET_MOTOR_SPEED, 0.0)
-        bitis = self.saat() + self.p.durma_zaman_asimi_s
+        baslangic = self.saat()
+        bitis = baslangic + self.p.durma_zaman_asimi_s
         while self.saat() < bitis:
             self.engine.process_queue(self.conn.rx_queue)
-            if abs(self.engine.motor_speed) < DURMUS_HIZ_HZ:
+            if (
+                abs(self.engine.motor_speed) < DURMUS_HIZ_HZ
+                and self.saat() - baslangic >= MIN_DURMA_BEKLEMESI_S
+            ):
                 break
             bekle(0.1)
         self.conn.send_command(protocol.CMD_SET_SERVO, 0)
@@ -342,23 +353,24 @@ class OlcumDongusu:
                 self.hata_bildir("Bağlantı koptu; yeniden bağlanılınca motor durdurulacak.")
             return
         if self._baglanti_koptu:
-            # Otomatik yeniden bağlanma oldu: önce güvenli duruma getir
+            # Otomatik yeniden bağlanma oldu. Firmware bağlantı kopunca motoru
+            # durdurmaz: motor hâlâ dönüyor olabilir. Normal durdurmadaki gibi
+            # önce hız sıfırlanır, motor durunca (ya da zaman aşımında) servo
+            # kapatılır; dönerken servoyu kesmek mili rampasız bırakır.
             self._baglanti_koptu = False
-            self.conn.send_command(protocol.CMD_SET_MOTOR_SPEED, 0.0)
-            self.conn.send_command(protocol.CMD_SET_SERVO, 0)
+            self._durdurmaya_basla()
             self._cihazi_hazirla()
-            self.durum = Durum.HAZIR
-            self.gunluk("Yeniden bağlandı; motor durduruldu, servo kapatıldı.")
+            self.gunluk("Yeniden bağlandı; motor durduruluyor, durunca servo kapatılacak.")
 
         self.engine.process_queue(self.conn.rx_queue)
         self._rs485_hatalarini_izle()
         simdi = self.saat()
 
         if self.durum is Durum.DURDURULUYOR:
+            gecen = simdi - self._durdurma_zamani
             if (
-                abs(self.engine.motor_speed) < DURMUS_HIZ_HZ
-                or simdi - self._durdurma_zamani > self.p.durma_zaman_asimi_s
-            ):
+                abs(self.engine.motor_speed) < DURMUS_HIZ_HZ and gecen >= MIN_DURMA_BEKLEMESI_S
+            ) or gecen > self.p.durma_zaman_asimi_s:
                 self.conn.send_command(protocol.CMD_SET_SERVO, 0)
                 self.durum = Durum.HATA if self.hata_metni else Durum.HAZIR
                 self.gunluk("Motor durdu, servo kapatıldı.")
@@ -570,6 +582,14 @@ class OlcumDongusu:
         if sonuc is None:
             return
         if istek == "referans":
+            sigma = math.degrees(sonuc.faz_belirsizligi(1))
+            if self.saglik or sigma > REFERANS_FAZ_SINIRI_DERECE:
+                neden = "; ".join(self.saglik) or (
+                    f"n = 1 fazı belirsiz (±{sigma:.3f}° > {REFERANS_FAZ_SINIRI_DERECE}°): "
+                    "referans mıknatıs takılı mı, sinyal yeterli mi?"
+                )
+                self.gunluk(f"Referans kullanılmadı, faz ofseti değişmedi ({neden}).")
+                return
             eski = self.faz_ofseti_derece
             self.faz_ofseti_derece = referans_faz_ofseti(sonuc, eski)
             self._referans_hizi_hz = sonuc.hiz_hz
@@ -584,12 +604,20 @@ class OlcumDongusu:
         if self.saglik:
             self.gunluk("Gecikme ölçümü kullanılmadı (sağlık sorunu); tekrarlayın.")
             return
+        sigma = sonuc.gecikme_belirsizligi_s
+        if not sigma <= GECIKME_BELIRSIZLIK_SINIRI_S:  # nan da reddedilir
+            self.gunluk(
+                f"Gecikme ölçümü kullanılmadı: belirsizlik ±{sigma * 1e6:.2f} µs > "
+                f"{GECIKME_BELIRSIZLIK_SINIRI_S * 1e6:g} µs (sinyal yok ya da çok zayıf; "
+                "mıknatıs takılı ve kanal doğru mu?)"
+            )
+            return
         eski, yeni = self.gecikme_s, sonuc.gecikme_s
         self.gecikme_s = yeni
         self.gecikme_kaynagi = f"ölçüldü, {abs(sonuc.hiz_hz):.1f} Hz"
         self.gecmisi_sifirla()
         self.gunluk(
-            f"Gecikme: {eski * 1e3:.4f} ms -> {yeni * 1e3:.4f} ms. Kalıcı yapmak için "
+            f"Gecikme: {eski * 1e3:.4f} ms -> {yeni * 1e3:.4f} ms (±{sigma * 1e6:.2f} µs). Kalıcı yapmak için "
             f"merkezleme_olcer.yaml -> olcum.gecikme_ms: {yeni * 1e3:.4f}"
         )
         if self._referans_hizi_hz is not None:

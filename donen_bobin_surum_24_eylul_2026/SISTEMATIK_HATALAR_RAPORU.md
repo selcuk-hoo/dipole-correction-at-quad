@@ -75,6 +75,8 @@ Bu rapor, merkezleme ölçüm programındaki analizin eleştirel gözden geçiri
 
 Faz farkı, akıdaki genliği × n en büyük olan harmonikten okunur: kuadrupolde n=2, referans dipolde n=1.
 
+**Güvenilirlik:** fazın artıktan tahmin edilen belirsizliği ±2 µs'yi aşarsa (mıknatıs yok, yanlış kanal, sinyal çok zayıf) gecikme uygulanmaz. Referans için aynı kontrol ±0,05°'dir; sağlık sorunu olan referans da uygulanmaz.
+
 **Doğruluk:** gerçek 0,1800 ms, ölçülen 0,1798 ms; hem kuadrupolde hem referans dipolde, 1° hız dalgasıyla. Ölçülen değer `olcum.gecikme_ms`'e yazılır. Donanım (ADC hızı/filtresi, firmware) değişmedikçe sabittir. Faz ofseti, yeni gecikmeye kendiliğinden taşınır (referans tekrar alınmadan).
 
 **Not:** yöne bağlı sabit bir açı farkı da (mil burulması, kaplin boşluğu) aynı biçimde görünür ve ölçülen "gecikme"ye katılır. Bu bileşen zaman değil açı olduğu için ölçülen L yalnızca **ölçüldüğü hızda** tam doğrudur. Hız değişirse gecikme yeniden ölçülmelidir.

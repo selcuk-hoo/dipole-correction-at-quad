@@ -445,10 +445,17 @@ def test_baglanti_kopunca_ve_donunce_guvenli_durum(kurulum):
     dongu.conn.connected = False
     calistir(dunya, dongu, 0.5)
     assert dongu.durum is Durum.HATA
+    assert dunya.hiz == pytest.approx(23.0, abs=0.5)  # firmware motoru durdurmaz
     dongu.conn.connected = True  # otomatik yeniden bağlanma
     calistir(dunya, dongu, 0.1)
-    assert dongu.durum is Durum.HAZIR
-    assert dunya.hedef == 0.0 and not dunya.servo
+    # Hız sıfırlanır ama servo, motor durana kadar açık kalır (normal durdurma gibi)
+    assert dunya.hedef == 0.0 and dunya.servo
+    assert dongu.durum is Durum.DURDURULUYOR
+    calistir(dunya, dongu, 0.6)
+    assert dunya.servo and dunya.hiz > 5.0
+    calistir(dunya, dongu, 2.0)
+    assert not dunya.servo and dunya.hiz == pytest.approx(0.0, abs=0.2)
+    assert dongu.durum is Durum.HATA  # kopma hatası kullanıcıya gösterilmeye devam eder
 
 
 def test_kes_motoru_durdurup_baglantiyi_kapatir(kurulum):
@@ -529,6 +536,45 @@ def test_gecikme_olcumu_referans_ofsetini_tasir(kurulum):
     calistir(dunya, dongu, 2.5)
     c1 = dongu.son_sonuc.c1
     assert c1.real > 0 and abs(c1.imag) < 2e-4 * abs(c1)
+
+
+@pytest.mark.parametrize("zayif", [False, True])
+def test_gecikme_sinyal_yoksa_ya_da_zayifsa_reddedilir(kurulum, zayif):
+    """Mıknatıs yokken (yalnızca gürültü) ya da sinyal çok zayıfken ölçülen
+    faz anlamsızdır; gecikme uygulanmamalı. Zayıf sinyalde artık eşiği
+    gevşetilse bile faz belirsizliği sınırı reddetmeli."""
+    dunya, dongu, gunluk = kurulum
+    dunya.gecikme_s = 3e-4
+    dunya.gurultu_V = 1e-6
+    dunya.c1, dunya.c2 = (0j, 1e-6 + 0j) if zayif else (0j, 0j)
+    if zayif:
+        dongu.p = dataclasses.replace(dongu.p, artik_esigi=0.99, sicrama_esigi=100.0)
+    dongu.otomatik_yaz = False
+    dongu.baglan()
+    dongu.baslat()
+    calistir(dunya, dongu, 5.0)
+    dongu.gecikme_olc()
+    calistir(dunya, dongu, 14.0)
+    assert not dongu.gecikme_olculuyor and dongu.yon == -1
+    assert dongu.gecikme_s == 0.0 and dongu.gecikme_kaynagi == "parametre dosyası"
+    assert any(m.startswith("Gecikme ölçümü kullanılmadı") for m in gunluk)
+    if zayif:
+        assert any("belirsizlik" in m for m in gunluk)
+
+
+def test_referans_miknatis_yoksa_faz_ofseti_degismez(kurulum):
+    dunya, dongu, gunluk = kurulum
+    dunya.c1, dunya.c2 = 0j, 0j
+    dunya.gurultu_V = 1e-6
+    dongu.otomatik_yaz = False
+    dongu.baglan()
+    dongu.baslat()
+    calistir(dunya, dongu, 5.0)
+    dongu.faz_ofseti_derece = 12.5
+    dongu.tek_olcum(referans=True)
+    calistir(dunya, dongu, 2.5)
+    assert dongu.faz_ofseti_derece == 12.5
+    assert any(m.startswith("Referans kullanılmadı") for m in gunluk)
 
 
 def test_gecikme_olcumu_kanal_degisince_iptal(kurulum):

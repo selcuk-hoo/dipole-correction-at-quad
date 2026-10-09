@@ -3,10 +3,5 @@
     "port": 5000,
     "data_mode": 1,
     "rate": "14400 SPS",
-    "motor_speed": 20.0,
-    "coil_turns": 100.0,
-    "coil_length_mm": 50.0,
-    "coil_width_mm": 20.0,
-    "merkezleme_duyarlilik_n2": 1.0,
-    "merkezleme_kilit_yolu": null
+    "motor_speed": 20.0
 }

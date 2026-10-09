@@ -385,6 +385,11 @@ Değerler `harmonikler.birim` biriminde kabul edilir (elle giriş kutularıyla
 aynı sözleşme). Dosya yolu ve zamanlamalar `dosya_girisi` bölümünde
 (bkz. §7) ayarlanır.
 
+Dönen bobin tarafında bu dosyayı yazan program
+`donen_bobin_surum_24_eylul_2026/host/merkezleme_olcer.py`'dir (tek pencerelik
+minimal arayüz; ayrıntılar `donen_bobin_surum_24_eylul_2026/README_SURUM.md`).
+Değerleri Tesla cinsinden yazar; bu yüzden `harmonikler.birim` `T` kalmalıdır.
+
 `--dosyadan` tek başına **yarı otomatik** çalışır: arayüz açık kalır, alanlar
 dosyadan otomatik dolar, ama "Onayla" ve "Önerilen akımları UYGULA" düğmelerine
 yine kullanıcı basar. `--otomatik --dosyadan` ile birleşince **tam otomatik**

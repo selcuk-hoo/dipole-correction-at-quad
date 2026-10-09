@@ -1,0 +1,51 @@
+# =============================================================================
+#  Dönen bobin -> merkezleme ölçüm programı parametreleri
+#
+#  Bu dosyayı hem host/merkezleme_olcer.py (minimal pencere) hem de büyük
+#  arayüzün makro sistemindeki MERKEZLEME_OLCUM komutu okur. Göreli dosya
+#  yolları depo köküne göredir.
+# =============================================================================
+
+baglanti:
+  ip: 169.254.1.177
+  port: 5000
+
+bobin:
+  # İki düz bobin var; birbirine dik, sarım sayıları ve geometrileri aynı.
+  kanallar:
+    "Düz bobin 1 (AIN0-AIN1)": [0, 1]
+    "Düz bobin 2 (AIN4-AIN5)": [4, 5]
+  varsayilan_kanal: "Düz bobin 1 (AIN0-AIN1)"
+  sarim_sayisi: 5
+  uzunluk_mm: 100.0            # dönme ekseni boyunca
+  genislik_mm: 20.0
+  eksene_uzaklik_mm: 20.0      # bobin ORTASININ dönme eksenine uzaklığı
+  # teget : bobin düzlemi yarıçapa dik; iki iletken aynı yarıçapta
+  # radyal: bobin düzlemi dönme eksenini içeren yarı düzlemde; iletkenler
+  #         eksene_uzaklik -/+ genislik/2 yarıçaplarında
+  # Seçim n=1 ile n=2 duyarlılığı arasındaki göreli fazı (90°) belirler;
+  # ölçeği değiştirmez.
+  tip: teget
+
+adc:
+  kazanc: 32                   # 1 | 2 | 4 | 8 | 16 | 32
+  ornekleme_sps: 7200          # 2400 | 4800 | 7200 | 14400 | ...
+  filtre: Sinc4                # Sinc1 | Sinc2 | Sinc3 | Sinc4 | FIR
+  doyma_uyari_orani: 0.8       # sinyal tepesi tam ölçeğin bu oranını aşarsa uyar
+
+motor:
+  hiz_hz: 23.0
+  max_hiz_hz: 23.0             # pencereden bunun üstü girilemez
+  hiz_toleransi_hz: 0.3        # ölçülen hız hedefe bu kadar yakınsa "oturdu"
+  oturma_suresi_s: 3.0         # hız oturduktan sonra ek bekleme
+  durma_zaman_asimi_s: 15.0    # Durdur'da servo kapatmadan önce en fazla bekleme
+
+olcum:
+  pencere_s: 2.0               # her ölçümde kullanılan veri süresi (tam tura kırpılır)
+  faz_ofseti_derece: 0.0       # enkoder açısından çıkarılır; "Referans" düğmesiyle ayarlanır
+  r_ref_mm: 25.0               # merkezleme yapilandirma.yaml -> harmonikler.r_ref_mm ile AYNI olmalı
+  kilit_dosyasi: veri_kilidi/.kilit
+  merkezleme_yapilandirmasi: yapilandirma.yaml   # açılışta r_ref/birim tutarlılık kontrolü
+
+arayuz:
+  tema: koyu                   # acik | koyu (pencereden de değiştirilebilir)

@@ -44,6 +44,7 @@ from .merkezleme_koprusu import (
 DURMUS_HIZ_HZ = 0.2
 KANAL_GECIS_S = 0.25  # kanal değişiminden sonra atılan veri süresi
 GECMIS_UZUNLUGU = 20  # ortalama ± σ için tutulan son ölçüm sayısı
+MIN_PENCERE_S = 0.5
 
 
 class Durum(enum.Enum):
@@ -79,6 +80,7 @@ class OlcumDongusu:
         self.hata_metni = ""
         self.kanal = p.varsayilan_kanal
         self.hedef_hiz_hz = p.hiz_hz
+        self.pencere_s = p.pencere_s
         self.faz_ofseti_derece = p.faz_ofseti_derece
         self.otomatik_yaz = True
         self.son_sonuc: OlcumSonucu | None = None
@@ -103,22 +105,39 @@ class OlcumDongusu:
 
     @property
     def gereken_ornek(self) -> int:
-        return int(math.ceil(self.p.pencere_s * self.p.ornekleme_sps))
+        return int(math.ceil(self.pencere_s * self.p.ornekleme_sps))
 
-    def genlik_istatistigi(self) -> tuple[int, np.ndarray, np.ndarray]:
-        """Geçmişteki ölçümlerden (N, genlik, σ), n = 1..HARMONIK_SAYISI için,
+    @property
+    def max_pencere_s(self) -> float:
+        """Cihaz arabelleğinin (DataEngine halka tamponu) %90'ı."""
+        return 0.9 * getattr(self.engine, "max_points", 1_000_000) / self.p.ornekleme_sps
+
+    def pencere_ayarla(self, saniye: float) -> float:
+        """Ölçüm süresi: rastgele gürültü 1/√süre ile azalır; dönmeyle
+        eşzamanlı hatalar ve yavaş sürüklenme azalmaz."""
+        saniye = max(MIN_PENCERE_S, min(float(saniye), self.max_pencere_s))
+        if saniye != self.pencere_s:
+            self.pencere_s = saniye
+            self.gecmisi_sifirla()  # farklı süreli ölçümler aynı ortalamaya girmesin
+            self.gunluk(f"Ölçüm süresi: {saniye:g} s")
+        return saniye
+
+    def harmonik_istatistigi(self) -> tuple[int, np.ndarray, np.ndarray]:
+        """Geçmişteki ölçümlerden (N, ortalama C_n, σ_b + i·σ_a), n = 1..H,
         Tesla cinsinden (r_ref'te).
 
-        Genlik, karmaşık değerlerin ortalamasının mutlak değeridir: harmoniğin
-        fazı kararlı olduğundan gürültü √N ile azalır (genliklerin ortalaması
-        alınsaydı gürültü tabanı yukarı kayardı). σ, tek ölçümlerin karmaşık
-        düzlemdeki saçılımıdır."""
-        bos = np.zeros(HARMONIK_SAYISI)
+        Ortalama karmaşık değerlerin ortalamasıdır: harmoniğin fazı kararlı
+        olduğundan gürültü √N ile azalır (genliklerin ortalaması alınsaydı
+        gürültü tabanı yukarı kayardı). σ, tek ölçümlerin normal ve skew
+        bileşenlerindeki saçılımıdır."""
         if not self.gecmis:
-            return 0, bos, bos
+            return 0, np.zeros(HARMONIK_SAYISI, complex), np.zeros(HARMONIK_SAYISI, complex)
         c = np.array([s.harmonikler for s in self.gecmis])
-        sigma = np.hypot(c.real.std(axis=0), c.imag.std(axis=0)) if len(c) > 1 else bos
-        return len(c), np.abs(c.mean(axis=0)), sigma
+        sigma = (
+            c.real.std(axis=0) + 1j * c.imag.std(axis=0) if len(c) > 1
+            else np.zeros(HARMONIK_SAYISI, complex)
+        )
+        return len(c), c.mean(axis=0), sigma
 
     def gecmisi_sifirla(self) -> None:
         self.gecmis.clear()

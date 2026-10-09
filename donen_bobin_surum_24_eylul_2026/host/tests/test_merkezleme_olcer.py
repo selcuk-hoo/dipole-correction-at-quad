@@ -330,12 +330,13 @@ def test_surekli_olcum_csv_ve_istatistik(kurulum, p):
     calistir(dunya, dongu, 4.5)  # hızlanma (~1.2 s) + oturma (3 s)
     assert dongu.durum is Durum.DONUYOR
     calistir(dunya, dongu, 10.1)
-    n_olcum, genlik, sigma = dongu.genlik_istatistigi()  # Tesla
+    n_olcum, ortalama, sigma = dongu.harmonik_istatistigi()  # Tesla
     assert n_olcum == 5  # 2 s'lik örtüşmeyen pencereler
-    assert genlik[1] == pytest.approx(abs(dunya.c2), rel=1e-4)
-    assert genlik[2] == pytest.approx(abs(complex(2e-6, -1e-6)), rel=0.05)
-    assert 0 < sigma[2] < 0.1 * genlik[2]  # gürültü var ama küçük
-    assert genlik[4] < 0.1 * genlik[2]  # alan yok: yalnızca gürültü tabanı
+    assert ortalama[1] == pytest.approx(dunya.c2, rel=1e-4)
+    assert ortalama[2] == pytest.approx(complex(2e-6, -1e-6), rel=0.05)
+    assert 0 < sigma[2].real < 0.1 * abs(ortalama[2])  # gürültü var ama küçük
+    assert 0 < sigma[2].imag < 0.1 * abs(ortalama[2])
+    assert abs(ortalama[4]) < 0.1 * abs(ortalama[2])  # alan yok: yalnızca gürültü tabanı
     assert not p.kilit_dosyasi.exists()
 
     satirlar = list(csv.reader(dongu.kayit.yol.open(encoding="utf-8")))
@@ -344,7 +345,38 @@ def test_surekli_olcum_csv_ve_istatistik(kurulum, p):
     assert dongu.kayit.yol.parent == p.kayit_dizini
 
     dongu.kanal_sec("Düz bobin 2 (AIN4-AIN5)")
-    assert dongu.genlik_istatistigi()[0] == 0  # kanal değişince ortalama sıfırlanır
+    assert dongu.harmonik_istatistigi()[0] == 0  # kanal değişince ortalama sıfırlanır
+
+
+def test_uzun_olcum_suresi_gurultuyu_azaltir(kurulum):
+    """Rastgele gürültü 1/√süre ile azalmalı: 8 s, 2 s'ye göre ~2 kat az saçılım."""
+    dunya, dongu, _ = kurulum
+    dunya.ust = {3: complex(2e-6, -1e-6)}
+    dunya.gurultu_V = 2e-5
+    dongu.otomatik_yaz = False
+    dongu.csv_kaydet = False
+    dongu.baglan()
+    dongu.baslat()
+    calistir(dunya, dongu, 4.5)
+
+    def sacilim(sure: float, adet: int) -> float:
+        dongu.pencere_ayarla(sure)
+        assert dongu.harmonik_istatistigi()[0] == 0  # süre değişince ortalama sıfırlanır
+        calistir(dunya, dongu, sure * adet + 0.2)
+        n, _, sigma = dongu.harmonik_istatistigi()
+        assert n == adet
+        return abs(sigma[2])
+
+    kisa, uzun = sacilim(2.0, 12), sacilim(8.0, 12)
+    assert 1.4 < kisa / uzun < 2.8  # beklenen 2
+
+
+def test_olcum_suresi_sinirlari(kurulum):
+    _, dongu, _ = kurulum
+    assert dongu.pencere_ayarla(0.01) == 0.5
+    assert dongu.pencere_ayarla(1e6) == pytest.approx(dongu.max_pencere_s)
+    assert dongu.max_pencere_s == pytest.approx(0.9 * 1_000_000 / SPS)  # DataEngine arabelleği
+    assert dongu.gereken_ornek == math.ceil(dongu.max_pencere_s * SPS)
 
 
 def test_csv_kapaliyken_dosya_yazilmaz(kurulum, p):
@@ -440,6 +472,7 @@ def test_makro_yolu(p):
 def test_pencere_duman(kurulum, p, monkeypatch):
     pytest.importorskip("PySide6")
     monkeypatch.setenv("QT_QPA_PLATFORM", "offscreen")
+    from PySide6.QtCore import Qt
     from PySide6.QtWidgets import QApplication
 
     from mgf.merkezleme_penceresi import TEMALAR, MerkezlemePenceresi
@@ -461,23 +494,44 @@ def test_pencere_duman(kurulum, p, monkeypatch):
         pencere._tick()
     assert pencere.dongu.olcum_sayisi >= 1
     assert pencere.lbl_b1.text().endswith(" T")
-    # Grafikler doldu (log10 değerler). Üç ölçek: gerçek alan, n=1'e, n=2'ye göre
-    from mgf.merkezleme_penceresi import OLCEKLER
+    # Grafikler doldu (log10 değerler)
+    from mgf.merkezleme_penceresi import GOSTERIMLER, OLCEKLER
 
     assert pencere.cb_olcek.count() == len(OLCEKLER) == 3
-    assert pencere.olcek == "gercek"
-    ust = pencere.cubuk.opts["y1"]
-    assert ust[1] == pytest.approx(np.log10(abs(dunya.c2)), abs=1e-3)
-    assert ust[2] == pytest.approx(np.log10(abs(dunya.ust[3])), abs=0.05)
+    assert pencere.olcek == "gercek" and pencere.gosterim == "bilesen"
+    b, a = pencere.seriler["b"], pencere.seriler["a"]
+    # Normal ve skew ayrı çubuklar; yükseklik |değer|
+    assert b["cubuk"].opts["y1"][1] == pytest.approx(np.log10(dunya.c2.real), abs=1e-3)
+    assert a["cubuk"].opts["y1"][1] == pytest.approx(np.log10(dunya.c2.imag), abs=0.01)
+    assert b["cubuk"].opts["y1"][2] == pytest.approx(np.log10(2e-6), abs=0.05)
+    # a1 = -1e-6 negatif: içi boş çubuk, işaretli etiket
+    assert a["cubuk"].opts["brushes"][0].style() == Qt.NoBrush
+    assert b["cubuk"].opts["brushes"][0].style() != Qt.NoBrush
+    assert a["yazilar"][0].textItem.toPlainText().startswith("-1.0e-06")
+    assert b["yazilar"][0].textItem.toPlainText().startswith("+2.0e-06")
+
+    # Genlik gösterimi ve üç ölçek
+    pencere.cb_gosterim.setCurrentIndex(list(GOSTERIMLER).index("genlik"))
+    g = pencere.seriler["genlik"]
+    assert not b["cubuk"].isVisible() and not a["hata"].isVisible()  # normal/skew gizli
+    assert g["cubuk"].isVisible()
+    assert g["cubuk"].opts["y1"][1] == pytest.approx(np.log10(abs(dunya.c2)), abs=1e-3)
     pencere.cb_olcek.setCurrentIndex(list(OLCEKLER).index("n2"))
-    ust = pencere.cubuk.opts["y1"]
-    assert ust[1] == pytest.approx(0.0, abs=1e-9)
-    assert pencere.deger_yazilari[1].textItem.toPlainText() == "1"
+    assert g["cubuk"].opts["y1"][1] == pytest.approx(0.0, abs=1e-9)
+    assert g["yazilar"][1].textItem.toPlainText() == "1"
     assert pencere.grafik_cok.getAxis("left").labelText == "|C_n| / |C₂|"
     pencere.cb_olcek.setCurrentIndex(list(OLCEKLER).index("n1"))
-    ust = pencere.cubuk.opts["y1"]
-    assert ust[0] == pytest.approx(0.0, abs=1e-9)
-    assert ust[1] == pytest.approx(np.log10(abs(dunya.c2) / abs(dunya.c1)), abs=0.01)
+    assert g["cubuk"].opts["y1"][0] == pytest.approx(0.0, abs=1e-9)
+    assert g["cubuk"].opts["y1"][1] == pytest.approx(
+        np.log10(abs(dunya.c2) / abs(dunya.c1)), abs=0.01
+    )
+    assert pencere.sekmeler.tabText(1) == "Bobin gerilimi"
+    # Yardım: parametrelerden doldurulmuş metin, kipsiz pencere
+    pencere.btn_yardim.click()
+    yardim = pencere.yardim_penceresi.metin.toPlainText()
+    assert pencere.yardim_penceresi.isVisible()
+    assert f"En fazla {p.max_hiz_hz:g} Hz" in yardim and "merkezleme_olcer.yaml" in yardim
+    pencere.yardim_penceresi.close()
     x, y = pencere.ham_noktalar.getData()
     assert len(x) > 1000 and len(pencere.ham_uydurma.getData()[0]) == 721
     assert "satır" in pencere.lbl_kayit.text()

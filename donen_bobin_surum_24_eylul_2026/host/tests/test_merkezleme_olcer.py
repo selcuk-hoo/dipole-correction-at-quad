@@ -332,11 +332,12 @@ def test_surekli_olcum_csv_ve_istatistik(kurulum, p):
     calistir(dunya, dongu, 4.5)  # hızlanma (~1.2 s) + oturma (3 s)
     assert dongu.durum is Durum.DONUYOR
     calistir(dunya, dongu, 10.1)
-    n_olcum, b, a, sigma = dongu.birim_istatistigi()
+    n_olcum, genlik, sigma = dongu.genlik_istatistigi()
     assert n_olcum == 5  # 2 s'lik örtüşmeyen pencereler
-    assert b[2] == pytest.approx(2e-6 / abs(dunya.c2) * 1e4, rel=0.05)
-    assert a[2] == pytest.approx(-1e-6 / abs(dunya.c2) * 1e4, rel=0.05)
-    assert 0 < sigma[2].real < 0.1 * abs(b[2])  # gürültü var ama küçük
+    assert genlik[1] == pytest.approx(1e4)  # ana alan
+    assert genlik[2] == pytest.approx(abs(complex(2e-6, -1e-6)) / abs(dunya.c2) * 1e4, rel=0.05)
+    assert 0 < sigma[2] < 0.1 * genlik[2]  # gürültü var ama küçük
+    assert genlik[4] < 0.1 * genlik[2]  # alan yok: yalnızca gürültü tabanı
     assert not p.kilit_dosyasi.exists()
 
     satirlar = list(csv.reader(dongu.kayit.yol.open(encoding="utf-8")))
@@ -345,7 +346,7 @@ def test_surekli_olcum_csv_ve_istatistik(kurulum, p):
     assert dongu.kayit.yol.parent == p.kayit_dizini
 
     dongu.kanal_sec("Düz bobin 2 (AIN4-AIN5)")
-    assert dongu.birim_istatistigi()[0] == 0  # kanal değişince ortalama sıfırlanır
+    assert dongu.genlik_istatistigi()[0] == 0  # kanal değişince ortalama sıfırlanır
 
 
 def test_csv_kapaliyken_dosya_yazilmaz(kurulum, p):
@@ -462,9 +463,10 @@ def test_pencere_duman(kurulum, p, monkeypatch):
         pencere._tick()
     assert pencere.dongu.olcum_sayisi >= 1
     assert pencere.lbl_b1.text().endswith(" T")
-    # Grafikler doldu: n=3 çubuğu sıfır değil, n=2 (ana alan) gösterilmiyor
-    yukseklik = pencere.cubuk_b.opts["height"]
-    assert yukseklik[2] > 1 and yukseklik[1] == 0
+    # Grafikler doldu (log10 değerler): n=2 ana alan 10⁴, n=3 ~ 10 birim
+    ust = pencere.cubuk.opts["y1"]
+    assert ust[1] == pytest.approx(4.0) and 0.5 < ust[2] < 2.0
+    assert pencere.deger_yazilari[1].textItem.toPlainText() == "10000"
     x, y = pencere.ham_noktalar.getData()
     assert len(x) > 1000 and len(pencere.ham_uydurma.getData()[0]) == 721
     assert "satır" in pencere.lbl_kayit.text()

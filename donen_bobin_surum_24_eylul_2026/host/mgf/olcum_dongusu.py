@@ -105,15 +105,20 @@ class OlcumDongusu:
     def gereken_ornek(self) -> int:
         return int(math.ceil(self.p.pencere_s * self.p.ornekleme_sps))
 
-    def birim_istatistigi(self) -> tuple[int, np.ndarray, np.ndarray, np.ndarray]:
-        """Geçmişteki ölçümlerden (N, ortalama b_n, ortalama a_n, σ(b_n)+i·σ(a_n))
-        n = 1..HARMONIK_SAYISI için, ana alana göre birim (1e-4 |C_2|)."""
+    def genlik_istatistigi(self) -> tuple[int, np.ndarray, np.ndarray]:
+        """Geçmişteki ölçümlerden (N, genlik, σ), n = 1..HARMONIK_SAYISI için,
+        ana alana göre birim (1e-4 |C_2|).
+
+        Genlik, karmaşık değerlerin ortalamasının mutlak değeridir: harmoniğin
+        fazı kararlı olduğundan gürültü √N ile azalır (genliklerin ortalaması
+        alınsaydı gürültü tabanı yukarı kayardı). σ, tek ölçümlerin karmaşık
+        düzlemdeki saçılımıdır."""
+        bos = np.zeros(HARMONIK_SAYISI)
         if not self.gecmis:
-            bos = np.zeros(HARMONIK_SAYISI)
-            return 0, bos, bos, bos.astype(complex)
+            return 0, bos, bos
         b = np.array([[s.birim(n) for n in range(1, HARMONIK_SAYISI + 1)] for s in self.gecmis])
-        sigma = b.real.std(axis=0) + 1j * b.imag.std(axis=0) if len(b) > 1 else np.zeros(b.shape[1], complex)
-        return len(b), b.real.mean(axis=0), b.imag.mean(axis=0), sigma
+        sigma = np.hypot(b.real.std(axis=0), b.imag.std(axis=0)) if len(b) > 1 else bos
+        return len(b), np.abs(b.mean(axis=0)), sigma
 
     def gecmisi_sifirla(self) -> None:
         self.gecmis.clear()

@@ -34,7 +34,7 @@ from PySide6.QtWidgets import (
 from .merkezleme_koprusu import HARMONIK_SAYISI, Parametreler, tutarlilik_uyarilari
 from .olcum_dongusu import Durum, OlcumDongusu
 
-_CUBUK_GENISLIGI = 0.34
+_CUBUK_GENISLIGI = 0.6
 _HAM_NOKTA_SAYISI = 4000  # ham sinyal grafiğinde gösterilen en fazla örnek
 
 TEMALAR = {
@@ -247,21 +247,20 @@ class MerkezlemePenceresi(QMainWindow):
         dikey.addLayout(ust)
         self.grafik_cok = pg.PlotWidget()
         self.grafik_cok.setMenuEnabled(False)
+        self.grafik_cok.setMouseEnabled(x=False, y=False)
+        # Log eksen: BarGraphItem/ErrorBarItem log kipini kendileri uygulamadığı
+        # için bunlara log10 değerler verilir; eksen yalnızca 10^k etiketler.
+        self.grafik_cok.setLogMode(x=False, y=True)
         self.grafik_cok.getAxis("bottom").setTicks(
             [[(n, f"{n}") for n in range(1, HARMONIK_SAYISI + 1)]]
         )
         self.grafik_cok.setXRange(0.4, HARMONIK_SAYISI + 0.6, padding=0)
-        sifir = np.zeros(HARMONIK_SAYISI)
         x = np.arange(1, HARMONIK_SAYISI + 1)
-        self.cubuk_b = pg.BarGraphItem(x=x - _CUBUK_GENISLIGI / 2, height=sifir, width=_CUBUK_GENISLIGI)
-        self.cubuk_a = pg.BarGraphItem(x=x + _CUBUK_GENISLIGI / 2, height=sifir, width=_CUBUK_GENISLIGI)
-        self.hata_b = pg.ErrorBarItem(x=x - _CUBUK_GENISLIGI / 2, y=sifir, top=sifir, bottom=sifir, beam=0.12)
-        self.hata_a = pg.ErrorBarItem(x=x + _CUBUK_GENISLIGI / 2, y=sifir, top=sifir, bottom=sifir, beam=0.12)
-        self.sifir_cizgisi = pg.InfiniteLine(pos=0, angle=0)
-        self.ana_alan_yazisi = pg.TextItem("ana alan", anchor=(0.5, 1.0))
-        self.ana_alan_yazisi.setPos(2, 0)
-        for oge in (self.sifir_cizgisi, self.cubuk_b, self.cubuk_a, self.hata_b, self.hata_a,
-                    self.ana_alan_yazisi):
+        sifir = np.zeros(HARMONIK_SAYISI)
+        self.cubuk = pg.BarGraphItem(x=x, y0=sifir, y1=sifir, width=_CUBUK_GENISLIGI)
+        self.hata = pg.ErrorBarItem(x=x, y=sifir, top=sifir, bottom=sifir, beam=0.15)
+        self.deger_yazilari = [pg.TextItem(anchor=(0.5, 1.0)) for _ in x]
+        for oge in (self.cubuk, self.hata, *self.deger_yazilari):
             self.grafik_cok.addItem(oge)
         dikey.addWidget(self.grafik_cok)
         self.sekmeler.addTab(sayfa, "Çok kutuplar")
@@ -284,16 +283,14 @@ class MerkezlemePenceresi(QMainWindow):
                 eksen = grafik.getAxis(kenar)
                 eksen.setPen(pg.mkPen(t["soluk"]))
                 eksen.setTextPen(pg.mkPen(t["yazi"]))
-        self.grafik_cok.setLabel("left", "birim (10⁻⁴ · |C₂|, r_ref'te)", color=t["yazi"])
+        self.grafik_cok.setLabel("left", "|C_n| (birim: 10⁻⁴ · |C₂|, r_ref'te)", color=t["yazi"])
         self.grafik_cok.setLabel("bottom", "n (1 dipol, 2 kuadrupol, 3 sekstupol, ...)", color=t["yazi"])
         self.grafik_ham.setLabel("left", "Bobin gerilimi (mV)", color=t["yazi"])
         self.grafik_ham.setLabel("bottom", "Açı (°, faz ofsetli)", color=t["yazi"])
-        self.sifir_cizgisi.setPen(pg.mkPen(t["soluk"], width=1))
-        self.ana_alan_yazisi.setColor(t["soluk"])
-        self.cubuk_b.setOpts(brush=pg.mkBrush(t["vurgu"]), pen=pg.mkPen(None))
-        self.cubuk_a.setOpts(brush=pg.mkBrush(t["uyari"]), pen=pg.mkPen(None))
-        self.hata_b.setData(pen=pg.mkPen(t["yazi"], width=1))
-        self.hata_a.setData(pen=pg.mkPen(t["yazi"], width=1))
+        self.cubuk.setOpts(brush=pg.mkBrush(t["vurgu"]), pen=pg.mkPen(None))
+        self.hata.setData(pen=pg.mkPen(t["yazi"], width=1))
+        for yazi in self.deger_yazilari:
+            yazi.setColor(t["yazi"])
         self.ham_noktalar.setSymbolBrush(pg.mkBrush(t["soluk"]))
         self.ham_noktalar.setSymbolPen(None)
         self.ham_uydurma.setPen(pg.mkPen(t["vurgu"], width=1.5))
@@ -304,27 +301,32 @@ class MerkezlemePenceresi(QMainWindow):
 
     def _grafikleri_ciz(self) -> None:
         d = self.dongu
-        t = TEMALAR[self.tema]
-        n_olcum, b, a, sigma = d.birim_istatistigi()
-        gosterilen = np.arange(1, HARMONIK_SAYISI + 1) != 2  # n=2 ana alan: 10⁴, gösterilmez
-        b, a = np.where(gosterilen, b, 0.0), np.where(gosterilen, a, 0.0)
-        sb, sa = np.where(gosterilen, sigma.real, 0.0), np.where(gosterilen, sigma.imag, 0.0)
+        n_olcum, genlik, sigma = d.genlik_istatistigi()
         x = np.arange(1, HARMONIK_SAYISI + 1)
-        self.cubuk_b.setOpts(height=b)
-        self.cubuk_a.setOpts(height=a)
-        self.hata_b.setData(x=x - _CUBUK_GENISLIGI / 2, y=b, top=sb, bottom=sb)
-        self.hata_a.setData(x=x + _CUBUK_GENISLIGI / 2, y=a, top=sa, bottom=sa)
-        sutun = (
-            f"<span style='color:{t['vurgu']}'>■</span> b<sub>n</sub> normal &nbsp; "
-            f"<span style='color:{t['uyari']}'>■</span> a<sub>n</sub> skew"
-        )
         if n_olcum == 0:
-            self.lbl_cok_kutup.setText(f"Henüz ölçüm yok &nbsp;&nbsp; {sutun}")
+            self.lbl_cok_kutup.setText("Henüz ölçüm yok")
+            self.cubuk.setOpts(y0=np.zeros_like(genlik), y1=np.zeros_like(genlik))
+            self.hata.setData(x=x, y=np.zeros_like(genlik), top=np.zeros_like(genlik),
+                              bottom=np.zeros_like(genlik))
+            for yazi in self.deger_yazilari:
+                yazi.setText("")
         else:
-            s = d.son_sonuc
+            # Taban: en küçük genliğin bir alt onluğu (1e-4..1 birim arası)
+            pozitif = genlik[genlik > 0]
+            taban = 10.0 ** np.clip(np.floor(np.log10(pozitif.min())) if len(pozitif) else -2, -4, 0)
+            ust = np.log10(np.maximum(genlik, taban))
+            alt = np.log10(np.maximum(genlik - sigma, taban))
+            tepe = np.log10(np.maximum(genlik + sigma, taban))
+            self.cubuk.setOpts(y0=np.full_like(ust, np.log10(taban)), y1=ust)
+            self.hata.setData(x=x, y=ust, top=tepe - ust, bottom=ust - alt)
+            for n, yazi in enumerate(self.deger_yazilari, start=1):
+                g = genlik[n - 1]
+                yazi.setText(f"{g:.0f}" if g >= 100 else f"{g:.3g}")
+                yazi.setPos(n, tepe[n - 1])
+            self.grafik_cok.setYRange(np.log10(taban), np.log10(4e4), padding=0)
             self.lbl_cok_kutup.setText(
-                f"Son {n_olcum} ölçüm: ortalama ± σ &nbsp;·&nbsp; |C<sub>2</sub>| = "
-                f"{abs(s.c2):.4e} T &nbsp;&nbsp; {sutun}"
+                f"Son {n_olcum} ölçüm: |ortalama C<sub>n</sub>| ± σ (tek ölçüm saçılımı)"
+                f" &nbsp;·&nbsp; |C<sub>2</sub>| = {abs(d.son_sonuc.c2):.4e} T"
             )
 
         s = d.son_sonuc

@@ -239,7 +239,7 @@ class MerkezlemePenceresi(QMainWindow):
         self.lbl_faz = self._deger_etiketi(g, 2, 0, "Faz ofseti")
         self.lbl_tepe = self._deger_etiketi(g, 2, 2, "Sinyal tepesi")
         self.lbl_gecikme = self._deger_etiketi(g, 3, 0, "Gecikme")
-        self.lbl_artik = self._deger_etiketi(g, 3, 2, "Uydurma artığı")
+        self.lbl_artik = self._deger_etiketi(g, 3, 2, "Artık / saat sıçr.")
         g.addWidget(QLabel("Kayıt:"), 4, 0)
         self.lbl_kayit = QLabel("—")
         self.lbl_kayit.setTextInteractionFlags(Qt.TextSelectableByMouse)
@@ -607,15 +607,19 @@ class MerkezlemePenceresi(QMainWindow):
         oran = s.tepe_V / self.p.tam_olcek_V
         self.lbl_tepe.setText(f"{s.tepe_V * 1e3:.2f} mV (tam ölçeğin %{100 * oran:.0f})")
         self.lbl_tepe.setStyleSheet(f"color: {self._renk('kotu' if d.doyma_uyarisi else 'yazi')};")
-        self.lbl_artik.setText(f"{s.artik_orani:.1e} (eşik {self.p.artik_esigi:.0e})")
-        self.lbl_artik.setStyleSheet(f"color: {self._renk('kotu' if d.artik_uyarisi else 'yazi')};")
+        sicrama = "—" if np.isnan(s.saat_sicramasi) else f"{s.saat_sicramasi:.2f}"
+        self.lbl_artik.setText(f"{s.artik_orani:.1e} / {sicrama}")
+        self.lbl_artik.setToolTip(
+            f"Uydurma artığı (eşik {self.p.artik_esigi:.0e}) / okuma saati sıçraması, örnek "
+            f"(eşik {self.p.sicrama_esigi:g}; tek örnek kaybı ~1)"
+        )
+        self.lbl_artik.setStyleSheet(f"color: {self._renk('kotu' if d.saglik else 'yazi')};")
         uyarilar = []
         if d.doyma_uyarisi:
             uyarilar.append("ADC doymaya yakın: kazancı düşürün (merkezleme_olcer.yaml → adc.kazanc).")
-        if d.artik_uyarisi:
+        if d.saglik:
             uyarilar.append(
-                "Uydurma artığı yüksek: ölçüm güvenilmez (açı, kanal, doyma, örnek kaybı?). "
-                "Bu durumda merkezleme'ye yazılmaz."
+                "Ölçüm güvenilmez, merkezleme'ye yazılmaz: " + "; ".join(d.saglik) + "."
             )
         self.lbl_uyari.setText(" ".join(uyarilar))
         self.lbl_uyari.setStyleSheet(f"color: {self._renk('kotu')};")

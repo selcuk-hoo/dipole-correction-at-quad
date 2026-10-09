@@ -125,7 +125,7 @@ def test_parametreler_ve_tutarlilik(p, tmp_path):
     assert p.bobin.sarim_sayisi == 5 and p.bobin.eksene_uzaklik_m == pytest.approx(0.02)
     assert p.kanallar[p.varsayilan_kanal] == (0, 1)
     assert p.kazanc == 32 and p.ornekleme_sps == 7200 and p.filtre == "Sinc4"
-    assert p.gecikme_s == 0.0 and p.artik_esigi == pytest.approx(5e-3)
+    assert p.gecikme_s == 0.0 and p.artik_esigi == pytest.approx(5e-3) and p.sicrama_esigi == 0.6
     assert mk.tutarlilik_uyarilari(p) == []
 
     kfg = tmp_path / "y.yaml"
@@ -349,7 +349,7 @@ def test_surekli_olcum_csv_ve_istatistik(kurulum, p):
 
     satirlar = list(csv.reader(dongu.kayit.yol.open(encoding="utf-8")))
     assert satirlar[0][:3] == ["zaman", "tur", "kanal"] and satirlar[0][-1] == "a6_T"
-    for sutun in ("gecikme_ms", "cift_yon", "artik_orani", "aci_yontemi"):
+    for sutun in ("gecikme_ms", "cift_yon", "artik_orani", "saat_sicramasi", "aci_yontemi"):
         assert sutun in satirlar[0]
     assert len(satirlar) == 1 + 5 and {s[1] for s in satirlar[1:]} == {"surekli"}
     assert dongu.kayit.yol.parent == p.kayit_dizini
@@ -478,7 +478,7 @@ def test_makro_yolu(p):
     # Artığı yüksek ölçüm yazılmaz
     p.kilit_dosyasi.unlink()
     dunya.kayip = 3
-    with pytest.raises(RuntimeError, match="artığı"):
+    with pytest.raises(RuntimeError, match="yazılmadı"):
         mk.kuadrupol_olcumu_yaz(motor, p)
     assert not p.kilit_dosyasi.exists()
 
@@ -574,7 +574,19 @@ def test_artigi_yuksek_olcum_merkezlemeye_yazilmaz(kurulum, p):
     assert not p.kilit_dosyasi.exists() and dongu.olcum_sayisi == 0
     assert sum(m.startswith("Ölçüm reddedildi") for m in gunluk) == 3
     assert dongu.durum in (Durum.DURDURULUYOR, Durum.HATA) and "artığı" in dongu.hata_metni
-    assert dongu.artik_uyarisi
+    assert dongu.saglik and "artığı" in dongu.saglik[0]
+
+
+def test_rs485_hata_sayaci_bildirilir(kurulum):
+    dunya, dongu, gunluk = kurulum
+    dongu.otomatik_yaz = False
+    dongu.baglan()
+    dongu.engine.rs485_error_count = 7
+    calistir(dunya, dongu, 0.2)
+    assert not any("RS485" in m for m in gunluk)  # ilk değer yalnızca kaydedilir
+    dongu.engine.rs485_error_count = 9
+    calistir(dunya, dongu, 0.1)
+    assert any("2 bozuk ADC örneği" in m for m in gunluk)
 
 
 # ---------------------------------------------------------------------------
@@ -637,7 +649,8 @@ def test_pencere_duman(kurulum, p, monkeypatch):
         np.log10(abs(dunya.c2) / abs(dunya.c1)), abs=0.01
     )
     assert pencere.sekmeler.tabText(1) == "Bobin akısı"
-    assert "ms" in pencere.lbl_gecikme.text() and "eşik" in pencere.lbl_artik.text()
+    assert "ms" in pencere.lbl_gecikme.text() and "/" in pencere.lbl_artik.text()
+    assert "eşik" in pencere.lbl_artik.toolTip()
     # Merkezleme'ye yazarken çerçeve denetimleri kilitli
     assert not pencere.cb_kanal.isEnabled() and not pencere.btn_ref.isEnabled()
     assert not pencere.btn_gecikme.isEnabled()

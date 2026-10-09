@@ -72,6 +72,7 @@ UYDURMA_HARMONIK_SAYISI = 15
 _PARCA = 50_000  # normal denklemler bu kadar örneklik parçalarla kurulur (bellek)
 _SURUKLENME_DERECESI = 3  # akıdaki zaman polinomu: ADC ofsetinin integrali ve sürüklenmesi
 _OKUMA_SAATI_SAPMA_SINIRI = 0.45  # örnek; düzgün varış titreşimi ~0.29 (0..1 tekdüze)
+_SICRAMA_PENCERESI = 41  # okuma; okuma saati artığının kayan medyanı bu kadar okumada
 
 
 class ParametreHatasi(ValueError):
@@ -121,6 +122,7 @@ class Parametreler:
     faz_ofseti_derece: float
     gecikme_s: float
     artik_esigi: float
+    sicrama_esigi: float
     r_ref_m: float
     kilit_dosyasi: Path
     kayit_dizini: Path
@@ -170,6 +172,7 @@ def parametreleri_yukle(yol: Path | str | None = None) -> Parametreler:
             faz_ofseti_derece=float(o["faz_ofseti_derece"]),
             gecikme_s=float(o.get("gecikme_ms", 0.0)) * 1e-3,
             artik_esigi=float(o.get("artik_esigi", 5e-3)),
+            sicrama_esigi=float(o.get("sicrama_esigi", 0.6)),
             r_ref_m=float(o["r_ref_mm"]) * 1e-3,
             kilit_dosyasi=_repo_yolu(o["kilit_dosyasi"]),
             kayit_dizini=_repo_yolu(o["kayit_dizini"]),
@@ -241,6 +244,10 @@ class OlcumSonucu:
     # ADC-enkoder zaman gecikmesi: tek yönde analizde kullanılan değer, çift
     # yönde iki yönün farkından ölçülen değer
     gecikme_s: float = 0.0
+    # Okuma saati sıçraması (örnek): enkoder okumalarının düzenli saatine göre
+    # ADC örnek sayısındaki kalıcı kayma. Kaybolan her örnek ~1 ekler;
+    # sağlıklı veride ~0.2. Merdiven yoksa ölçülemez (nan).
+    saat_sicramasi: float = math.nan
     # Çizim için: pencerenin (ofsetli) açısı, sürüklenmesi çıkarılmış akı
     # ve uydurmanın Fourier katsayıları [sabit, a_1, b_1, ..., a_M, b_M]
     # (M = UYDURMA_HARMONIK_SAYISI >= raporlanan harmonik sayısı)
@@ -306,7 +313,7 @@ def kubik_enterpolasyon(x: np.ndarray, xp: np.ndarray, yp: np.ndarray) -> np.nda
     )
 
 
-def aci_merdivenini_duzelt(acilmis: np.ndarray) -> tuple[np.ndarray, int, int, str]:
+def aci_merdivenini_duzelt(acilmis: np.ndarray) -> tuple[np.ndarray, int, int, str, float]:
     """Enkoder açısındaki merdiveni giderir.
 
     Stator enkoderi ~1 ms'de bir okuyup rotora gönderir; rotor her ADC örneğine
@@ -321,29 +328,47 @@ def aci_merdivenini_duzelt(acilmis: np.ndarray) -> tuple[np.ndarray, int, int, s
     sabit gecikme bir açı ofseti gibidir (referansla ya da çift yönlü ölçümle
     giderilir).
 
-    Dönen (açı, ilk, son, yöntem): yalnızca ilk..son arasındaki örnekler geçerli.
+    Aynı uydurma örnek kaybını da gösterir: okumalar stator saatine bağlı
+    düzenli aralıklarla gelir; aradan bir ADC örneği kaybolursa sonraki bütün
+    taze noktalar bir örnek erken görünür. Uydurmanın artığının kayan medyanındaki
+    tepe-tepe değişim ("sıçrama") bunu tekil titreşimlerden ayırır.
+
+    Dönen (açı, ilk, son, yöntem, sıçrama): yalnızca ilk..son arasındaki
+    örnekler geçerli.
     """
     taze = np.flatnonzero(np.diff(acilmis) != 0) + 1
     if len(taze) < 4:
-        return acilmis, 0, len(acilmis), "yok"
+        return acilmis, 0, len(acilmis), "yok", math.nan
     d = np.diff(taze)
-    adim = float(np.median(d))
+    # Okuma aralığı (örnek): ortalama; atlanan okumalar (2x, 3x aralık)
+    # yuvarlanarak sayılır ve ortalama bir kez yeniden hesaplanır. (Medyan
+    # kullanılmaz: okuma başına 2.4 örnekte medyan 2 olur ve 3'lük aralıklar
+    # iki okuma sayılır.)
+    adim = float(np.mean(d))
+    sayi = np.maximum(1.0, np.rint(d / adim))
+    adim = float(np.sum(d) / np.sum(sayi))
     if adim > 1.5:
-        # Okuma sırası: atlanan okumalar (2x, 3x aralık) yuvarlanarak sayılır
-        j = np.concatenate(([0.0], np.cumsum(np.rint(d / adim))))
+        j = np.concatenate(([0.0], np.cumsum(np.maximum(1.0, np.rint(d / adim)))))
         a = np.column_stack([np.ones_like(j), j])
         katsayi, *_ = np.linalg.lstsq(a, taze.astype(float), rcond=None)
         konum = a @ katsayi
-        if np.std(taze - konum) <= _OKUMA_SAATI_SAPMA_SINIRI:
+        artik = taze - konum
+        sicrama = math.nan
+        if len(artik) >= 2 * _SICRAMA_PENCERESI:
+            kayan = np.lib.stride_tricks.sliding_window_view(artik, _SICRAMA_PENCERESI)
+            sicrama = float(np.ptp(np.median(kayan, axis=1)))
+        if np.std(artik) <= _OKUMA_SAATI_SAPMA_SINIRI:
             # Taze nokta, varıştan SONRAKİ ilk örnektir (0..1 örnek geç; ortalama
             # yarım örnek): okuma anı için yarım örnek geri gidilir. Kalan iletim
             # gecikmesi sabittir (çift yönlü ölçümle ölçülür).
             konum = konum - 0.5
             ilk, son = int(np.ceil(konum[0])), int(np.floor(konum[-1])) + 1
             duz = kubik_enterpolasyon(np.arange(len(acilmis), dtype=float), konum, acilmis[taze])
-            return duz, ilk, son, "okuma saati"
+            return duz, ilk, son, "okuma saati", sicrama
+    else:
+        sicrama = math.nan
     duz = kubik_enterpolasyon(np.arange(len(acilmis), dtype=float), taze.astype(float), acilmis[taze])
-    return duz, int(taze[0]), int(taze[-1]) + 1, "enterpolasyon"
+    return duz, int(taze[0]), int(taze[-1]) + 1, "enterpolasyon", sicrama
 
 
 def olcum_hesapla(
@@ -370,9 +395,9 @@ def olcum_hesapla(
     # Akı: yamuk kuralıyla integral (dikdörtgen kuralı yarım örneklik kayma yapar)
     aki = -dt * (np.cumsum(v) - 0.5 * v - 0.5 * v[0])
     acilmis = np.unwrap(np.radians(aci))
-    yontem = "yok"
+    yontem, sicrama = "yok", math.nan
     if aci_duzelt:
-        acilmis, ilk, son, yontem = aci_merdivenini_duzelt(acilmis)
+        acilmis, ilk, son, yontem, sicrama = aci_merdivenini_duzelt(acilmis)
         acilmis, aki, v = acilmis[ilk:son], aki[ilk:son], v[ilk:son]
     if gecikme_s:
         # Her gerilim örneği, açı örneğinden gecikme_s önceki ana aittir
@@ -436,6 +461,7 @@ def olcum_hesapla(
         artik_orani=artik_orani,
         aci_yontemi=yontem,
         gecikme_s=gecikme_s,
+        saat_sicramasi=sicrama,
         aci_derece=np.degrees(teta) % 360.0,
         aki_Vs=aki - surukleme,
         fourier=np.concatenate(([0.0], katsayi[m_pol:])),
@@ -477,6 +503,7 @@ def cift_yon_birlestir(ileri: OlcumSonucu, geri: OlcumSonucu) -> OlcumSonucu:
         tur_sayisi=ileri.tur_sayisi + geri.tur_sayisi,
         tepe_V=max(ileri.tepe_V, geri.tepe_V),
         artik_orani=max(ileri.artik_orani, geri.artik_orani),
+        saat_sicramasi=float(np.fmax(ileri.saat_sicramasi, geri.saat_sicramasi)),
         gecikme_s=psi / (2 * math.pi * abs(ileri.hiz_hz)),
         cift_yon=True,
     )
@@ -508,6 +535,22 @@ def cift_yon_hesapla(
     gecikme_s += hesapla(gecikme_s).gecikme_s
     sonuc = hesapla(gecikme_s)
     return dataclasses.replace(sonuc, gecikme_s=gecikme_s + sonuc.gecikme_s)
+
+
+def saglik_sorunlari(sonuc: OlcumSonucu, p: "Parametreler") -> list[str]:
+    """Ölçümü merkezleme'ye yazmayı engelleyen sorunlar (boşsa sağlıklı)."""
+    sorunlar = []
+    if not sonuc.artik_orani <= p.artik_esigi:
+        sorunlar.append(
+            f"uydurma artığı {sonuc.artik_orani:.1e} > eşik {p.artik_esigi:.1e} "
+            "(açı, kanal, doyma ya da örnek kaybı?)"
+        )
+    if sonuc.saat_sicramasi > p.sicrama_esigi:  # nan: ölçülemedi, engellemez
+        sorunlar.append(
+            f"okuma saati sıçraması {sonuc.saat_sicramasi:.2f} örnek > eşik {p.sicrama_esigi:.2f} "
+            "(büyük olasılıkla ADC örneği kaybı)"
+        )
+    return sorunlar
 
 
 def referans_faz_ofseti(sonuc: OlcumSonucu, mevcut_ofset_derece: float) -> float:
@@ -546,7 +589,7 @@ class OlcumKaydi:
             if yeni:
                 yazici.writerow(
                     ["zaman", "tur", "kanal", "hiz_hz", "tur_sayisi", "tepe_mV", "faz_ofseti_derece",
-                     "gecikme_ms", "cift_yon", "artik_orani", "aci_yontemi", "G_T_m", "x_c_um", "y_c_um"]
+                     "gecikme_ms", "cift_yon", "artik_orani", "saat_sicramasi", "aci_yontemi", "G_T_m", "x_c_um", "y_c_um"]
                     + [f"{ad}{n}_T" for n in range(1, len(sonuc.harmonikler) + 1) for ad in ("b", "a")]
                 )
             z = sonuc.merkez_m * 1e6
@@ -554,7 +597,7 @@ class OlcumKaydi:
                 [datetime.now().isoformat(timespec="seconds"), tur, kanal, f"{sonuc.hiz_hz:.4f}",
                  sonuc.tur_sayisi, f"{sonuc.tepe_V * 1e3:.4f}", f"{faz_ofseti_derece:.3f}",
                  f"{sonuc.gecikme_s * 1e3:.4f}", int(sonuc.cift_yon), f"{sonuc.artik_orani:.2e}",
-                 sonuc.aci_yontemi, f"{sonuc.gradyen_T_m:.6g}", f"{z.real:.3f}", f"{z.imag:.3f}"]
+                 f"{sonuc.saat_sicramasi:.3f}", sonuc.aci_yontemi, f"{sonuc.gradyen_T_m:.6g}", f"{z.real:.3f}", f"{z.imag:.3f}"]
                 + [f"{x:.6e}" for c in sonuc.harmonikler for x in (c.real, c.imag)]
             )
         self.satir_sayisi += 1
@@ -573,10 +616,8 @@ def kuadrupol_olcumu_yaz(engine, p: Parametreler) -> OlcumSonucu:
         ham_aci, adc, engine.live_rate_sps, p.bobin, p.r_ref_m, p.faz_ofseti_derece,
         gecikme_s=p.gecikme_s,
     )
-    if sonuc.artik_orani > p.artik_esigi:
-        raise RuntimeError(
-            f"Uydurma artığı yüksek ({sonuc.artik_orani:.1e} > {p.artik_esigi:.1e}); "
-            "ölçüm yazılmadı (açı, kanal, doyma ya da örnek kaybı?)"
-        )
+    sorunlar = saglik_sorunlari(sonuc, p)
+    if sorunlar:
+        raise RuntimeError("Ölçüm yazılmadı: " + "; ".join(sorunlar))
     kilide_yaz(sonuc, p.kilit_dosyasi)
     return sonuc

@@ -51,6 +51,10 @@ olcum:
   # Akı uydurmasının artığı / harmonik içerik (rms). Sağlıklı ölçümde ~1e-4..1e-3.
   # Bunu aşan ölçüm merkezleme'ye yazılmaz (örnek kaybı, açı hatası, doyma).
   artik_esigi: 5.0e-3
+  # Enkoder okumaları stator saatine bağlı düzenli aralıklarla gelir; bir ADC
+  # örneği kaybolursa sonraki okumalar bir örnek kayar. Bu kaymanın (örnek
+  # cinsinden) eşiği: sağlıklı veride ~0.2, tek kayıpta ~1.
+  sicrama_esigi: 0.6
   r_ref_mm: 25.0               # merkezleme yapilandirma.yaml -> harmonikler.r_ref_mm ile AYNI olmalı
   kilit_dosyasi: veri_kilidi/.kilit
   kayit_dizini: donen_bobin_surum_24_eylul_2026/olcumler   # her oturum ayrı CSV

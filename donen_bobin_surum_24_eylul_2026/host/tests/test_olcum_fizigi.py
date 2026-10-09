@@ -125,6 +125,7 @@ def test_merkez_ve_harmonikler_gercekci_enkoderle(model, tip, f_hz):
     assert s.c2 == pytest.approx(model.gercek[1], rel=5e-5)
     assert ust_hata(model, s) < 0.3
     assert s.artik_orani < 1e-3 and s.aci_yontemi == "okuma saati"
+    assert s.saat_sicramasi < 0.4 and mk.saglik_sorunlari(s, mk.parametreleri_yukle()) == []
     assert math.copysign(1, s.hiz_hz) == math.copysign(1, f_hz)
 
 
@@ -174,6 +175,18 @@ def test_cift_yon_birlesik_olcum_dogru(model):
 def test_enkoder_atlama_ve_titresimi(model):
     s = olc(model, bobin(), atla=0.01, titresim_s=5e-6, gecikme_s=NET_GECIKME_S)
     assert abs(s.merkez_m - model.merkez) < 2e-6
+    assert s.saat_sicramasi < 0.4  # atlanan okumalar ve titreşim kayıp sanılmaz
+
+
+@pytest.mark.parametrize("tohum", range(4))
+def test_tek_ornek_kaybi_okuma_saatinden_yakalanir(model, tohum):
+    """Tek bir kayıp örnek artığı eşiğin altında bırakabilir; ama enkoder
+    okumalarının düzenli saatine göre bir örneklik kalıcı kayma yaratır."""
+    p = mk.parametreleri_yukle()
+    b = bobin()
+    s = mk.olcum_hesapla(*model.veri(b, kayip=1, tohum=tohum), SPS, b, model.r_ref)
+    assert s.saat_sicramasi > 0.8
+    assert any("sıçrama" in m for m in mk.saglik_sorunlari(s, p))
 
 
 def test_ornek_kaybi_artikla_yakalanir(model):

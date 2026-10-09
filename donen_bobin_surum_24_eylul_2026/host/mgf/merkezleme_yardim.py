@@ -86,9 +86,11 @@ Hata çubuğu çubuktan uzunsa o terim gürültünün altındadır.</li>
 </ul>
 <p><b>Bobin akısı:</b> son ölçüm penceresinde bobinden geçen akı (gerilimin zaman
 integrali), enkoder açısına göre (turlar üst üste); çizgi, uydurulan harmoniklerin
-toplamıdır. Noktalar çizgiye oturmalıdır. Sayısal karşılığı <i>uydurma artığı</i>dır:
-sağlıklı ölçümde ~1e-4..1e-3; eşiği (<code>olcum.artik_esigi</code>) aşan ölçüm
-merkezleme'ye yazılmaz, üst üste 3 kez aşılırsa motor durdurulur.</p>
+toplamıdır. Noktalar çizgiye oturmalıdır. Sayısal karşılığı <i>uydurma artığı</i>dır
+(sağlıklı ölçümde ~1e-4..1e-3). İkinci ölçüt <i>okuma saati sıçraması</i>dır: bir ADC örneği
+kaybolursa enkoder okumaları bir örnek kayar (sağlıklı ~0.2, kayıpta ~1). İkisinden biri
+eşiği (<code>olcum.artik_esigi</code>, <code>olcum.sicrama_esigi</code>) aşan ölçüm
+merkezleme'ye yazılmaz; üst üste 3 kez olursa motor durdurulur.</p>
 <p><b>Çerçeve kilidi:</b> "Merkezleme'ye yaz" açıkken ve motor dönerken bobin, hız, referans
 ve gecikme değiştirilemez; merkezleme'nin kalibrasyonu bu çerçevede yapılır.</p>
 <p><b>Günlük:</b> olaylar, uyarılar ve her ölçümün özeti.</p>
@@ -98,8 +100,9 @@ ve gecikme değiştirilemez; merkezleme'nin kalibrasyonu bu çerçevede yapılı
 <li><b>Bağlantı kurulamadı:</b> IP adresini (varsayılan {p.ip}) ve kabloyu kontrol edin.</li>
 <li><b>Rotor ÇEVRİMDIŞI:</b> rotor kartından veri gelmiyor; ölçüm yapılmaz.</li>
 <li><b>Hız oturmuyor:</b> motor sürücüsünü kontrol edin.</li>
-<li><b>Uydurma artığı yüksek:</b> örnek kaybı (RS485/TCP), yanlış kanal, doyma ya da
-enkoder sorunu. Bobin akısı grafiğine bakın.</li>
+<li><b>Ölçüm reddedildi:</b> artık yüksekse yanlış kanal, doyma ya da enkoder sorunu; saat
+sıçraması yüksekse örnek kaybı (RS485/TCP; günlükte RS485 uyarısı var mı?). Bobin akısı
+grafiğine bakın.</li>
 <li><b>Doyma uyarısı:</b> parametre dosyasındaki <code>adc.kazanc</code> değerini düşürün.</li>
 <li><b>Merkezleme zaman aşımına uğruyor:</b> bu pencerede "Merkezleme'ye yaz" açık mı ve motor
 dönüyor mu, kontrol edin.</li>

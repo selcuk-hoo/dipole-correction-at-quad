@@ -71,6 +71,7 @@ class DataEngine:
         self.current_vref = 2.5
         self.adc_status_state = 'ok'
         self.last_adc_error = None
+        self.rs485_error_count = None  # durum paketinden (stator ADC sağlama toplamı hataları)
         self.pending_adc_config = None
         
     # ADS1263 gain table (matches ads1263_types.h ADS1263_GAIN_VALUES)
@@ -299,6 +300,7 @@ class DataEngine:
                     up, spd, enc, ppr, r_on, r_err, ro_err, q_depth = protocol.STRUCT_STATUS.unpack(payload)
                     self.motor_speed = spd
                     self.encoder_ppr = ppr
+                    self.rs485_error_count = r_err  # stator'un attığı bozuk ADC örnekleri
                     self.rotor_online = (r_on != 0)
                     
                 elif pkt_type == protocol.TCP_TYPE_HELLO_ACK:

@@ -49,13 +49,14 @@ from .merkezleme_koprusu import (
     kilide_yaz,
     olcum_hesapla,
     referans_faz_ofseti,
+    saglik_sorunlari,
 )
 
 DURMUS_HIZ_HZ = 0.2
 KANAL_GECIS_S = 0.25  # kanal değişiminden sonra atılan veri süresi
 GECMIS_UZUNLUGU = 20  # ortalama ± σ için tutulan son ölçüm sayısı
 MIN_PENCERE_S = 0.5
-MAX_ARDISIK_RED = 3  # artığı yüksek bu kadar ölçümden sonra durdurulur
+MAX_ARDISIK_RED = 3  # sağlıksız bu kadar ölçümden sonra durdurulur
 
 
 class Durum(enum.Enum):
@@ -101,7 +102,8 @@ class OlcumDongusu:
         self.son_sonuc_zamani: datetime | None = None
         self.olcum_sayisi = 0  # merkezleme'ye yazılan
         self.doyma_uyarisi = False
-        self.artik_uyarisi = False
+        self.saglik: list[str] = []  # son ölçümün sağlık sorunları (boş: sağlıklı)
+        self._rs485_hata_sayisi: int | None = None
         self.gecmis: deque[OlcumSonucu] = deque(maxlen=GECMIS_UZUNLUGU)
         self.kayit = OlcumKaydi(p.kayit_dizini)
         self.csv_kaydet = True
@@ -349,6 +351,7 @@ class OlcumDongusu:
             self.gunluk("Yeniden bağlandı; motor durduruldu, servo kapatıldı.")
 
         self.engine.process_queue(self.conn.rx_queue)
+        self._rs485_hatalarini_izle()
         simdi = self.saat()
 
         if self.durum is Durum.DURDURULUYOR:
@@ -411,7 +414,7 @@ class OlcumDongusu:
         if self._taze_ornek(self._toplama_baslangici) < self.gereken_ornek:
             return
         sonuc = self._olc("merkezleme")
-        if sonuc is None or self._artik_reddi(sonuc):
+        if sonuc is None or self._saglik_reddi(sonuc):
             self._toplama_baslangici = self.engine.total_samples_received
             return
         kilide_yaz(sonuc, self.p.kilit_dosyasi)
@@ -470,19 +473,28 @@ class OlcumDongusu:
             self._tek_istek = None
             self._yarim = None
 
-    def _artik_reddi(self, sonuc: OlcumSonucu) -> bool:
+    def _saglik_reddi(self, sonuc: OlcumSonucu) -> bool:
         """Merkezleme'ye yazılacak ölçüm için sağlık kontrolü."""
-        if sonuc.artik_orani <= self.p.artik_esigi:
+        if not self.saglik:
             self._ardisik_red = 0
             return False
         self._ardisik_red += 1
-        self.gunluk(
-            f"Ölçüm reddedildi: uydurma artığı {sonuc.artik_orani:.1e} > eşik "
-            f"{self.p.artik_esigi:.1e} (açı, kanal, doyma ya da örnek kaybı?)"
-        )
+        self.gunluk("Ölçüm reddedildi: " + "; ".join(self.saglik))
         if self._ardisik_red >= MAX_ARDISIK_RED:
-            self.hata_bildir(f"Üst üste {MAX_ARDISIK_RED} ölçüm reddedildi (uydurma artığı yüksek).")
+            self.hata_bildir(f"Üst üste {MAX_ARDISIK_RED} ölçüm reddedildi ({self.saglik[0]}).")
         return True
+
+    def _rs485_hatalarini_izle(self) -> None:
+        """Stator, ADC sağlama toplamı tutmayan örnekleri atar ve sayar (durum
+        paketi, saniyede bir). Atılan örnek akı integralini bozar; saat
+        sıçraması kontrolü onu ayrıca yakalar, burada yalnızca bildirilir."""
+        sayi = getattr(self.engine, "rs485_error_count", None)
+        if sayi is None:
+            return
+        if self._rs485_hata_sayisi is not None and sayi != self._rs485_hata_sayisi:
+            fark = (sayi - self._rs485_hata_sayisi) % 65536
+            self.gunluk(f"UYARI: stator {fark} bozuk ADC örneği attı (RS485); o andaki ölçüm reddedilebilir.")
+        self._rs485_hata_sayisi = sayi
 
     def _taze_ornek(self, baslangic: int) -> int:
         return self.engine.total_samples_received - baslangic
@@ -530,11 +542,9 @@ class OlcumDongusu:
                 f"UYARI: sinyal tepesi {sonuc.tepe_V * 1e3:.1f} mV, ADC tam ölçeği "
                 f"{self.p.tam_olcek_V * 1e3:.1f} mV; kazancı düşürün."
             )
-        self.artik_uyarisi = sonuc.artik_orani > self.p.artik_esigi
-        if self.artik_uyarisi and tur != "merkezleme":  # merkezleme'de reddedilirken yazılır
-            self.gunluk(
-                f"UYARI: uydurma artığı {sonuc.artik_orani:.1e} > eşik {self.p.artik_esigi:.1e}"
-            )
+        self.saglik = saglik_sorunlari(sonuc, self.p)
+        if self.saglik and tur != "merkezleme":  # merkezleme'de reddedilirken yazılır
+            self.gunluk("UYARI: " + "; ".join(self.saglik))
         if tur not in ("referans", "gecikme"):
             self.gecmis.append(sonuc)
         if self.csv_kaydet:
@@ -571,8 +581,8 @@ class OlcumDongusu:
             self.gunluk("Tek ölçüm: " + ozet(sonuc))
 
     def _gecikmeyi_uygula(self, sonuc: OlcumSonucu) -> None:
-        if sonuc.artik_orani > self.p.artik_esigi:
-            self.gunluk("Gecikme ölçümü kullanılmadı (uydurma artığı yüksek).")
+        if self.saglik:
+            self.gunluk("Gecikme ölçümü kullanılmadı (sağlık sorunu); tekrarlayın.")
             return
         eski, yeni = self.gecikme_s, sonuc.gecikme_s
         self.gecikme_s = yeni

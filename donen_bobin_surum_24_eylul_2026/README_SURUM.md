@@ -34,7 +34,7 @@ Pencere cihaza bağlanır, ADC'yi ayarlar (32×, 7200 SPS, Sinc4, Voltage), seç
 
 **Gecikme ölç (iki yön):** ADC örneği (Sinc4 filtresi) ile enkoder açısı (stator ~1 ms'de bir okur, RS485'le rotora gönderir) arasında sabit bir zaman gecikmesi vardır. Sabit hızda bu yalnızca bir açı ofsetidir (referans giderir); ama tur içi hız dalgalanmasında güçlü n=2'yi n=1/n=3'e karıştırır (simülasyonda 0,5° dalgada ~5 µm, 2° dalgada ~19 µm sahte merkez kayması). Düğme bir pencereyi bu yönde, motoru ters çevirip bir pencereyi öbür yönde alır; gecikme iki yön arasındaki faz farkından bulunur (yöne bağlı mil burulması/boşluk da buna katılır). Ölçülen değer `olcum.gecikme_ms`'e yazılmalıdır; faz ofseti yeni gecikmeye kendiliğinden taşınır. Bilinen gecikmeyle tek yönlü ölçüm, simülasyonda 2° dalgada bile 0,1 µm içindedir.
 
-**Sağlık kontrolü ve çerçeve kilidi:** akı uydurmasının artığı (`olcum.artik_esigi`, varsayılan 5e-3) aşılırsa ölçüm merkezleme'ye yazılmaz; üst üste 3 kez aşılırsa motor durdurulur. "Merkezleme'ye yaz" açıkken bobin, hız, referans ve gecikme değiştirilemez.
+**Sağlık kontrolü ve çerçeve kilidi:** iki ölçüt var: akı uydurmasının artığı (`olcum.artik_esigi`, varsayılan 5e-3) ve okuma saati sıçraması (`olcum.sicrama_esigi`, varsayılan 0.6 örnek). İkincisi örnek kaybını doğrudan yakalar: enkoder okumaları stator saatine bağlı düzenli aralıklarla gelir; bir ADC örneği kaybolursa sonraki bütün okumalar bir örnek kayar (sağlıklı veride ~0.2, tek kayıpta ~1; 7200 SPS'te 10 µs okuma titreşiminde bile sağlıklı değer ≤0.33). Biri aşılırsa ölçüm merkezleme'ye yazılmaz; üst üste 3 kez olursa motor durdurulur. Stator'un attığı bozuk ADC örnekleri (durum paketindeki RS485 sayacı) günlüğe yazılır. "Merkezleme'ye yaz" açıkken bobin, hız, referans ve gecikme değiştirilemez.
 
 ### Fizik
 
@@ -54,9 +54,9 @@ Büyük arayüzün makro sisteminde `MERKEZLEME_OLCUM` komutu aynı hesabı tek 
 4. **İşaret/el kuralı:** mıknatısı (ya da bobini) bilinen bir miktar +x yönünde kaydırın; x_c beklenen işaret ve büyüklükte değişmeli (y için de). Yanlışsa kanal kutupları ya da bobin tipi ters demektir.
 5. **Mutlak ölçek:** bilinen gradyen |C₂|/r_ref ile karşılaştırılır (K₂'yi, dolayısıyla bobin alanını/sarım sayısını doğrular). Merkezin ölçeği K₂/K₁'ye bağlıdır (eksene uzaklık); bunu 4. maddedeki bilinen kaydırma doğrular.
 6. **Referans:** referans sonrası referans mıknatıs b0 > 0, a0 ≈ 0 vermeli; bobin 1 ve bobin 2 (dik) aynı C_n'leri vermeli.
-7. **Artık:** sağlıklı ölçümlerde uydurma artığı ne düzeyde? 5e-3 eşiği gerçek gürültüye göre ayarlanabilir.
+7. **Sağlık ölçütleri:** sağlıklı ölçümlerde pencerede görünen "Artık / saat sıçr." ne düzeyde? Eşikler (5e-3 ve 0.6) gerçek gürültüye göre ayarlanabilir. Reddedilen ölçüm sık geliyorsa günlükte RS485 uyarısı olup olmadığına bakın.
 
-**Bilinen sınırlama (firmware):** örneklerde sıra numarası yok; stator ADC sağlama toplamı tutmayan örnekleri sessizce atıyor (yalnızca durum paketindeki sayaç artıyor) ve PC tarafında kuyruk dolarsa paket düşüyor. Akı integrali kayıpsız örnek varsayar; tek kayıp merkezde birkaç µm hata yapabilir. Şimdilik artık eşiği yakalıyor; kesin çözüm firmware'de örnek sayacı (ve tercihen enkoder okumasının zaman damgası).
+**Bilinen sınırlama (firmware):** örneklerde sıra numarası yok; stator ADC sağlama toplamı tutmayan örnekleri sessizce atıyor (yalnızca durum paketindeki sayaç artıyor) ve PC tarafında kuyruk dolarsa paket düşüyor. Akı integrali kayıpsız örnek varsayar; tek kayıp merkezde birkaç µm hata yapabilir. Okuma saati sıçraması bunu yakalar ve ölçüm reddedilir (onarılmaz). Kesin çözüm firmware'de örnek sayacı (ve tercihen enkoder okumasının zaman damgası).
 
 ### Testler
 

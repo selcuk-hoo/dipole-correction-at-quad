@@ -57,7 +57,7 @@ def test_merkez_merkezleme_simulatoruyle_ayni(p, tip):
     t = np.arange(int(2.03 * SPS)) / SPS
     teta = 2 * math.pi * 23.0 * t + 0.7
     v = bobin_gerilimi(teta, 23.0, c1, c2, bobin, p.r_ref_m) + 3e-4
-    s = mk.olcum_hesapla(np.degrees(teta) % 360, v, 23.0, bobin, p.r_ref_m)
+    s = mk.olcum_hesapla(np.degrees(teta) % 360, v, SPS, bobin, p.r_ref_m)
 
     assert s.c1 == pytest.approx(c1, rel=1e-6)
     assert s.c2 == pytest.approx(c2, rel=1e-6)
@@ -71,7 +71,7 @@ def test_dipol_buyuk_arayuzun_formuluyle_ayni(p):
     t = np.arange(int(2.0 * SPS)) / SPS
     teta = 2 * math.pi * 20.0 * t
     v = bobin_gerilimi(teta, 20.0, c1, 0j, p.bobin, p.r_ref_m)
-    s = mk.olcum_hesapla(np.degrees(teta) % 360, v, 20.0, p.bobin, p.r_ref_m)
+    s = mk.olcum_hesapla(np.degrees(teta) % 360, v, SPS, p.bobin, p.r_ref_m)
 
     # magnetic_analysis.py: finish_scan
     y = v - v.mean()
@@ -91,13 +91,14 @@ def test_ust_harmonikler_ve_birimler(p):
     t = np.arange(int(2.0 * SPS)) / SPS
     teta = 2 * math.pi * 23.0 * t + 1.1
     v = bobin_gerilimi(teta, 23.0, c1, c2, p.bobin, p.r_ref_m, ust) + 5e-4 + 3e-4 * t
-    s = mk.olcum_hesapla(np.degrees(teta) % 360, v, 23.0, p.bobin, p.r_ref_m)
+    s = mk.olcum_hesapla(np.degrees(teta) % 360, v, SPS, p.bobin, p.r_ref_m)
 
     assert len(s.harmonikler) == mk.HARMONIK_SAYISI == 6
     for n, c in ust.items():
         assert s.harmonikler[n - 1] == pytest.approx(c, rel=1e-5), n
-    # Uydurma eğrisi, sürüklenmesi çıkarılmış ham veriyi birebir izlemeli
-    assert np.max(np.abs(s.uydurma(s.aci_derece) - s.gerilim_V)) < 1e-9
+    # Uydurma eğrisi, sürüklenmesi çıkarılmış akıyı birebir izlemeli
+    assert np.max(np.abs(s.uydurma(s.aci_derece) - s.aki_Vs)) < 1e-7 * np.max(np.abs(s.aki_Vs))
+    assert s.artik_orani < 1e-6
 
 
 @pytest.mark.parametrize("yon", [1, -1])
@@ -113,9 +114,9 @@ def test_referans_ofseti_dipolu_saf_normal_yapar(p):
     teta = 2 * math.pi * 23.0 * np.arange(int(2.0 * SPS)) / SPS
     v = bobin_gerilimi(teta, 23.0, c1, 0j, p.bobin, p.r_ref_m)
     aci = np.degrees(teta) % 360
-    s = mk.olcum_hesapla(aci, v, 23.0, p.bobin, p.r_ref_m)
+    s = mk.olcum_hesapla(aci, v, SPS, p.bobin, p.r_ref_m)
     ofset = mk.referans_faz_ofseti(s, 0.0)
-    s2 = mk.olcum_hesapla(aci, v, 23.0, p.bobin, p.r_ref_m, ofset)
+    s2 = mk.olcum_hesapla(aci, v, SPS, p.bobin, p.r_ref_m, ofset)
     assert s2.c1.real > 0
     assert abs(s2.c1.imag) < 1e-9 * abs(s2.c1)
 
@@ -124,6 +125,7 @@ def test_parametreler_ve_tutarlilik(p, tmp_path):
     assert p.bobin.sarim_sayisi == 5 and p.bobin.eksene_uzaklik_m == pytest.approx(0.02)
     assert p.kanallar[p.varsayilan_kanal] == (0, 1)
     assert p.kazanc == 32 and p.ornekleme_sps == 7200 and p.filtre == "Sinc4"
+    assert p.gecikme_s == 0.0 and p.artik_esigi == pytest.approx(5e-3)
     assert mk.tutarlilik_uyarilari(p) == []
 
     kfg = tmp_path / "y.yaml"
@@ -156,6 +158,8 @@ class SahteDunya:
         self.c1, self.c2 = complex(2e-6, -1e-6), complex(1.9e-3, 2e-5)
         self.ust: dict[int, complex] = {}  # n >= 3
         self.gurultu_V = 0.0
+        self.gecikme_s = 0.0  # gerilim örneği açıya göre bu kadar eski
+        self.kayip = 0  # get_latest_data'da silinen örnek sayısı
         self.rng = np.random.default_rng(3)
         self.servo = False
         self.hedef = 0.0
@@ -188,7 +192,7 @@ class SahteDunya:
         if self.gurultu_V:
             v = v + self.rng.normal(0.0, self.gurultu_V, n)
         self.hiz, self.teta = float(hizlar[-1]), float(tetalar[-1])
-        self.aci.extend((np.degrees(tetalar) % 360).tolist())
+        self.aci.extend((np.degrees(tetalar + w * self.gecikme_s) % 360).tolist())
         self.gerilim.extend(v.tolist())
 
 
@@ -238,7 +242,11 @@ class SahteMotor:
         pass
 
     def get_latest_data(self, n):
-        return np.array(self.d.aci[-n:]), np.array(self.d.gerilim[-n:])
+        aci, v = np.array(self.d.aci[-n:]), np.array(self.d.gerilim[-n:])
+        if self.d.kayip:
+            sil = np.linspace(len(v) // 4, 3 * len(v) // 4, self.d.kayip).astype(int)
+            aci, v = np.delete(aci, sil), np.delete(v, sil)
+        return aci, v
 
 
 @pytest.fixture
@@ -341,6 +349,8 @@ def test_surekli_olcum_csv_ve_istatistik(kurulum, p):
 
     satirlar = list(csv.reader(dongu.kayit.yol.open(encoding="utf-8")))
     assert satirlar[0][:3] == ["zaman", "tur", "kanal"] and satirlar[0][-1] == "a6_T"
+    for sutun in ("gecikme_ms", "cift_yon", "artik_orani", "aci_yontemi"):
+        assert sutun in satirlar[0]
     assert len(satirlar) == 1 + 5 and {s[1] for s in satirlar[1:]} == {"surekli"}
     assert dongu.kayit.yol.parent == p.kayit_dizini
 
@@ -465,6 +475,107 @@ def test_makro_yolu(p):
     assert json.loads(p.kilit_dosyasi.read_text()) == s.dosya_verisi()
     assert s.c2 == pytest.approx(dunya.c2, rel=1e-4)
 
+    # Artığı yüksek ölçüm yazılmaz
+    p.kilit_dosyasi.unlink()
+    dunya.kayip = 3
+    with pytest.raises(RuntimeError, match="artığı"):
+        mk.kuadrupol_olcumu_yaz(motor, p)
+    assert not p.kilit_dosyasi.exists()
+
+
+# ---------------------------------------------------------------------------
+# Gecikme (iki yön), çerçeve kilidi, artık eşiği
+# ---------------------------------------------------------------------------
+def test_gecikme_olcumu_motoru_cevirip_gecikmeyi_bulur(kurulum):
+    dunya, dongu, gunluk = kurulum
+    dunya.gecikme_s = 3e-4
+    dongu.otomatik_yaz = False
+    dongu.baglan()
+    dongu.baslat()
+    calistir(dunya, dongu, 5.0)
+    dongu.gecikme_olc()
+    assert dongu.gecikme_olculuyor
+    calistir(dunya, dongu, 2.2)
+    assert dongu._yarim is not None and dunya.hedef == -23.0  # ilk yön alındı, ters çevrildi
+    calistir(dunya, dongu, 10.0)
+    assert not dongu.gecikme_olculuyor and dongu.yon == -1
+    assert dongu.gecikme_s == pytest.approx(3e-4, abs=2e-6)
+    assert "ölçüldü" in dongu.gecikme_kaynagi
+    assert any("gecikme_ms" in m for m in gunluk)  # kalıcı yapma talimatı
+    # Ters yönde de ölçüm doğru
+    dongu.tek_olcum()
+    calistir(dunya, dongu, 2.5)
+    assert dongu.son_sonuc.hiz_hz < 0
+    assert dongu.son_sonuc.c2 == pytest.approx(dunya.c2, rel=1e-4)
+
+
+def test_gecikme_olcumu_referans_ofsetini_tasir(kurulum):
+    """Referans gecikme bilinmeden (0) alınmış olsun. Gecikme ölçülünce faz
+    ofseti taşınmalı: ters yönde de referans dipol saf normal görünmeli.
+    Taşınmasaydı 23 Hz ve 0.3 ms'de 2 x 2.5° hata olurdu."""
+    dunya, dongu, _ = kurulum
+    dunya.gecikme_s = 3e-4
+    dunya.c1, dunya.c2 = 3e-4 * np.exp(1j * math.radians(-120.0)), 0j
+    dongu.otomatik_yaz = False
+    dongu.baglan()
+    dongu.baslat()
+    calistir(dunya, dongu, 5.0)
+    dongu.tek_olcum(referans=True)
+    calistir(dunya, dongu, 2.5)
+    dongu.gecikme_olc()
+    calistir(dunya, dongu, 14.0)
+    assert dongu.yon == -1 and dongu.gecikme_s == pytest.approx(3e-4, abs=2e-6)
+    dongu.tek_olcum()
+    calistir(dunya, dongu, 2.5)
+    c1 = dongu.son_sonuc.c1
+    assert c1.real > 0 and abs(c1.imag) < 2e-4 * abs(c1)
+
+
+def test_gecikme_olcumu_kanal_degisince_iptal(kurulum):
+    dunya, dongu, _ = kurulum
+    dongu.otomatik_yaz = False
+    dongu.baglan()
+    dongu.baslat()
+    calistir(dunya, dongu, 5.0)
+    dongu.gecikme_olc()
+    calistir(dunya, dongu, 2.2)
+    dongu.kanal_sec("Düz bobin 2 (AIN4-AIN5)")
+    assert not dongu.gecikme_olculuyor and dongu._yarim is None
+
+
+def test_merkezlemeye_yazarken_cerceve_kilitli(kurulum):
+    dunya, dongu, gunluk = kurulum
+    dongu.baglan()
+    dongu.baslat()
+    calistir(dunya, dongu, 6.0)
+    assert dongu.cerceve_kilitli
+    assert not dongu.kanal_sec("Düz bobin 2 (AIN4-AIN5)")
+    assert dongu.kanal == "Düz bobin 1 (AIN0-AIN1)" and dunya.kanal == (0, 1)
+    assert dongu.hiz_ayarla(10.0) == 23.0 and dunya.hedef == 23.0
+    dongu.tek_olcum(referans=True)
+    dongu.gecikme_olc()
+    assert dongu._tek_istek is None
+    assert sum("yapılamaz" in m for m in gunluk) == 4
+    # Yazma kapatılınca değiştirilebilir; geri açılınca çerçeve farkı uyarılır
+    calistir(dunya, dongu, 3.0)
+    assert dongu.olcum_sayisi >= 1
+    dongu.otomatik_yaz_ayarla(False)
+    assert dongu.kanal_sec("Düz bobin 2 (AIN4-AIN5)") and dunya.kanal == (4, 5)
+    dongu.otomatik_yaz_ayarla(True)
+    assert "UYARI: ölçüm çerçevesi" in gunluk[-1]
+
+
+def test_artigi_yuksek_olcum_merkezlemeye_yazilmaz(kurulum, p):
+    dunya, dongu, gunluk = kurulum
+    dunya.kayip = 30  # örnek kaybı: akı integrali bozulur
+    dongu.baglan()
+    dongu.baslat()
+    calistir(dunya, dongu, 6.0 + 2.1 * 3)
+    assert not p.kilit_dosyasi.exists() and dongu.olcum_sayisi == 0
+    assert sum(m.startswith("Ölçüm reddedildi") for m in gunluk) == 3
+    assert dongu.durum in (Durum.DURDURULUYOR, Durum.HATA) and "artığı" in dongu.hata_metni
+    assert dongu.artik_uyarisi
+
 
 # ---------------------------------------------------------------------------
 # Pencere (ekransız)
@@ -525,7 +636,11 @@ def test_pencere_duman(kurulum, p, monkeypatch):
     assert g["cubuk"].opts["y1"][1] == pytest.approx(
         np.log10(abs(dunya.c2) / abs(dunya.c1)), abs=0.01
     )
-    assert pencere.sekmeler.tabText(1) == "Bobin gerilimi"
+    assert pencere.sekmeler.tabText(1) == "Bobin akısı"
+    assert "ms" in pencere.lbl_gecikme.text() and "eşik" in pencere.lbl_artik.text()
+    # Merkezleme'ye yazarken çerçeve denetimleri kilitli
+    assert not pencere.cb_kanal.isEnabled() and not pencere.btn_ref.isEnabled()
+    assert not pencere.btn_gecikme.isEnabled()
     # Yardım: parametrelerden doldurulmuş metin, kipsiz pencere
     pencere.btn_yardim.click()
     yardim = pencere.yardim_penceresi.metin.toPlainText()
@@ -540,6 +655,9 @@ def test_pencere_duman(kurulum, p, monkeypatch):
         dunya.ilerle(0.05)
         pencere._tick()
     assert pencere.dongu.durum is Durum.DONUYOR
+    assert pencere.cb_kanal.isEnabled() and pencere.btn_gecikme.isEnabled()
+    x, y = pencere.ham_noktalar.getData()
+    assert np.max(np.abs(y)) == pytest.approx(np.max(np.abs(pencere.dongu.son_sonuc.aki_Vs)) * 1e6, rel=0.05)
     # Kapanışta gerçek saatle beklenir; sahte motor yavaşlamasa da zaman
     # aşımından sonra servo kapatılmalı.
     import time as _time

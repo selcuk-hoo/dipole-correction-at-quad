@@ -15,6 +15,15 @@ Döngü (otomatik yazma açıkken):
 
 Kilit silinmeden önceki örnekler kullanılmaz; çünkü merkezleme kilidi yeni
 akımlar oturduktan sonra siler.
+
+Ölçüm çerçevesi (kanal, faz ofseti, gecikme, dönüş yönü, hız) merkezleme'ye
+yazılırken değiştirilemez: merkezleme'nin kalibrasyonu bu çerçevede yapılır;
+yarıda değişirse düzeltmeler yanlış yöne gider.
+
+Gecikme ölçümü (iki yön): bir pencere bu yönde, motor ters çevrilip bir
+pencere öbür yönde alınır; iki yön arasındaki faz farkından ADC ile enkoder
+arasındaki sabit zaman gecikmesi bulunur ve sonraki tek yönlü ölçümlerde
+uygulanır (bkz. merkezleme_koprusu.cift_yon_birlestir).
 """
 from __future__ import annotations
 
@@ -36,6 +45,7 @@ from .merkezleme_koprusu import (
     OlcumKaydi,
     OlcumSonucu,
     Parametreler,
+    cift_yon_hesapla,
     kilide_yaz,
     olcum_hesapla,
     referans_faz_ofseti,
@@ -45,6 +55,7 @@ DURMUS_HIZ_HZ = 0.2
 KANAL_GECIS_S = 0.25  # kanal değişiminden sonra atılan veri süresi
 GECMIS_UZUNLUGU = 20  # ortalama ± σ için tutulan son ölçüm sayısı
 MIN_PENCERE_S = 0.5
+MAX_ARDISIK_RED = 3  # artığı yüksek bu kadar ölçümden sonra durdurulur
 
 
 class Durum(enum.Enum):
@@ -82,11 +93,15 @@ class OlcumDongusu:
         self.hedef_hiz_hz = p.hiz_hz
         self.pencere_s = p.pencere_s
         self.faz_ofseti_derece = p.faz_ofseti_derece
+        self.gecikme_s = p.gecikme_s
+        self.gecikme_kaynagi = "parametre dosyası"
+        self.yon = 1  # motor hız komutunun işareti
         self.otomatik_yaz = True
         self.son_sonuc: OlcumSonucu | None = None
         self.son_sonuc_zamani: datetime | None = None
         self.olcum_sayisi = 0  # merkezleme'ye yazılan
         self.doyma_uyarisi = False
+        self.artik_uyarisi = False
         self.gecmis: deque[OlcumSonucu] = deque(maxlen=GECMIS_UZUNLUGU)
         self.kayit = OlcumKaydi(p.kayit_dizini)
         self.csv_kaydet = True
@@ -96,12 +111,40 @@ class OlcumDongusu:
         self._toplama_baslangici = 0
         self._surekli_baslangici = 0
         self._durdurma_zamani = 0.0
-        self._tek_istek: str | None = None  # "tek" | "referans"
+        self._tek_istek: str | None = None  # "tek" | "referans" | "gecikme"
         self._tek_baslangici = 0
+        self._yarim: tuple[np.ndarray, np.ndarray] | None = None  # gecikme ölçümünün ilk yönü
+        self._beklenen_isaret: float | None = None  # ters çevirmeden sonra ölçülen hızın işareti
+        self._referans_hizi_hz: float | None = None  # referans alınırken (işaretli)
+        self._ardisik_red = 0
+        self._yazim_cercevesi: tuple | None = None
 
     @property
     def donuyor(self) -> bool:
         return self.durum in _DONUYOR
+
+    @property
+    def cerceve(self) -> tuple:
+        """Merkezleme'ye yazılan ölçümlerin karşılaştırılabilir olması için
+        sabit kalması gerekenler."""
+        return (self.kanal, self.faz_ofseti_derece, self.gecikme_s, self.yon, self.hedef_hiz_hz)
+
+    @property
+    def cerceve_kilitli(self) -> bool:
+        return self.otomatik_yaz and self.donuyor
+
+    @property
+    def gecikme_olculuyor(self) -> bool:
+        return self._tek_istek == "gecikme"
+
+    def _kilitli_mi(self, eylem: str) -> bool:
+        if self.cerceve_kilitli:
+            self.gunluk(
+                f"{eylem}: merkezleme'ye yazılırken yapılamaz (ölçüm çerçevesi değişir). "
+                "Önce 'Merkezleme'ye yaz'ı kapatın."
+            )
+            return True
+        return False
 
     @property
     def gereken_ornek(self) -> int:
@@ -166,9 +209,27 @@ class OlcumDongusu:
             self.gunluk("Bağlantı kesildi.")
         self.durum = Durum.BAGLI_DEGIL
 
-    def kanal_sec(self, ad: str) -> None:
+    def otomatik_yaz_ayarla(self, acik: bool) -> bool:
+        if acik and self.gecikme_olculuyor:
+            self.gunluk("Gecikme ölçümü sürerken merkezleme'ye yazma açılamaz.")
+            return False
+        self.otomatik_yaz = acik
+        self.gunluk("Merkezleme'ye otomatik yazma " + ("açık." if acik else "kapalı."))
+        if acik and self._yazim_cercevesi not in (None, self.cerceve):
+            self.gunluk(
+                "UYARI: ölçüm çerçevesi (kanal/faz ofseti/gecikme/yön/hız) önceki yazımlardan "
+                "farklı. Merkezleme yarıda ise kalibrasyonu geçersiz olabilir; yeniden başlatın."
+            )
+        return True
+
+    def kanal_sec(self, ad: str) -> bool:
         if ad not in self.p.kanallar:
             raise ValueError(f"Bilinmeyen kanal: {ad}")
+        if ad == self.kanal:
+            return True
+        if self._kilitli_mi("Kanal değiştirme"):
+            return False
+        self._gecikme_olcumunu_iptal_et("kanal değişti")
         self.kanal = ad
         if self.conn.connected and self.durum is not Durum.BAGLI_DEGIL:
             self._kanal_gonder()
@@ -179,19 +240,25 @@ class OlcumDongusu:
         self._tek_baslangici = gecis
         self._surekli_baslangici = gecis
         self.gecmisi_sifirla()
+        return True
 
     def hiz_ayarla(self, hz: float) -> float:
+        """Hız büyüklüğü (Hz); yön `self.yon`'dadır. Dönen değer geçerli hedef."""
         hz = max(0.0, min(float(hz), self.p.max_hiz_hz))
         degisti = hz != self.hedef_hiz_hz
-        self.hedef_hiz_hz = hz
         if self.donuyor and degisti:
+            if self._kilitli_mi("Hız değiştirme"):
+                return self.hedef_hiz_hz
+            self._gecikme_olcumunu_iptal_et("hız değişti")
+            self.hedef_hiz_hz = hz
             self.gecmisi_sifirla()
             if hz <= 0:
                 self.durdur()
             else:
-                self.conn.send_command(protocol.CMD_SET_MOTOR_SPEED, float(hz))
+                self._hiz_gonder()
                 self.gunluk(f"Hız: {hz:g} Hz")
                 self._hiz_bekle()
+        self.hedef_hiz_hz = hz
         return hz
 
     def baslat(self) -> None:
@@ -202,9 +269,11 @@ class OlcumDongusu:
             return
         self.hata_metni = ""
         self.gecmisi_sifirla()
+        self._beklenen_isaret = None
+        self._ardisik_red = 0
         self.conn.send_command(protocol.CMD_SET_SERVO, 1)
-        self.conn.send_command(protocol.CMD_SET_MOTOR_SPEED, float(self.hedef_hiz_hz))
-        self.gunluk(f"Motor başlatıldı: {self.hedef_hiz_hz:g} Hz")
+        self._hiz_gonder()
+        self.gunluk(f"Motor başlatıldı: {self.yon * self.hedef_hiz_hz:+g} Hz")
         self._hiz_bekle()
 
     def durdur(self) -> None:
@@ -219,9 +288,28 @@ class OlcumDongusu:
         if not self.donuyor:
             self.gunluk("Önce motoru başlatın.")
             return
+        if referans and self._kilitli_mi("Referans"):
+            return
+        if self.gecikme_olculuyor:
+            self.gunluk("Gecikme ölçümü sürüyor; bitince tekrar deneyin.")
+            return
         self._tek_istek = "referans" if referans else "tek"
         self._tek_baslangici = self.engine.total_samples_received
         self.gunluk("Referans ölçümü alınıyor..." if referans else "Tek ölçüm alınıyor...")
+
+    def gecikme_olc(self) -> None:
+        """İki yönlü ölçümle ADC-enkoder gecikmesini ölç (motor bir kez ters
+        döner). Sonraki ölçümler bu gecikmeyle analiz edilir; faz ofseti
+        yeni gecikmeye taşınır."""
+        if not self.donuyor:
+            self.gunluk("Önce motoru başlatın.")
+            return
+        if self._kilitli_mi("Gecikme ölçümü") or self.gecikme_olculuyor:
+            return
+        self._tek_istek = "gecikme"
+        self._yarim = None
+        self._tek_baslangici = self.engine.total_samples_received
+        self.gunluk("Gecikme ölçümü: önce bu yönde, sonra ters yönde birer pencere...")
 
     def guvenli_durdur(self, bekle: Callable[[float], None] = time.sleep) -> None:
         """Bloklayarak: motoru durdur, durmasını bekle, servoyu kapat."""
@@ -236,6 +324,7 @@ class OlcumDongusu:
             bekle(0.1)
         self.conn.send_command(protocol.CMD_SET_SERVO, 0)
         self._tek_istek = None
+        self._yarim = None
         if self.durum is not Durum.BAGLI_DEGIL:
             self.durum = Durum.HAZIR
 
@@ -322,10 +411,11 @@ class OlcumDongusu:
         if self._taze_ornek(self._toplama_baslangici) < self.gereken_ornek:
             return
         sonuc = self._olc("merkezleme")
-        if sonuc is None:
+        if sonuc is None or self._artik_reddi(sonuc):
             self._toplama_baslangici = self.engine.total_samples_received
             return
         kilide_yaz(sonuc, self.p.kilit_dosyasi)
+        self._yazim_cercevesi = self.cerceve
         self.olcum_sayisi += 1
         self.gunluk(f"Ölçüm #{self.olcum_sayisi} yazıldı: " + ozet(sonuc))
         self.durum = Durum.KILIT_BEKLENIYOR
@@ -352,12 +442,47 @@ class OlcumDongusu:
         pos, neg = self.p.kanallar[self.kanal]
         self.conn.send_command(protocol.CMD_SET_SCAN_CHANNELS, (pos << 8) | neg)
 
+    def _hiz_gonder(self) -> None:
+        self.conn.send_command(protocol.CMD_SET_MOTOR_SPEED, float(self.yon * self.hedef_hiz_hz))
+
     def _hiz_bekle(self) -> None:
         self._hiz_oturdu_zamani = None
         self.durum = Durum.HIZ_BEKLENIYOR
 
     def _hiz_tamam(self) -> bool:
-        return abs(abs(self.engine.motor_speed) - self.hedef_hiz_hz) <= self.p.hiz_toleransi_hz
+        hiz = self.engine.motor_speed
+        if self._beklenen_isaret is not None and hiz * self._beklenen_isaret <= 0:
+            return False  # ters çevirme henüz bitmedi (durum paketi gecikmeli gelir)
+        return abs(abs(hiz) - self.hedef_hiz_hz) <= self.p.hiz_toleransi_hz
+
+    def _yonu_cevir(self) -> None:
+        isaret = math.copysign(1.0, self.engine.motor_speed)
+        self.yon = -self.yon
+        self._beklenen_isaret = -isaret
+        self._hiz_gonder()
+        self.gunluk(f"Motor ters çevriliyor: {self.yon * self.hedef_hiz_hz:+g} Hz")
+        self._hiz_bekle()
+
+    def _gecikme_olcumunu_iptal_et(self, neden: str) -> None:
+        if self.gecikme_olculuyor:
+            self.gunluk(f"Gecikme ölçümü iptal edildi ({neden}).")
+        if self.gecikme_olculuyor or self._yarim is not None:
+            self._tek_istek = None
+            self._yarim = None
+
+    def _artik_reddi(self, sonuc: OlcumSonucu) -> bool:
+        """Merkezleme'ye yazılacak ölçüm için sağlık kontrolü."""
+        if sonuc.artik_orani <= self.p.artik_esigi:
+            self._ardisik_red = 0
+            return False
+        self._ardisik_red += 1
+        self.gunluk(
+            f"Ölçüm reddedildi: uydurma artığı {sonuc.artik_orani:.1e} > eşik "
+            f"{self.p.artik_esigi:.1e} (açı, kanal, doyma ya da örnek kaybı?)"
+        )
+        if self._ardisik_red >= MAX_ARDISIK_RED:
+            self.hata_bildir(f"Üst üste {MAX_ARDISIK_RED} ölçüm reddedildi (uydurma artığı yüksek).")
+        return True
 
     def _taze_ornek(self, baslangic: int) -> int:
         return self.engine.total_samples_received - baslangic
@@ -366,20 +491,34 @@ class OlcumDongusu:
         self.conn.send_command(protocol.CMD_SET_MOTOR_SPEED, 0.0)
         self._durdurma_zamani = self.saat()
         self._tek_istek = None
+        self._yarim = None
         self.durum = Durum.DURDURULUYOR
 
-    def _olc(self, tur: str) -> OlcumSonucu | None:
-        """Son `pencere_s` verisinden ölç; başarılıysa göster, geçmişe ve
-        CSV'ye ekle. `tur`: merkezleme | surekli | tek | referans."""
+    def _son_veri(self) -> tuple[np.ndarray, np.ndarray] | None:
         if self.engine.current_data_mode != 1:
             self.hata_bildir("Cihaz Voltage kipinde değil; ölçüm yapılamadı.")
             return None
         aci, gerilim = self.engine.get_latest_data(self.gereken_ornek)
+        return np.array(aci, dtype=np.float64), np.array(gerilim, dtype=np.float64)
+
+    def _olc(self, tur: str, ilk_yon: tuple[np.ndarray, np.ndarray] | None = None) -> OlcumSonucu | None:
+        """Son `pencere_s` verisinden ölç; başarılıysa göster, geçmişe ve
+        CSV'ye ekle. `tur`: merkezleme | surekli | tek | referans | gecikme.
+        `ilk_yon` verilirse (öbür yöndeki veri) çift yönlü ölçülür."""
+        veri = self._son_veri()
+        if veri is None:
+            return None
         try:
-            sonuc = olcum_hesapla(
-                aci, gerilim, self.engine.motor_speed, self.p.bobin, self.p.r_ref_m,
-                self.faz_ofseti_derece,
-            )
+            if ilk_yon is None:
+                sonuc = olcum_hesapla(
+                    *veri, self.p.ornekleme_sps, self.p.bobin, self.p.r_ref_m,
+                    self.faz_ofseti_derece, gecikme_s=self.gecikme_s,
+                )
+            else:
+                sonuc = cift_yon_hesapla(
+                    ilk_yon, veri, self.p.ornekleme_sps, self.p.bobin, self.p.r_ref_m,
+                    self.faz_ofseti_derece, gecikme_s=self.gecikme_s,
+                )
         except ValueError as hata:
             self.gunluk(f"Ölçüm hesaplanamadı: {hata}")
             return None
@@ -391,7 +530,12 @@ class OlcumDongusu:
                 f"UYARI: sinyal tepesi {sonuc.tepe_V * 1e3:.1f} mV, ADC tam ölçeği "
                 f"{self.p.tam_olcek_V * 1e3:.1f} mV; kazancı düşürün."
             )
-        if tur != "referans":
+        self.artik_uyarisi = sonuc.artik_orani > self.p.artik_esigi
+        if self.artik_uyarisi and tur != "merkezleme":  # merkezleme'de reddedilirken yazılır
+            self.gunluk(
+                f"UYARI: uydurma artığı {sonuc.artik_orani:.1e} > eşik {self.p.artik_esigi:.1e}"
+            )
+        if tur not in ("referans", "gecikme"):
             self.gecmis.append(sonuc)
         if self.csv_kaydet:
             try:
@@ -404,17 +548,53 @@ class OlcumDongusu:
     def _tek_istegi_isle(self) -> None:
         if self._tek_istek is None or self._taze_ornek(self._tek_baslangici) < self.gereken_ornek:
             return
+        if self._tek_istek == "gecikme" and self._yarim is None:
+            # İlk yön: veriyi sakla, motoru ters çevir; hız oturunca ikinci pencere
+            self._yarim = self._son_veri()
+            if self._yarim is not None:
+                self._yonu_cevir()
+            return
         istek, self._tek_istek = self._tek_istek, None
-        sonuc = self._olc(istek)
+        ilk_yon, self._yarim = self._yarim, None
+        sonuc = self._olc(istek, ilk_yon)
         if sonuc is None:
             return
         if istek == "referans":
             eski = self.faz_ofseti_derece
             self.faz_ofseti_derece = referans_faz_ofseti(sonuc, eski)
+            self._referans_hizi_hz = sonuc.hiz_hz
             self.gecmisi_sifirla()
             self.gunluk(f"Faz ofseti: {eski:.2f}° -> {self.faz_ofseti_derece:.2f}°")
+        elif istek == "gecikme":
+            self._gecikmeyi_uygula(sonuc)
         else:
             self.gunluk("Tek ölçüm: " + ozet(sonuc))
+
+    def _gecikmeyi_uygula(self, sonuc: OlcumSonucu) -> None:
+        if sonuc.artik_orani > self.p.artik_esigi:
+            self.gunluk("Gecikme ölçümü kullanılmadı (uydurma artığı yüksek).")
+            return
+        eski, yeni = self.gecikme_s, sonuc.gecikme_s
+        self.gecikme_s = yeni
+        self.gecikme_kaynagi = f"ölçüldü, {abs(sonuc.hiz_hz):.1f} Hz"
+        self.gecmisi_sifirla()
+        self.gunluk(
+            f"Gecikme: {eski * 1e3:.4f} ms -> {yeni * 1e3:.4f} ms. Kalıcı yapmak için "
+            f"merkezleme_olcer.yaml -> olcum.gecikme_ms: {yeni * 1e3:.4f}"
+        )
+        if self._referans_hizi_hz is not None:
+            # Referansta açı ω_ref·L_eski kadar geri kaydırılmıştı; aynı çerçeve için
+            # faz ofseti ω_ref·(L_yeni - L_eski) kadar azaltılır.
+            eski_ofset = self.faz_ofseti_derece
+            self.faz_ofseti_derece = (
+                eski_ofset - 360.0 * self._referans_hizi_hz * (yeni - eski)
+            ) % 360.0
+            self.gunluk(
+                f"Faz ofseti yeni gecikmeye taşındı: {eski_ofset:.3f}° -> {self.faz_ofseti_derece:.3f}°"
+            )
+        else:
+            self.gunluk("Faz ofseti bu oturumda referansla ayarlanmadı; referansı yeniden alın.")
+        self.gunluk("Çift yönlü ölçüm: " + ozet(sonuc))
 
     def hata_bildir(self, metin: str) -> None:
         """Hata: motor dönüyorsa ve bağlantı varsa güvenli şekilde durdur."""

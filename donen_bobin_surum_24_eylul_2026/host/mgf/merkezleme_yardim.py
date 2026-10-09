@@ -37,6 +37,12 @@ cihaza gönderilir.</li>
 <li><b>Referans mıknatısla sıfırla</b> — enkoderin sıfırı cihaz her açıldığında değişir.
 Referans dipol mıknatısı takılıyken basın: onun alanı saf normal ve pozitif
 (b0 &gt; 0, a0 = 0) görünecek şekilde faz ofseti ayarlanır.</li>
+<li><b>Gecikme ölç (iki yön)</b> — ADC örneği ile enkoder açısı arasında sabit bir zaman
+gecikmesi vardır; bilinmezse hız dalgalanması n = 2'yi n = 1'e karıştırır (µm'ler).
+"Merkezleme'ye yaz" kapalıyken basın: bir pencere bu yönde, motor ters çevrilip bir
+pencere öbür yönde alınır ve gecikme bulunur. Ölçülen değeri günlükte yazdığı gibi
+parametre dosyasına (<code>olcum.gecikme_ms</code>) yazın; donanım değişmedikçe sabittir.
+Faz ofseti yeni gecikmeye kendiliğinden taşınır.</li>
 <li><b>Merkezleme için:</b> "Merkezleme'ye yaz" açıkken depo kökünde
 <code>python -m merkezleme --dosyadan</code> (yarı otomatik) ya da
 <code>--otomatik --dosyadan --canli</code> (tam otomatik) çalıştırın.</li>
@@ -78,9 +84,13 @@ uyarı verilir.</p>
 Hata çubuğu çubuktan uzunsa o terim gürültünün altındadır.</li>
 <li>Bu bobin n = 6'ya az, n = 7'ye neredeyse hiç duyarlı değildir.</li>
 </ul>
-<p><b>Bobin gerilimi:</b> son ölçüm penceresindeki gerilim, enkoder açısına göre (turlar üst
-üste); çizgi, uydurulan harmoniklerin toplamıdır. Noktalar çizgiye oturmalıdır. Düzleşmiş
-tepeler ADC doymasını gösterir.</p>
+<p><b>Bobin akısı:</b> son ölçüm penceresinde bobinden geçen akı (gerilimin zaman
+integrali), enkoder açısına göre (turlar üst üste); çizgi, uydurulan harmoniklerin
+toplamıdır. Noktalar çizgiye oturmalıdır. Sayısal karşılığı <i>uydurma artığı</i>dır:
+sağlıklı ölçümde ~1e-4..1e-3; eşiği (<code>olcum.artik_esigi</code>) aşan ölçüm
+merkezleme'ye yazılmaz, üst üste 3 kez aşılırsa motor durdurulur.</p>
+<p><b>Çerçeve kilidi:</b> "Merkezleme'ye yaz" açıkken ve motor dönerken bobin, hız, referans
+ve gecikme değiştirilemez; merkezleme'nin kalibrasyonu bu çerçevede yapılır.</p>
 <p><b>Günlük:</b> olaylar, uyarılar ve her ölçümün özeti.</p>
 
 <h3>Sorun giderme</h3>
@@ -88,6 +98,8 @@ tepeler ADC doymasını gösterir.</p>
 <li><b>Bağlantı kurulamadı:</b> IP adresini (varsayılan {p.ip}) ve kabloyu kontrol edin.</li>
 <li><b>Rotor ÇEVRİMDIŞI:</b> rotor kartından veri gelmiyor; ölçüm yapılmaz.</li>
 <li><b>Hız oturmuyor:</b> motor sürücüsünü kontrol edin.</li>
+<li><b>Uydurma artığı yüksek:</b> örnek kaybı (RS485/TCP), yanlış kanal, doyma ya da
+enkoder sorunu. Bobin akısı grafiğine bakın.</li>
 <li><b>Doyma uyarısı:</b> parametre dosyasındaki <code>adc.kazanc</code> değerini düşürün.</li>
 <li><b>Merkezleme zaman aşımına uğruyor:</b> bu pencerede "Merkezleme'ye yaz" açık mı ve motor
 dönüyor mu, kontrol edin.</li>

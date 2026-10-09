@@ -32,15 +32,31 @@ Pencere cihaza bağlanır, ADC'yi ayarlar (32×, 7200 SPS, Sinc4, Voltage), seç
 
 **Referans mıknatısla sıfırla:** enkoderin sıfırı her açılışta değişir. Referans dipol mıknatısı takılıyken bu düğmeye basılınca faz ofseti, o alan saf normal ve pozitif (b0 > 0, a0 = 0) görünecek şekilde ayarlanır. Bu yalnızca raporlanan x/y yönlerini belirler; düzeltmenin yakınsamasını etkilemez.
 
+**Gecikme ölç (iki yön):** ADC örneği (Sinc4 filtresi) ile enkoder açısı (stator ~1 ms'de bir okur, RS485'le rotora gönderir) arasında sabit bir zaman gecikmesi vardır. Sabit hızda bu yalnızca bir açı ofsetidir (referans giderir); ama tur içi hız dalgalanmasında güçlü n=2'yi n=1/n=3'e karıştırır (simülasyonda 0,5° dalgada ~5 µm, 2° dalgada ~19 µm sahte merkez kayması). Düğme bir pencereyi bu yönde, motoru ters çevirip bir pencereyi öbür yönde alır; gecikme iki yön arasındaki faz farkından bulunur (yöne bağlı mil burulması/boşluk da buna katılır). Ölçülen değer `olcum.gecikme_ms`'e yazılmalıdır; faz ofseti yeni gecikmeye kendiliğinden taşınır. Bilinen gecikmeyle tek yönlü ölçüm, simülasyonda 2° dalgada bile 0,1 µm içindedir.
+
+**Sağlık kontrolü ve çerçeve kilidi:** akı uydurmasının artığı (`olcum.artik_esigi`, varsayılan 5e-3) aşılırsa ölçüm merkezleme'ye yazılmaz; üst üste 3 kez aşılırsa motor durdurulur. "Merkezleme'ye yaz" açıkken bobin, hız, referans ve gecikme değiştirilemez.
+
 ### Fizik
 
-`host/mgf/merkezleme_koprusu.py` bobin gerilimini enkoder açısına göre en küçük kareler ile harmoniklere ayırır (sabit + sürüklenme + 1..6. harmonik; güçlü n=2'nin zayıf n=1'e sızmaması için) ve bobin geometrisinden (5 sarım, 100×20 mm, eksene 20 mm, teğet) her mertebenin duyarlılığını hesaplayarak C₁..C₆'yı Tesla cinsinden, merkezleme'nin konvansiyonunda (r_ref = 25 mm) verir. Bu sayede merkez `z_c = −r_ref·C₁/C₂` gerçek uzunluk biriminde çıkar; ADC/elektronik kazanç hatası iki harmoniği aynı oranda etkilediğinden merkezi değiştirmez. n=1 sonucu `magnetic_analysis.py`'deki Bx/By formülüyle birebir aynıdır (testle doğrulanmıştır).
+`host/mgf/merkezleme_koprusu.py` bobin gerilimini zamana göre integre ederek akıyı bulur (Φ = −∫V dt, yamuk kuralı; yamuk kuralının harmonik başına küçük kazanç hatası düzeltilir) ve akıyı enkoder açısına göre en küçük kareler ile harmoniklere ayırır (sabit + zaman polinomu + 1..15. harmonik; 1..6 raporlanır). Hız hiç kullanılmaz: dönüş yönü ve hız dalgalanması sonucu etkilemez; tek koşul ADC örneklerinin zamanda düzgün ve kayıpsız olmasıdır. Enkoder açısındaki ~1 ms'lik merdiven, taze okumaların düzenli okuma saatine oturtulması ve kübik enterpolasyonla giderilir. Bobin geometrisinden (5 sarım, 100×20 mm, eksene 20 mm, teğet) her mertebenin duyarlılığını hesaplayarak C₁..C₆'yı Tesla cinsinden, merkezleme'nin konvansiyonunda (r_ref = 25 mm) verir. Bu sayede merkez `z_c = −r_ref·C₁/C₂` gerçek uzunluk biriminde çıkar; ADC/elektronik kazanç hatası iki harmoniği aynı oranda etkilediğinden merkezi değiştirmez. n=1 sonucu `magnetic_analysis.py`'deki Bx/By formülüyle birebir aynıdır (testle doğrulanmıştır).
 
 Bütün sayılar `merkezleme_olcer.yaml`'dadır. Açılışta `r_ref` ve birimin merkezleme yapılandırmasıyla tutarlılığı kontrol edilir.
 
 ### Makro komutu
 
 Büyük arayüzün makro sisteminde `MERKEZLEME_OLCUM` komutu aynı hesabı tek seferlik yapar ("Merkezleme Kuadrupol Olcumu" hazır makrosu). Sürekli otomatik ölçüm için minimal pencere tercih edilmelidir.
+
+### Lab doğrulama planı
+
+1. **Tekrarlanabilirlik:** sürekli ölçümde x_c, y_c saçılımı; ölçüm süresini 2 → 8 s yapınca ~2 kat azalmalı.
+2. **Gecikme:** "Gecikme ölç" iki-üç kez; değerler birbirine µs düzeyinde yakın olmalı (beklenen ~0,1–0,3 ms). `olcum.gecikme_ms`'e yazın.
+3. **Yön karşılaştırması:** gecikme ayarlıyken aynı alanı +23 ve −23 Hz'de ölçün (Gecikme ölç sonrası motor ters yönde kalır); C₁..C₆ yön içinde ve yönler arasında aynı olmalı.
+4. **İşaret/el kuralı:** mıknatısı (ya da bobini) bilinen bir miktar +x yönünde kaydırın; x_c beklenen işaret ve büyüklükte değişmeli (y için de). Yanlışsa kanal kutupları ya da bobin tipi ters demektir.
+5. **Mutlak ölçek:** bilinen gradyen |C₂|/r_ref ile karşılaştırılır (K₂'yi, dolayısıyla bobin alanını/sarım sayısını doğrular). Merkezin ölçeği K₂/K₁'ye bağlıdır (eksene uzaklık); bunu 4. maddedeki bilinen kaydırma doğrular.
+6. **Referans:** referans sonrası referans mıknatıs b0 > 0, a0 ≈ 0 vermeli; bobin 1 ve bobin 2 (dik) aynı C_n'leri vermeli.
+7. **Artık:** sağlıklı ölçümlerde uydurma artığı ne düzeyde? 5e-3 eşiği gerçek gürültüye göre ayarlanabilir.
+
+**Bilinen sınırlama (firmware):** örneklerde sıra numarası yok; stator ADC sağlama toplamı tutmayan örnekleri sessizce atıyor (yalnızca durum paketindeki sayaç artıyor) ve PC tarafında kuyruk dolarsa paket düşüyor. Akı integrali kayıpsız örnek varsayar; tek kayıp merkezde birkaç µm hata yapabilir. Şimdilik artık eşiği yakalıyor; kesin çözüm firmware'de örnek sayacı (ve tercihen enkoder okumasının zaman damgası).
 
 ### Testler
 

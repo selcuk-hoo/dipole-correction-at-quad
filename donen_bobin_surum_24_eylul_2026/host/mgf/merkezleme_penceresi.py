@@ -45,7 +45,7 @@ OLCEKLER = {
     "n1": ("n = 1'e göre", 1, "|C_n| / |C₁|"),
     "n2": ("n = 2'ye göre", 2, "|C_n| / |C₂|"),
 }
-_HAM_NOKTA_SAYISI = 4000  # bobin gerilimi grafiğinde gösterilen en fazla örnek
+_HAM_NOKTA_SAYISI = 4000  # bobin akısı grafiğinde gösterilen en fazla örnek
 
 TEMALAR = {
     "acik": {
@@ -158,7 +158,7 @@ class MerkezlemePenceresi(QMainWindow):
         self.cb_kanal = QComboBox()
         self.cb_kanal.addItems(list(self.p.kanallar))
         self.cb_kanal.setCurrentText(self.p.varsayilan_kanal)
-        self.cb_kanal.currentTextChanged.connect(self.dongu.kanal_sec)
+        self.cb_kanal.currentTextChanged.connect(self._kanal_sec)
         satir.addWidget(self.cb_kanal)
         satir.addSpacing(16)
         satir.addWidget(QLabel("Hız:"))
@@ -190,7 +190,8 @@ class MerkezlemePenceresi(QMainWindow):
         self.chk_yaz.setChecked(True)
         self.chk_yaz.toggled.connect(self._otomatik_yaz)
         self.chk_yaz.setToolTip(
-            "Kapalıyken merkezleme'ye yazılmaz; her ölçüm süresinde bir sürekli ölçüm alınır."
+            "Kapalıyken merkezleme'ye yazılmaz; her ölçüm süresinde bir sürekli ölçüm alınır.\n"
+            "Açıkken ve motor dönerken bobin, hız, referans ve gecikme değiştirilemez."
         )
         self.chk_csv = QCheckBox("CSV'ye kaydet")
         self.chk_csv.setChecked(True)
@@ -213,7 +214,14 @@ class MerkezlemePenceresi(QMainWindow):
             "saf normal ve pozitif (b0 > 0, a0 = 0) görünecek şekilde ayarlanır."
         )
         self.btn_ref.clicked.connect(lambda: self.dongu.tek_olcum(referans=True))
-        for b in (self.btn_baslat, self.btn_durdur, self.btn_tek, self.btn_ref):
+        self.btn_gecikme = QPushButton("Gecikme ölç (iki yön)")
+        self.btn_gecikme.setToolTip(
+            "Bir pencere bu yönde, motor ters çevrilip bir pencere öbür yönde alınır.\n"
+            "İki yön arasındaki farktan ADC ile enkoder arasındaki zaman gecikmesi\n"
+            "bulunur ve sonraki ölçümlerde düzeltilir. Merkezleme'ye yazma kapalıyken."
+        )
+        self.btn_gecikme.clicked.connect(self.dongu.gecikme_olc)
+        for b in (self.btn_baslat, self.btn_durdur, self.btn_tek, self.btn_ref, self.btn_gecikme):
             satir.addWidget(b)
         satir.addStretch()
         satir.addWidget(self.chk_yaz)
@@ -230,13 +238,15 @@ class MerkezlemePenceresi(QMainWindow):
         self.lbl_sayac = self._deger_etiketi(g, 1, 2, "Yazılan ölçüm")
         self.lbl_faz = self._deger_etiketi(g, 2, 0, "Faz ofseti")
         self.lbl_tepe = self._deger_etiketi(g, 2, 2, "Sinyal tepesi")
-        g.addWidget(QLabel("Kayıt:"), 3, 0)
+        self.lbl_gecikme = self._deger_etiketi(g, 3, 0, "Gecikme")
+        self.lbl_artik = self._deger_etiketi(g, 3, 2, "Uydurma artığı")
+        g.addWidget(QLabel("Kayıt:"), 4, 0)
         self.lbl_kayit = QLabel("—")
         self.lbl_kayit.setTextInteractionFlags(Qt.TextSelectableByMouse)
-        g.addWidget(self.lbl_kayit, 3, 1, 1, 3)
+        g.addWidget(self.lbl_kayit, 4, 1, 1, 3)
         self.lbl_uyari = QLabel()
         self.lbl_uyari.setWordWrap(True)
-        g.addWidget(self.lbl_uyari, 4, 0, 1, 4)
+        g.addWidget(self.lbl_uyari, 5, 0, 1, 4)
         kok.addWidget(kutu)
 
         # Son ölçüm
@@ -313,10 +323,11 @@ class MerkezlemePenceresi(QMainWindow):
         sayfa = QWidget()
         dikey = QVBoxLayout(sayfa)
         aciklama = QLabel(
-            "Son ölçüm penceresinde ADC'nin kaydettiği bobin gerilimi; penceredeki bütün "
-            "turlar enkoder açısına göre üst üste çizilir. Çizgi, uydurulan harmoniklerin "
-            "toplamıdır (n = 1..6). Noktalar çizginin üstündeyse ölçüm sağlıklıdır; sistematik "
-            "sapma, sıçrama ya da düzleşmiş tepeler (doyma) bir sorun olduğunu gösterir."
+            "Son ölçüm penceresinde bobinden geçen akı: ADC'nin kaydettiği gerilimin zamana "
+            "göre integrali (yavaş sürüklenmesi çıkarılmış). Penceredeki bütün turlar enkoder "
+            "açısına göre üst üste çizilir; çizgi uydurulan harmoniklerin toplamıdır. Noktalar "
+            "çizginin üstündeyse ölçüm sağlıklıdır; turlar arasında kayma ya da sıçrama açı, "
+            "örnek kaybı ya da doyma sorununu gösterir (sayısal karşılığı: uydurma artığı)."
         )
         aciklama.setObjectName("aciklama")
         aciklama.setWordWrap(True)
@@ -329,7 +340,7 @@ class MerkezlemePenceresi(QMainWindow):
         self.ham_uydurma = self.grafik_ham.plot([], [])
         self.ham_noktalar.setZValue(1)  # sapmalar uydurma eğrisinin üstünde görünsün
         dikey.addWidget(self.grafik_ham)
-        self.sekmeler.addTab(sayfa, "Bobin gerilimi")
+        self.sekmeler.addTab(sayfa, "Bobin akısı")
 
     def _seri_kur(self, kayma: float, genislik: float) -> dict:
         x = np.arange(1, HARMONIK_SAYISI + 1) + kayma
@@ -355,7 +366,7 @@ class MerkezlemePenceresi(QMainWindow):
                 eksen.setTextPen(pg.mkPen(t["yazi"]))
         self.grafik_cok.setLabel("left", OLCEKLER[self.olcek][2], color=t["yazi"])
         self.grafik_cok.setLabel("bottom", "n (1 dipol, 2 kuadrupol, 3 sekstupol, ...)", color=t["yazi"])
-        self.grafik_ham.setLabel("left", "Bobin gerilimi (mV)", color=t["yazi"])
+        self.grafik_ham.setLabel("left", "Bobin akısı (µV·s)", color=t["yazi"])
         self.grafik_ham.setLabel("bottom", "Açı (°, faz ofsetli)", color=t["yazi"])
         for seri in self.seriler.values():
             seri["hata"].setData(pen=pg.mkPen(t["yazi"], width=1))
@@ -461,9 +472,9 @@ class MerkezlemePenceresi(QMainWindow):
             self.ham_uydurma.setData([], [])
             return
         adim = max(1, len(s.aci_derece) // _HAM_NOKTA_SAYISI)
-        self.ham_noktalar.setData(s.aci_derece[::adim], s.gerilim_V[::adim] * 1e3)
+        self.ham_noktalar.setData(s.aci_derece[::adim], s.aki_Vs[::adim] * 1e6)
         izgara = np.linspace(0.0, 360.0, 721)
-        self.ham_uydurma.setData(izgara, s.uydurma(izgara) * 1e3)
+        self.ham_uydurma.setData(izgara, s.uydurma(izgara) * 1e6)
 
     @staticmethod
     def _deger_etiketi(g: QGridLayout, satir: int, sutun: int, ad: str) -> QLabel:
@@ -509,8 +520,16 @@ class MerkezlemePenceresi(QMainWindow):
         self.dongu.baslat()
 
     def _otomatik_yaz(self, acik: bool) -> None:
-        self.dongu.otomatik_yaz = acik
-        self._gunluge_yaz("Merkezleme'ye otomatik yazma " + ("açık." if acik else "kapalı."))
+        if not self.dongu.otomatik_yaz_ayarla(acik):
+            self.chk_yaz.blockSignals(True)
+            self.chk_yaz.setChecked(self.dongu.otomatik_yaz)
+            self.chk_yaz.blockSignals(False)
+
+    def _kanal_sec(self, ad: str) -> None:
+        if not self.dongu.kanal_sec(ad):
+            self.cb_kanal.blockSignals(True)
+            self.cb_kanal.setCurrentText(self.dongu.kanal)
+            self.cb_kanal.blockSignals(False)
 
     def _bekleyerek(self, islev) -> None:
         """Bloklayan bir işlemi (motoru güvenle durdurma) arayüzü dondurmadan yap."""
@@ -553,19 +572,27 @@ class MerkezlemePenceresi(QMainWindow):
 
         self.btn_baslat.setEnabled(d.durum in (Durum.HAZIR, Durum.HATA) and bagli)
         self.btn_durdur.setEnabled(d.donuyor)
-        self.btn_tek.setEnabled(d.donuyor)
-        self.btn_ref.setEnabled(d.donuyor)
+        kilitli = d.cerceve_kilitli
+        self.btn_tek.setEnabled(d.donuyor and not d.gecikme_olculuyor)
+        self.btn_ref.setEnabled(d.donuyor and not kilitli and not d.gecikme_olculuyor)
+        self.btn_gecikme.setEnabled(d.donuyor and not kilitli and not d.gecikme_olculuyor)
+        self.cb_kanal.setEnabled(not kilitli)
+        self.hiz.setEnabled(not kilitli)
+        self.chk_yaz.setEnabled(not d.gecikme_olculuyor)
 
         metin = d.durum.value + (f" — {d.hata_metni}" if d.durum is Durum.HATA else "")
         if d.durum is Durum.VERI_TOPLANIYOR:
             yuzde = min(100, max(0, 100 * d._taze_ornek(d._toplama_baslangici) // d.gereken_ornek))
             metin += f" (%{yuzde})"
+        if d.gecikme_olculuyor:
+            metin += " — gecikme ölçülüyor (" + ("ikinci yön)" if d._yarim is not None else "ilk yön)")
         self.lbl_durum.setText(metin)
         self.lbl_durum.setStyleSheet(f"color: {self._renk(_DURUM_RENGI[d.durum])};")
 
         self.lbl_hiz.setText(f"{d.engine.motor_speed:.2f} Hz" if bagli else "—")
         self.lbl_sayac.setText(str(d.olcum_sayisi))
         self.lbl_faz.setText(f"{d.faz_ofseti_derece:.2f}°")
+        self.lbl_gecikme.setText(f"{d.gecikme_s * 1e3:.4f} ms ({d.gecikme_kaynagi})")
         if d.kayit.yol is not None:
             self.lbl_kayit.setText(f"{d.kayit.yol.name} ({d.kayit.satir_sayisi} satır)")
         else:
@@ -580,10 +607,17 @@ class MerkezlemePenceresi(QMainWindow):
         oran = s.tepe_V / self.p.tam_olcek_V
         self.lbl_tepe.setText(f"{s.tepe_V * 1e3:.2f} mV (tam ölçeğin %{100 * oran:.0f})")
         self.lbl_tepe.setStyleSheet(f"color: {self._renk('kotu' if d.doyma_uyarisi else 'yazi')};")
-        self.lbl_uyari.setText(
-            "ADC doymaya yakın: kazancı düşürün (merkezleme_olcer.yaml → adc.kazanc)."
-            if d.doyma_uyarisi else ""
-        )
+        self.lbl_artik.setText(f"{s.artik_orani:.1e} (eşik {self.p.artik_esigi:.0e})")
+        self.lbl_artik.setStyleSheet(f"color: {self._renk('kotu' if d.artik_uyarisi else 'yazi')};")
+        uyarilar = []
+        if d.doyma_uyarisi:
+            uyarilar.append("ADC doymaya yakın: kazancı düşürün (merkezleme_olcer.yaml → adc.kazanc).")
+        if d.artik_uyarisi:
+            uyarilar.append(
+                "Uydurma artığı yüksek: ölçüm güvenilmez (açı, kanal, doyma, örnek kaybı?). "
+                "Bu durumda merkezleme'ye yazılmaz."
+            )
+        self.lbl_uyari.setText(" ".join(uyarilar))
         self.lbl_uyari.setStyleSheet(f"color: {self._renk('kotu')};")
         self.lbl_b0.setText(f"{s.c1.real:+.4e} T")
         self.lbl_a0.setText(f"{s.c1.imag:+.4e} T")

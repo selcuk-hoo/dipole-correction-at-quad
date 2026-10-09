@@ -414,6 +414,30 @@ def test_referans_dugmesi_faz_ofsetini_ayarlar(kurulum):
     assert abs(dongu.son_sonuc.c1.imag) < 1e-3 * abs(dongu.son_sonuc.c1)
 
 
+def test_faz_ofseti_her_bobin_icin_ayri(kurulum):
+    """Dik iki bobin dönen çerçevede 90° farklı durur; birinin referansı
+    öbürüne uygulanırsa merkez 90° dönük raporlanır."""
+    dunya, dongu, gunluk = kurulum
+    dunya.c1, dunya.c2 = 3e-4 * np.exp(1j * math.radians(-120.0)), 0j
+    dongu.otomatik_yaz = False
+    dongu.baglan()
+    dongu.baslat()
+    calistir(dunya, dongu, 5.0)
+    assert not dongu.referans_alindi
+    dongu.tek_olcum(referans=True)
+    calistir(dunya, dongu, 2.5)
+    birinci = dongu.faz_ofseti_derece
+    assert dongu.referans_alindi and birinci != 0.0
+    dongu.kanal_sec("Düz bobin 2 (AIN4-AIN5)")
+    assert dongu.faz_ofseti_derece == 0.0 and not dongu.referans_alindi
+    assert "referans alınmadı" in gunluk[-1]
+    dongu.faz_ofseti_derece = 33.0
+    dongu.kanal_sec("Düz bobin 1 (AIN0-AIN1)")
+    assert dongu.faz_ofseti_derece == birinci and dongu.referans_alindi
+    dongu.kanal_sec("Düz bobin 2 (AIN4-AIN5)")
+    assert dongu.faz_ofseti_derece == 33.0
+
+
 def test_durdur_once_hizi_sifirlar_sonra_servoyu_kapatir(kurulum):
     dunya, dongu, _ = kurulum
     dongu.baglan()

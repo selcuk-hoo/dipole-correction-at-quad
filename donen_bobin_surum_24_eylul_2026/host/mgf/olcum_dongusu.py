@@ -100,7 +100,12 @@ class OlcumDongusu:
         self.kanal = p.varsayilan_kanal
         self.hedef_hiz_hz = p.hiz_hz
         self.pencere_s = p.pencere_s
-        self.faz_ofseti_derece = p.faz_ofseti_derece
+        # Faz ofseti her bobin için ayrıdır: bobinler dönen çerçevede farklı
+        # açılarda durur (dik iki bobin arasında 90°). Bir bobinin ofsetiyle
+        # öbürü ölçülürse merkez o açı kadar dönük raporlanır.
+        self._faz_ofsetleri = {ad: p.faz_ofseti_derece for ad in p.kanallar}
+        # Referans alınırken ölçülen hız (işaretli), bobin başına; None: alınmadı
+        self._referans_hizlari: dict[str, float | None] = {ad: None for ad in p.kanallar}
         self.gecikme_s = p.gecikme_s
         self.gecikme_kaynagi = "parametre dosyası"
         self.yon = 1  # motor hız komutunun işareti
@@ -124,13 +129,26 @@ class OlcumDongusu:
         self._tek_baslangici = 0
         self._yarim: tuple[np.ndarray, np.ndarray] | None = None  # gecikme ölçümünün ilk yönü
         self._beklenen_isaret: float | None = None  # ters çevirmeden sonra ölçülen hızın işareti
-        self._referans_hizi_hz: float | None = None  # referans alınırken (işaretli)
         self._ardisik_red = 0
         self._yazim_cercevesi: tuple | None = None
 
     @property
     def donuyor(self) -> bool:
         return self.durum in _DONUYOR
+
+    @property
+    def faz_ofseti_derece(self) -> float:
+        """Seçili bobinin faz ofseti."""
+        return self._faz_ofsetleri[self.kanal]
+
+    @faz_ofseti_derece.setter
+    def faz_ofseti_derece(self, deger: float) -> None:
+        self._faz_ofsetleri[self.kanal] = deger
+
+    @property
+    def referans_alindi(self) -> bool:
+        """Seçili bobin için bu oturumda referans alındı mı."""
+        return self._referans_hizlari[self.kanal] is not None
 
     @property
     def cerceve(self) -> tuple:
@@ -243,6 +261,10 @@ class OlcumDongusu:
         if self.conn.connected and self.durum is not Durum.BAGLI_DEGIL:
             self._kanal_gonder()
             self.gunluk(f"Kanal: {ad}")
+        self.gunluk(
+            f"{ad} faz ofseti: {self.faz_ofseti_derece:.2f}°"
+            + ("" if self.referans_alindi else " (bu bobin için referans alınmadı; referans alın)")
+        )
         # Eski kanaldan gelen örnekler ölçüme karışmasın
         gecis = self.engine.total_samples_received + int(KANAL_GECIS_S * self.p.ornekleme_sps)
         self._toplama_baslangici = gecis
@@ -592,7 +614,7 @@ class OlcumDongusu:
                 return
             eski = self.faz_ofseti_derece
             self.faz_ofseti_derece = referans_faz_ofseti(sonuc, eski)
-            self._referans_hizi_hz = sonuc.hiz_hz
+            self._referans_hizlari[self.kanal] = sonuc.hiz_hz
             self.gecmisi_sifirla()
             self.gunluk(f"Faz ofseti: {eski:.2f}° -> {self.faz_ofseti_derece:.2f}°")
         elif istek == "gecikme":
@@ -620,18 +642,18 @@ class OlcumDongusu:
             f"Gecikme: {eski * 1e3:.4f} ms -> {yeni * 1e3:.4f} ms (±{sigma * 1e6:.2f} µs). Kalıcı yapmak için "
             f"merkezleme_olcer.yaml -> olcum.gecikme_ms: {yeni * 1e3:.4f}"
         )
-        if self._referans_hizi_hz is not None:
+        for ad, hiz in self._referans_hizlari.items():
+            if hiz is None:
+                self.gunluk(f"{ad}: faz ofseti bu oturumda referansla ayarlanmadı; referansı yeniden alın.")
+                continue
             # Referansta açı ω_ref·L_eski kadar geri kaydırılmıştı; aynı çerçeve için
             # faz ofseti ω_ref·(L_yeni - L_eski) kadar azaltılır.
-            eski_ofset = self.faz_ofseti_derece
-            self.faz_ofseti_derece = (
-                eski_ofset - 360.0 * self._referans_hizi_hz * (yeni - eski)
-            ) % 360.0
+            eski_ofset = self._faz_ofsetleri[ad]
+            self._faz_ofsetleri[ad] = (eski_ofset - 360.0 * hiz * (yeni - eski)) % 360.0
             self.gunluk(
-                f"Faz ofseti yeni gecikmeye taşındı: {eski_ofset:.3f}° -> {self.faz_ofseti_derece:.3f}°"
+                f"{ad}: faz ofseti yeni gecikmeye taşındı: "
+                f"{eski_ofset:.3f}° -> {self._faz_ofsetleri[ad]:.3f}°"
             )
-        else:
-            self.gunluk("Faz ofseti bu oturumda referansla ayarlanmadı; referansı yeniden alın.")
         self.gunluk("Çift yönlü ölçüm: " + ozet(sonuc))
 
     def hata_bildir(self, metin: str) -> None:

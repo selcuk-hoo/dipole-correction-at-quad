@@ -591,7 +591,9 @@ class MerkezlemePenceresi(QMainWindow):
 
         self.lbl_hiz.setText(f"{d.engine.motor_speed:.2f} Hz" if bagli else "—")
         self.lbl_sayac.setText(str(d.olcum_sayisi))
-        self.lbl_faz.setText(f"{d.faz_ofseti_derece:.2f}°")
+        self.lbl_faz.setText(
+            f"{d.faz_ofseti_derece:.2f}°" + ("" if d.referans_alindi else " (referans alınmadı)")
+        )
         self.lbl_gecikme.setText(f"{d.gecikme_s * 1e3:.4f} ms ({d.gecikme_kaynagi})")
         if d.kayit.yol is not None:
             self.lbl_kayit.setText(f"{d.kayit.yol.name} ({d.kayit.satir_sayisi} satır)")

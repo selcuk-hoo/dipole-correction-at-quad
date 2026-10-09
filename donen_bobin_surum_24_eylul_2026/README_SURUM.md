@@ -46,7 +46,7 @@ Bütün sayılar `merkezleme_olcer.yaml`'dadır. Açılışta `r_ref` ve birimin
 
 Büyük arayüzün makro sisteminde `MERKEZLEME_OLCUM` komutu aynı hesabı tek seferlik yapar ("Merkezleme Kuadrupol Olcumu" hazır makrosu). Sürekli otomatik ölçüm için minimal pencere tercih edilmelidir.
 
-Hangi sistematik hatanın nasıl ve ne kadar düzeltildiği: [`SISTEMATIK_HATALAR_RAPORU.md`](SISTEMATIK_HATALAR_RAPORU.md).
+Sistemin nasıl çalıştığı, zayıf yanları ve açık hatalar: [`DONEN_BOBIN_REHBERI.md`](DONEN_BOBIN_REHBERI.md). Hangi sistematik hatanın nasıl ve ne kadar düzeltildiği: [`SISTEMATIK_HATALAR_RAPORU.md`](SISTEMATIK_HATALAR_RAPORU.md).
 
 ### Lab doğrulama planı
 

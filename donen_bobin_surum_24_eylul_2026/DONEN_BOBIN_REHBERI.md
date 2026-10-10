@@ -1,410 +1,441 @@
-# Dönen bobin ölçüm sistemi: nasıl çalışır, nerede zayıftır
+# Dönen bobin sistemi: nasıl çalışır, nerede zayıftır
 
-*Ekim 2026 · demirsiz kuadrupol merkezleme düzeneği için*
+*Ekim 2026 · Demirsiz kuadrupol merkezleme düzeneği için*
 
-Bu yazı, İrfan'ın geliştirdiği dönen bobin sistemini ve üzerine yapılan değişiklikleri baştan sona anlatır: ölçümün fiziği, donanım zinciri, yazılımın her adımda ne yaptığı, sistematik hataların hangilerinin giderildiği, hangilerinin açık olduğu ve lab'da bunların nasıl sınanacağı. Sayısal değerler, aksi belirtilmedikçe, bu düzeneğin parametreleriyle yapılmış simülasyonlardandır (bkz. `SISTEMATIK_HATALAR_RAPORU.md`). Gerçek donanımdaki düzeyler lab'da ölçülmelidir.
+Bu yazı, elinizdeki dönen bobin ölçüm aletini herhangi bir ön bilgi gerektirmeden anlatır. Önce aletin ne yaptığını, sonra yazılımın ölçümü nasıl hesapladığını, sonra hangi hataların giderildiğini ve hangilerinin hâlâ açık olduğunu, en sonda da lab'da neleri deneyeceğinizi bulacaksınız.
+
+**Önemli not:** Yazıdaki hata büyüklükleri **bilgisayar simülasyonundan** gelir. Simülasyon, gerçek aletin davranışını elimizden geldiğince taklit eder ama gerçek aletin kendisi değildir. Gerçek değerleri lab'da ölçeceğiz.
 
 ---
 
 ## İçindekiler
 
-1. [Ölçümün fiziği](#1-ölçümün-fiziği)
-2. [Elimizdeki alet](#2-elimizdeki-alet)
-3. [Yazılım: bir ölçüm nasıl yapılır](#3-yazılım-bir-ölçüm-nasıl-yapılır)
-4. [Hangi hatalar merkezleme için önemli](#4-hangi-hatalar-merkezleme-için-önemli)
+0. [Beş dakikalık özet](#0-beş-dakikalık-özet)
+1. [Ne ölçüyoruz ve neden](#1-ne-ölçüyoruz-ve-neden)
+2. [Alet: parçalar ve verinin yolu](#2-alet-parçalar-ve-verinin-yolu)
+3. [Yazılım ölçümü nasıl hesaplıyor](#3-yazılım-ölçümü-nasıl-hesaplıyor)
+4. [Bir hata ne zaman tehlikelidir](#4-bir-hata-ne-zaman-tehlikelidir)
 5. [Giderilen hatalar](#5-giderilen-hatalar)
-6. [Açık duran hatalar ve zayıf yanlar](#6-açık-duran-hatalar-ve-zayıf-yanlar)
-7. [Lab'da yapılacak testler](#7-labda-yapılacak-testler)
-8. [Önerilen iyileştirmeler](#8-önerilen-iyileştirmeler)
+6. [Hâlâ açık olan hatalar ve zayıf yanlar](#6-hâlâ-açık-olan-hatalar-ve-zayıf-yanlar)
+7. [Lab'da neleri deneyeceksiniz](#7-labda-neleri-deneyeceksiniz)
+8. [Sonraki adımlar](#8-sonraki-adımlar)
 9. [Sözlük](#9-sözlük)
 
 ---
 
-## 1. Ölçümün fiziği
+## 0. Beş dakikalık özet
 
-### 1.1 Dönen bir bobin neyi ölçer
-
-Mıknatısın açıklığına, mıknatıs eksenine paralel bir tel çerçeve (bobin) yerleştirilir ve eksen etrafında döndürülür. Bobinden geçen manyetik akı Φ, bobinin o anki açısına göre değişir; Faraday yasasına göre uçlarında V = −dΦ/dt gerilimi oluşur. Bobin bir tur attığında alanın açıklık içindeki dağılımını "taramış" olur. Akının açıya göre değişimini Fourier bileşenlerine ayırmak, alanın çok kutup bileşenlerini verir.
-
-### 1.2 Çok kutuplar
-
-Mıknatıs açıklığındaki iki boyutlu alan, karmaşık sayılarla tek bir seri olarak yazılır (z = x + iy, r_ref = 25 mm referans yarıçapı):
-
-  B_y + i·B_x = Σ C_n · (z / r_ref)^(n−1)
-
-| n | Ad | Alan biçimi |
-|---|---|---|
-| 1 | dipol | düzgün alan |
-| 2 | kuadrupol | merkezden uzaklıkla doğrusal artan alan (gradyen) |
-| 3 | sekstupol | uzaklığın karesiyle |
-| 4, 5, 6 | oktupol, dekapol, dodekapol | ... |
-
-C_n karmaşık sayıdır: gerçek kısmı **normal** (b_n), sanal kısmı **skew** (a_n) bileşendir. Dosyalarda ve pencerede b0/a0 n = 1'i, b1/a1 n = 2'yi gösterir.
-
-### 1.3 Merkez neden C₁/C₂'den çıkar
-
-İdeal bir kuadrupolün alanı tam merkezinde sıfırdır: yalnızca C₂ vardır. Mıknatıs ölçüm eksenine göre z_c kadar kaçıksa, ölçüm ekseninde alan sıfır değildir. Kuadrupol alanı kaydırılınca bir dipol bileşeni doğar (buna "feed-down" denir):
-
-  C₁ = −C₂ · z_c / r_ref  →  **z_c = −r_ref · C₁ / C₂**
-
-Merkezleme programı mıknatısı hareket ettirmez; dört bobinin akımlarına küçük asimetriler uygulayarak C₁'i sıfırlar. Ölçüm sisteminin görevi C₁ ve C₂'yi doğru ölçmektir.
-
-### 1.4 Ölçeği hissetmek: 1 µm ne kadar küçük
-
-Merkezdeki 1 µm'lik kaçıklık, C₁'in C₂'ye oranında 1 µm / 25 mm = **4·10⁻⁵** demektir. Bizim bobinde n = 1'in duyarlılığı n = 2'ninkinden biraz farklı olduğundan (bölüm 2.2), gerilimde bu oran ~**2,5·10⁻⁵**'tir. Yani:
-
-> Ana (n = 2) sinyalin **milyonda 25'i** kadar bir sızıntı, merkezde **1 µm** hata yapar.
-
-Bu yüzden n = 2'yi n = 1'e karıştıran her küçük etki (hız dalgalanması, açı hatası, zamanlama kayması) önemlidir. Bu yazının büyük kısmı bu tür karışmalarla ilgilidir.
-
-Örnek (simülasyondaki mıknatıs, G ≈ 0,095 T/m, 23 Hz):
-- n = 2 sinyalinin tepe değeri ≈ **5,5 mV**,
-- 1 µm merkeze karşılık gelen n = 1 sinyali ≈ **0,14 µV**.
+- **Alet ne yapıyor?** Mıknatısın içinde küçük bir tel bobini döndürüyor. Dönerken bobinde oluşan gerilimden mıknatısın manyetik alanını çıkarıyor. Bizim için en önemli sonuç, mıknatısın **merkezinin ölçüm eksenine göre nerede olduğu**.
+- **Merkez nasıl bulunuyor?** Kuadrupol mıknatısın alanı tam merkezde sıfırdır. Merkez kaçıksa ölçüm ekseninde küçük bir "sahte düzgün alan" (dipol) görürüz. Bu sahte alanın büyüklüğü kaçıklığı söyler.
+- **Neden zor?** Aradığımız sinyal, ana sinyalden yaklaşık **40 bin kat küçük**. Ana sinyalde yüz binde birkaçlık bir bozulma bile yanlış merkez gösterir. 1 µm hata için bile bu geçerli.
+- **Ne yaptık?** Hesap yöntemini, bu bozulmaların büyük kısmını yok edecek şekilde değiştirdik: hız dalgalanması, zaman gecikmesi, enkoderin basamaklı çalışması, örnek kaybı gibi.
+- **Ne kaldı?** En önemli açık konu **enkoderin her turda tekrarlanan küçük açı hatası**: her 1 açı dakikası (derecenin 60'ta biri) merkezde yaklaşık **6 µm** sahte kayma yapar. Bunu yazılım şimdilik göremiyor. Dik iki bobinle lab'da ölçülebilir (bölüm 6.1).
+- **Lab'da ilk iş:** gecikmeyi ölçmek, iki bobinin merkezini karşılaştırmak, aynı alanı farklı hızlarda ölçmek (bölüm 7).
 
 ---
 
-## 2. Elimizdeki alet
+## 1. Ne ölçüyoruz ve neden
 
-### 2.1 Veri zinciri
+### 1.1 Dönen bobin nasıl çalışır
+
+Mıknatısın deliğinde, dönme eksenine paralel duran bir tel çerçeve (bobin) düşünün. Bobin dönerken içinden geçen manyetik alan (buna **akı** denir) sürekli değişir. Faraday yasasına göre akı değiştiği anda bobinin uçlarında gerilim oluşur: akı ne kadar hızlı değişirse gerilim o kadar büyüktür.
+
+Bir tur boyunca bobin deliğin her yönünü "gezmiş" olur. Gerilimin tur boyunca nasıl değiştiğine bakarak alanın deliğin içinde nasıl dağıldığını anlarız.
+
+### 1.2 Alanın parçaları: dipol, kuadrupol, ...
+
+Bir mıknatısın alanı tek parça değildir; birkaç basit alanın toplamı gibi düşünülebilir. Bu parçalara **çok kutup bileşenleri** denir ve **n** numarasıyla anılır:
+
+| n | Adı | Nasıl bir alan? |
+|---|---|---|
+| 1 | dipol | Her yerde aynı yönde, aynı büyüklükte (düzgün alan) |
+| 2 | kuadrupol | Merkezde sıfır, merkezden uzaklaştıkça artar |
+| 3 | sekstupol | Merkezden uzaklaştıkça daha hızlı artar |
+| 4, 5, 6 | oktupol, dekapol, ... | Daha da yüksek mertebeler |
+
+Her bileşenin iki hâli vardır: **normal** ve **skew** (90/n derece çevrilmiş hâli). Pencerede ve dosyalarda bunlar `b` ve `a` harfleriyle gösterilir. `b0, a0` dipolü; `b1, a1` kuadrupolü anlatır. Hepsi Tesla biriminde, 25 mm yarıçapında verilir.
+
+### 1.3 Merkez nasıl bulunur
+
+Bizim mıknatıs bir **kuadrupol**: asıl işi, merkezden uzaklaştıkça artan bir alan üretmek. İdeal kuadrupolün alanı tam merkezinde sıfırdır.
+
+Ama ölçüm eksenimiz (bobinin döndüğü eksen) mıknatısın merkezinde olmayabilir. Eksen merkezden biraz kaçıksa, eksen üzerinde alan sıfır değildir; küçük bir düzgün alan (dipol) görürüz. Kuadrupol alanı "kaydırılınca" dipol gibi görünür. Bu dipolün büyüklüğü, kaçıklığın büyüklüğüyle doğru orantılıdır:
+
+> **Merkez kaçıklığı = −25 mm × (dipol büyüklüğü) / (kuadrupol büyüklüğü)**
+
+Yani yalnızca iki sayıyı doğru ölçmemiz yetiyor: C₁ (dipol) ve C₂ (kuadrupol).
+
+Merkezleme programı mıknatısı hiç hareket ettirmez. Dört bobinin akımlarını çok küçük farklarla değiştirerek dipolü sıfırlar. Ölçüm sisteminin görevi, bu dipolü ve kuadrupolü doğru ölçmek.
+
+### 1.4 Aradığımız sinyal ne kadar küçük?
+
+Bu bölüm, bu işin neden bu kadar titiz olması gerektiğini anlatıyor.
+
+- Ana sinyal (kuadrupol): yaklaşık **5,5 mV**.
+- 1 µm merkez kaçıklığına karşılık gelen sinyal (dipol): yaklaşık **0,14 µV**.
+
+Aradaki oran yaklaşık **40 bin**. Yani merkezi 1 µm doğrulukla bilmek için, 5,5 mV'luk ana sinyalin yaklaşık **yüz binde 2,5'ine** kadar doğru olmamız gerekir. Ana sinyal herhangi bir şekilde bu oranda bozulursa ve bozulma dipole karışırsa, merkezi 1 µm yanlış buluruz.
+
+Bu yüzden yazının büyük bölümü, **büyük kuadrupol sinyalinin küçük dipol sinyaline karışması** üzerine. Bu karışmanın başka yolları da var: hız dalgalanması, zamanlama kayması, enkoderin hatası.
+
+---
+
+## 2. Alet: parçalar ve verinin yolu
+
+### 2.1 Şema
 
 ```
-  ┌──────────────── DÖNEN KISIM ────────────────┐        ┌────────── SABİT KISIM ───────────┐
-  │                                              │        │                                  │
-  │  Düz bobin 1 ─┐                              │        │  Enkoder (artımlı, 3600/tur)     │
-  │  Düz bobin 2 ─┼─► ADS1263 ADC ─► Rotor kartı ◄──RS485──►  Stator kartı (RP2350)        │
-  │               │   32×, 7200 SPS,  (RP2350)   │ 8 Mb/s │   - enkoderi okur (~1 kHz gönderir)
-  │               │   Sinc4           her örneğe │        │   - motora adım darbesi verir   │
-  │               │                   son enkoder│        │   - servo açık/kapalı          │
-  │               │                   değerini   │        │   - Ethernet (W5500)            │
-  │               │                   ekler      │        │                                  │
-  └──────────────────────────────────────────────┘        └───────────────┬──────────────────┘
-                                                                          │ TCP
-                                                                          ▼
-                                                             PC: merkezleme_olcer.py
-                                                             (analiz) ── kilit dosyası ──► merkezleme
+ DÖNEN KISIM                                          SABİT KISIM
+ ─────────────────────────────────────────         ──────────────────────────────
+  Düz bobin 1 ─┐
+               ├─► ADC (sayısallaştırıcı) ─► Rotor kartı ◄─ RS485 ─► Stator kartı ◄─ Enkoder
+  Düz bobin 2 ─┘      7200 ölçüm/saniye       (her ölçüme               │            (milin açısı)
+                                               son açıyı ekler)         │
+                                                                        ├─► Motor sürücüsü
+                                                                        │
+                                                                        └─► Ethernet ─► Bilgisayar
 ```
 
-**Dönen kısım:** iki düz bobin ve onları okuyan ADC (ADS1263) dönen karttadır. Bobin kabloları dönen–sabit geçişinden geçmez; analog sinyal, mile bağlı kartta sayısallaştırılır ve geçişten yalnızca sayısal veri (RS485) geçer. Bu iyi bir tasarımdır: mikrovoltluk sinyal, geçişteki (kayar halka vb.) temas gürültüsünden korunur.
+**Dönen bobinler ve ADC:** İki düz bobin ve sinyalleri sayıya çeviren ADC, milin üzerindeki **dönen kartta** durur. Mikrovolt düzeyindeki sinyal kabloyla sabit kısma taşınmaz; orada sayıya çevrilir ve yalnızca sayılar sabit kısma gönderilir. Bu iyi bir tasarım, çünkü çok küçük analog sinyal, dönen-sabit geçişinde kolayca gürültüye bulanırdı.
 
-**Rotor kartı:** ADC her örneği hazırladığında (7200 kez/s) bir paket oluşturur: [ADC değeri, o ana kadar statordan gelen **son** enkoder değeri] ve bunu RS485 ile statora yollar.
+**Rotor kartı:** ADC bir ölçüm hazırladığında (saniyede 7200 kez) rotor kartı o ölçümün yanına **o ana kadar gelen son açı değerini** ekler ve pakete RS485 hattıyla sabit kısma yollar.
 
-**Stator kartı:**
-- Enkoderi sürekli okur ve en fazla milisaniyede bir, değer değiştiyse rotora gönderir.
-- Motoru adım/yön darbeleriyle sürer: 3600 adım/tur, ivme 10 tur/s². 23 Hz'e ~2,3 s'de çıkar.
-- Gelen örnekleri TCP ile PC'ye aktarır.
-- Saniyede bir durum paketi yollar: ölçülen hız, hata sayaçları.
+**Stator kartı:** Sabit kısımdaki karttır. Üç işi var:
+1. **Enkoderi okur** (mil açısını ölçen sensör) ve yaklaşık her milisaniyede bir bu açıyı dönen karta bildirir.
+2. **Motoru sürer** ve hızı ayarlar.
+3. Gelen ölçüm paketlerini **Ethernet'le bilgisayara** iletir.
 
-**PC:** paketleri bir halka tamponda tutar (1 milyon örnek ≈ 139 s). Ölçüm programı bu tampondan pencereler alıp analiz eder.
+**Bilgisayar:** paketleri bir tampona yazar (yaklaşık 2 dakikalık veri tutar). Ölçüm programı bu tampondan zaman pencereleri alıp analiz eder.
 
-### 2.2 Bobinler ve duyarlılıkları
+### 2.2 Bobinlerimiz
 
-- İki düz bobin: 5 sarım, 100 mm (eksen boyunca) × 20 mm, ortaları eksenden 20 mm uzakta, **teğet** (bobin düzlemi yarıçapa dik).
-- Birbirlerine diktirler; yani dönen çerçevede 90° farklı açıda dururlar.
-- AIN0–AIN1 bobin 1, AIN4–AIN5 bobin 2'dir.
+- **İki düz bobin**, birbirine **dik**. Dönen düzlemde birbirinden 90° farklı dururlar.
+- Her biri: **5 sarım**, **100 mm × 20 mm**, ortası eksenden **20 mm** uzakta.
+- Bobin 1: AIN0–AIN1. Bobin 2: AIN4–AIN5.
 
-Bir bobinin n. harmoniğe duyarlılığı, iletkenlerinin konumlarından hesaplanır: K_n = (z₂ⁿ − z₁ⁿ)/(n·r_refⁿ⁻¹). Gerilim n·K_n ile orantılıdır:
+Bir bobinin her çok kutba duyarlılığı farklıdır; bobinin geometrisi belirler. Bizim bobinde şöyle:
 
 | n | 1 | 2 | 3 | 4 | 5 | 6 | 7 |
 |---|---|---|---|---|---|---|---|
-| n·\|K_n\| (mm) | 20 | 32 | 35 | 31 | 21 | 9 | 2,4 |
+| Göreli duyarlılık | 20 | 32 | 35 | 31 | 21 | 9 | 2,4 |
 
-İletkenler eksenden R = 22,4 mm uzakta ve bobin ortasından ±26,6° açıdadır. Duyarlılık sin(n·26,6°) ile gider: n = 3 civarında en yüksek, **n = 6'da zayıf, n = 7'de neredeyse kör**. Bu, bobin geometrisinin değişmez bir özelliğidir.
+Yani bobin en iyi n = 2–4 arasını görüyor; **n = 6'yı zor, n = 7'yi neredeyse hiç göremiyor**. Bu, bobinin geometrisinin değişmez bir sonucu, yazılımla düzeltilemez.
 
-### 2.3 Enkoder ve "sıfır" sorunu
+### 2.3 Enkoder ve "sıfır açı" sorunu
 
-Enkoder **artımlıdır** (incremental): yalnızca açı değişimlerini sayar, mutlak açıyı bilmez. Çözünürlük 3600 sayım/tur, yani 0,1°. Firmware sayacı açılışta sıfırlar; bu yüzden "sıfır açı" her açılışta milin o anki konumudur. Bu, **referans mıknatıs** ölçümünü gerektirir (bölüm 3.4).
+Enkoder **artımlı** türdendir: milin ne kadar döndüğünü sayar ama milin şu an hangi açıda olduğunu bilmez. Aletin açılışında sayaç sıfırlanır; yani "sıfır derece", o an milin durduğu yerdir. Her açılışta bu yer farklıdır.
 
-0,1° çözünürlük tek başına sorun değildir: simülasyonda merkeze etkisi **0,06 µm**.
+Bu yüzden her açılışta **referans mıknatıs** ile "sıfır"ı belirlememiz gerekir (bölüm 3.4).
+
+Enkoderin çözünürlüğü yaklaşık 0,1° (tur başına 3600 sayım). Bu tek başına sorun değil; simülasyonda merkeze etkisi yaklaşık 0,06 µm.
 
 ### 2.4 ADC
 
-ADS1263 32 bitlik bir delta-sigma ADC'dir. Ayarlar:
-- Kazanç 32: tam ölçek ±78 mV. Pencere, sinyal tepesi bunun %80'ini aşarsa doyma uyarısı verir.
-- 7200 örnek/s, Sinc4 sayısal filtre.
+Sinyali sayıya çeviren ADC (ADS1263) şöyle ayarlı:
+- **Kazanç 32:** küçük sinyali 32 kat büyütür. Ölçebildiği en büyük gerilim ±78 mV. Sinyal bunun %80'ine ulaşırsa program "doyma uyarısı" verir.
+- **Saniyede 7200 ölçüm**, **Sinc4 filtre** (gürültüyü azaltan sayısal süzgeç).
 
-Filtre, her örneği birkaç yüz mikrosaniye **geçmişe** kaydırır. Bu, bölüm 5.2'deki gecikmenin bir parçasıdır.
+Bu süzgeç, her ölçümü birkaç yüz mikrosaniye **geçmişe** kaydırır. Bu, bölüm 5.2'deki "gecikme" sorununun bir parçası.
 
 ---
 
-## 3. Yazılım: bir ölçüm nasıl yapılır
+## 3. Yazılım ölçümü nasıl hesaplıyor
 
-### 3.1 Programlar
+### 3.1 Hangi programlar var
 
-| Program | Ne yapar |
+| Program | Ne işe yarar |
 |---|---|
-| `host/radarMGF.py` (İrfan'ın büyük arayüzü) | Geliştirme ve genel ölçüm: 9 sekme, FFT, kayıt, makrolar. |
-| `host/merkezleme_olcer.py` (minimal pencere) | Merkezleme için sadeleştirilmiş tek pencere. Bu yazıda anlatılan analiz burada. |
-| `python -m merkezleme` (depo kökü) | Akımları ayarlayan merkezleme programı. Ölçümleri `veri_kilidi/.kilit` dosyasından alır. |
+| `host/radarMGF.py` | İrfan'ın büyük arayüzü: 9 sekme, her türlü ölçüm ve geliştirme işi. |
+| `host/merkezleme_olcer.py` | Merkezleme için sadeleştirilmiş tek pencere. Bu yazıdaki analiz bunda. |
+| `python -m merkezleme` | Akımları ayarlayan merkezleme programı. Ölçümleri bir dosya aracılığıyla alır. |
 
-Minimal pencere ile merkezleme programı bir **kilit dosyası** üzerinden konuşur:
-1. Merkezleme akımları ayarlar ve kilidi siler ("ölç").
-2. Ölçüm programı, kilit silindikten **sonra** gelen veriyle ölçer ve sonucu kilide yazar ("veri hazır").
-3. Merkezleme okur, yeni akımları ayarlar, kilidi siler.
+Ölçüm penceresi ile merkezleme programı **bir kilit dosyası** üzerinden konuşur, trafik ışığı gibi:
+1. Merkezleme akımları değiştirir ve kilit dosyasını siler. Bu "ölç" demektir.
+2. Ölçüm programı, kilit silindikten **sonra** gelen veriyi kullanarak ölçer ve sonucu dosyaya yazar. Bu "veri hazır" demektir.
+3. Merkezleme dosyayı okur, yeni akımları ayarlar ve kilidi tekrar siler.
 
-Kilit silinmeden önceki veri kullanılmaz, çünkü akımlar o sırada değişiyor olabilir.
+Kilit silinmeden önceki veri kullanılmaz; çünkü akımlar o sırada değişiyor olabilir.
 
 ### 3.2 Bir ölçümün adımları
 
-Her ölçüm, son `pencere_s` saniyelik (varsayılan 2 s, ~46 tur) veriden yapılır:
+Her ölçüm, son 2 saniyenin verisini (yaklaşık 46 tur) kullanır. Süre pencereden ayarlanabilir.
 
-1. **Açıyı düzelt (merdiven).** Enkoder değeri ~1 ms'de bir güncellenir; araya düşen ~7 örnek aynı (eskimiş) açıyı taşır. Program her yeni değerin geldiği ilk örneği bulur, okumaların düzenli saatine bir doğru oturtur ve açıyı aralarda kübik eğriyle enterpole eder (bölüm 5.3).
-2. **Gecikmeyi uygula.** Gerilim örneği, yanındaki açıdan L kadar eskidir. Açı zamanda L kadar geri kaydırılır (bölüm 5.2).
-3. **Akıyı bul.** Gerilim zamana göre toplanır: Φ = −∫V dt. Akı yalnızca bobinin **konumuna** bağlıdır, hızına bağlı değildir (bölüm 5.1).
-4. **Tam turlara kırp.** Pencere tam tur sayısına indirilir.
-5. **Uydur.** Akı, açıya karşı en küçük karelerle uydurulur:
-   - sabit + 3. dereceden zaman polinomu (ADC ofsetinin integrali ve yavaş sürüklenme),
-   - 1'den 15'e kadar harmonikler.
+1. **Açıyı düzelt.** Enkoder açıyı yaklaşık 1 ms'de bir güncelliyor, ama ADC saniyede 7200 ölçüm yapıyor. Bu yüzden her yeni açı değeri yaklaşık 7 ölçümde aynı kalıyor ("merdiven"). Program, açıların aslında ne zaman okunduğunu hesaplayıp aradaki açıları pürüzsüz bir eğriyle tahmin eder (bölüm 5.3).
+2. **Gecikmeyi uygula.** Her ölçüm, yanındaki açıdan biraz eskidir. Program açıyı bu kadar geriye çeker (bölüm 5.2).
+3. **Akıyı bul.** Gerilimleri zaman içinde toplayarak akıyı hesaplar. (Bölüm 5.1: bu adım, hız dalgalanmasına karşı en büyük korumamız.)
+4. **Tam turlara kırp.** Pencereyi tam tur sayısına kısaltır.
+5. **Şekil uydur.** Akının açıya göre eğrisine, birkaç sinüs dalgasının toplamı (bu dalgalar n = 1, 2, ... bileşenleridir) en iyi uyacak şekilde uydurulur. Ayrıca ADC'nin yavaş kaymasını gidermek için yavaş değişen bir terim de eklenir.
+6. **Tesla'ya çevir.** Her bileşenin büyüklüğü, bobinin o bileşene duyarlılığına bölünür. Böylece sonuç gerçek alan olarak çıkar.
+7. **Merkezi hesapla.** Dipol ve kuadrupol büyüklüğünden merkez bulunur.
+8. **Sağlık kontrolü.** Bir şey ters gittiyse ölçüm merkezleme'ye **gönderilmez**:
+   - Uydurma, veriyi iyi açıklayamıyorsa (artık yüksek).
+   - Veride örnek kaybı belirtisi varsa (saat sıçraması yüksek).
 
-   n = 1..6 raporlanır; üstteki harmonikler, raporlanan mertebelere sızmasınlar diye modelde tutulur.
-6. **Harmonikleri Tesla'ya çevir.** Her harmoniğin akı genliği, bobinin o mertebedeki duyarlılığına (N·L·K_n) bölünür. Toplama yönteminin (yamuk kuralı) küçük kazanç kaybı da düzeltilir.
-7. **Merkezi hesapla.** z_c = −r_ref·C₁/C₂.
-8. **Sağlık kontrolü.** İki ölçüt vardır; biri aşılırsa ölçüm merkezleme'ye yazılmaz:
-   - **Uydurma artığı:** uydurmanın açıklayamadığı kısım / harmonik içerik (eşik 2·10⁻²),
-   - **Okuma saati sıçraması:** kayıp örnek göstergesi (eşik 0,6).
+### 3.3 Pencerede ne görüyorsunuz
 
-### 3.3 Pencerede gördükleriniz
+- **Durum kutusu:** hız, yazılan ölçüm sayısı, faz ofseti, sinyal tepesi, gecikme, sağlık göstergesi ("Artık / saat sıçr."), uyarılar.
+- **Son ölçüm:** b0, a0 (dipol), b1, a1 (kuadrupol), gradyen, merkez x_c ve y_c.
+- **Çok kutuplar grafiği:** son 20 ölçümün ortalaması, logaritmik ölçekle. Hata çubuğu çubuktan uzunsa o bileşen gürültünün içinde kaybolmuş demektir.
+- **Bobin akısı grafiği:** son pencerenin akısı, bütün turlar üst üste. Üzerindeki çizgi uydurma. Noktalar çizgiye oturmalı.
+- **Günlük:** her olay, her uyarı.
 
-- **Durum kutusu:** ölçülen hız, yazılan ölçüm sayısı, faz ofseti (seçili bobinin), sinyal tepesi, gecikme, "Artık / saat sıçr.", kayıt dosyası, uyarılar.
-- **Son ölçüm:** b0, a0 (dipol), b1, a1 (kuadrupol), gradyen, x_c, y_c.
-- **Çok kutuplar sekmesi:** son 20 ölçümün ortalaması ± tek ölçüm saçılımı, logaritmik eksende. Hata çubuğu çubuktan uzunsa o terim gürültünün altındadır.
-- **Bobin akısı sekmesi:** son pencerenin akısı açıya karşı, bütün turlar üst üste; çizgi uydurmadır. Noktalar çizgiye oturmalıdır.
-- **Günlük:** her olay ve uyarı.
+### 3.4 Referans mıknatıs
 
-### 3.4 Referans mıknatıs (her bobin için ayrı)
+Enkoderin sıfırı her açılışta değiştiği için, programın "x yönü" ile gerçek x yönü arasındaki açı bilinmez. Bunu belirlemek için **alanı düşey olan bir referans mıknatısı** takılır ve "Referans mıknatısla sıfırla"ya basılır. Program, bu mıknatısın alanı "tam normal, pozitif" görünecek şekilde bir açı düzeltmesi (faz ofseti) bulur.
 
-Enkoderin sıfırı her açılışta değiştiğinden, programın "x yönü" ile mıknatısın x yönü arasındaki açı bilinmez. Alanı **düşey** olan bir referans dipol mıknatısı takılır ve "Referans mıknatısla sıfırla"ya basılır. Program, o alanı saf normal ve pozitif (b0 > 0, a0 = 0) gösterecek açı ofsetini bulur.
+Dikkat edilecekler:
+- **Her bobin için ayrı yapılmalı.** İki bobin birbirine 90° farklı durur. Birinin düzeltmesini öbürüne uygularsanız merkez 90° dönük çıkar. Program artık düzeltmeyi bobin başına tutuyor ve referansı alınmamış bobinde uyarıyor.
+- **Bu işlem yalnızca yönü belirler.** Merkezleme'nin sıfıra yakınsamasını etkilemez.
+- **Mıknatıs yoksa ya da sinyal zayıfsa** program düzeltmeyi değiştirmez ve nedenini yazar.
 
-- **Her bobin için ayrı:** iki bobin dönen çerçevede 90° farklı durduğundan, birinin ofseti öbürüne uygulanırsa merkez 90° dönük çıkar. Program artık ofseti bobin başına tutuyor ve referansı alınmamış bobinde uyarıyor.
-- **Yalnızca yön belirler:** referans x/y yönlerini belirler. Merkezlemenin yakınsamasını etkilemez (bölüm 4).
-- **Kontrol:** referans mıknatıs takılı değilken ya da sinyal zayıfken basılırsa program ofseti değiştirmez ve nedenini yazar.
+### 3.5 Gecikme ölçümü
 
-### 3.5 Gecikme ölçümü (iki yönlü)
+"Gecikme ölç (iki yön)" düğmesi (yalnızca "Merkezleme'ye yaz" kapalıyken çalışır):
+1. Bu yönde bir pencere alır.
+2. Motoru ters yöne çevirir.
+3. Öbür yönde bir pencere alır.
 
-"Gecikme ölç (iki yön)" düğmesi (yalnızca "Merkezleme'ye yaz" kapalıyken):
-1. Bu yönde bir pencere alınır.
-2. Motor ters çevrilir.
-3. Öbür yönde bir pencere alınır.
-
-Gecikme, iki yön arasındaki faz farkından bulunur (bölüm 5.2). Ölçülen değer günlükte yazılır; `merkezleme_olcer.yaml` → `olcum.gecikme_ms`'e girilince kalıcı olur. Donanım ve ADC ayarları değişmedikçe sabittir. Sinyal zayıfsa (belirsizlik > 2 µs) uygulanmaz.
+İki yön arasındaki farktan gecikme bulunur (neden bölüm 5.2'de). Program sonucu günlüğe yazar. Kalıcı olması için `merkezleme_olcer.yaml` içindeki `olcum.gecikme_ms` değerine elle yazılır. Donanım ve ADC ayarları değişmedikçe bu değer sabit kalır. Sinyal çok zayıfsa sonuç kullanılmaz.
 
 ---
 
-## 4. Hangi hatalar merkezleme için önemli
+## 4. Bir hata ne zaman tehlikelidir
 
-Bu, sistemi değerlendirmenin anahtarıdır. Merkezleme programı ilk adımlarda, akımları değiştirip ölçülen C₁'in nasıl değiştiğini **kendisi ölçer** (tepki matrisi) ve sonra C₁'i sıfıra sürer. Bu nedenle hatalar üç sınıfa ayrılır:
+Merkezleme programı çalışmaya başlarken önce **bir test yapar**: akımlara küçük değişiklikler uygular ve ölçülen dipolün nasıl değiştiğine bakar. Böylece ölçüm ile akım arasındaki ilişkiyi kendisi öğrenir. Sonra dipolü sıfıra götürmeye çalışır.
 
-**A. Ölçek ve dönme hataları — zararsız.** Bobin duyarlılığındaki (K_n) hata, elektronik kazanç hatası, küçük bir faz ofseti hatası ölçülen C₁'i bir sayıyla çarpar ya da döndürür. Merkezleme bunu tepki matrisine katar; **sıfır, sıfır olarak kalır.** Bunlar yalnızca raporlanan µm değerlerinin doğruluğunu etkiler, varılan noktayı etkilemez.
+Bu çalışma tarzı yüzünden hatalar üç gruba ayrılır:
 
-**B. Ofset tipi hatalar — kritik.** Gerçek merkez sıfırken ölçümde **sahte bir C₁** üreten her etki, merkezleme'yi yanlış bir noktaya götürür. Bu kaymayı hiçbir yinelemeyle fark edemez. Bunlar çoğunlukla n = 2'nin n = 1'e karışmasıdır (bölüm 1.4: milyonda 25 sızıntı = 1 µm). **Bu yazıdaki en önemli hatalar bu sınıftadır.**
+**A. Ölçek hataları — zararsız.**
+Ölçülen her şeyi aynı oranda büyüten ya da küçülten hatalar (bobin duyarlılığındaki hata, elektronik kazanç hatası). Merkezleme bunları kendi testinde zaten öğrenir. "Sıfır" her çarpanla yine sıfırdır. Yalnızca raporlanan µm sayıları kayar; varılan nokta doğru kalır.
 
-**C. Rastgele hatalar — tekrarlanabilirlik.** Gürültü, zamanlama titreşimi. Ölçüm süresi uzatılarak ya da ortalama alınarak azalır, sistematik kayma yapmaz.
+**B. Sahte merkez hataları — tehlikeli.**
+Mıknatısın merkezi gerçekte tam yerindeyken, ölçümde sahte bir dipol gösteren hatalar. Merkezleme bu sahte dipolü sıfırlamaya çalışır ve mıknatısı **gerçekten yanlış bir noktaya** götürür. Hiçbir tekrar bunu düzeltmez; çünkü ölçüm sistemi sıfırı "doğru" görür. Çoğu, bölüm 1.4'teki "büyük sinyalin küçük sinyale karışması" türündendir. **Yazıdaki en önemli hatalar bu grupta.**
 
-Bir ek kural: merkezleme sürerken ölçüm çerçevesi değişirse (bobin, faz ofseti, gecikme, yön, hız), A sınıfı bir hata yarıda değişmiş olur ve tepki matrisi geçersizleşir. Program bu yüzden "Merkezleme'ye yaz" açıkken bunları kilitler.
+**C. Rastgele hatalar — tekrar ve ortalamayla azalır.**
+Gürültü, zamanlama titreşimi. Ölçüm süresini uzatınca ya da ortalama alınca azalır. Bir yöne sistematik kayma yapmaz.
+
+**Bir kural:** Merkezleme çalışırken ölçüm koşulları (bobin, faz düzeltmesi, gecikme, dönüş yönü, hız) değişirse, merkezleme'nin öğrendikleri geçersiz olur. Bu yüzden "Merkezleme'ye yaz" açıkken bu ayarlar **kilitlidir**.
 
 ---
 
 ## 5. Giderilen hatalar
 
-Ayrıntılı sayılar: `SISTEMATIK_HATALAR_RAPORU.md`. Burada sezgisi anlatılıyor.
+Her başlıkta aynı sıra: **ne oluyordu → neden kötüydü → ne yaptık → ne kadar iyileşti**. Sayıların hepsi simülasyondandır. Tüm simülasyonlarda gerçek merkez 152 µm kaçık alınmıştır.
 
-### 5.1 Tur içi hız dalgalanması (B sınıfı) — giderildi
+### 5.1 Motor hızının tur içinde dalgalanması (B grubu)
 
-**Kaynak:** motor her turda tam sabit hızla dönmez. Gerilim V = −ω(t)·dΦ/dθ, yani o anki hızla orantılıdır.
+**Ne oluyor:** Motor her turda mükemmel sabit hızla dönmez. Bobin gerilimi, bobinin **o anki hızıyla** orantılıdır. Hız küçük bir miktar artıp azalırsa, gerilim de aynı oranda artıp azalır.
 
-**Neden kötüydü:** eski yöntem gerilimi ortalama hızla bölüyordu. Hız turun bir yerinde %1 hızlıysa, n = 2 sinyali o bölgede %1 büyük görünür; bu, n = 2'nin n = 1 ve n = 3'e karışmasıdır.
+**Neden kötüydü:** Eski yöntem gerilime bakıp "hız sabit" varsayıyordu. Hız dalgalanınca, ana sinyal (kuadrupol) bozulur; bu bozulma dipole karışır ve sahte merkez kayması çıkar.
 
-| Açı dalgası | Eski yöntem | Yeni yöntem |
+> **Benzetme:** Bir arabanın katettiği yolu, hız göstergesine bakarak tahmin etmeye çalışın. Hız göstergesi sürekli oynuyorsa tahmininiz bozulur. Oysa **kilometre sayacına** baksanız, hızın nasıl oynadığının önemi olmaz. Gerilim "hız göstergesi" gibidir (akının ne kadar hızlı değiştiğini söyler); **akı** ise "kilometre sayacı" gibidir (yalnızca bobinin nerede olduğuna bağlıdır).
+
+**Ne yaptık:** Gerilimi zaman içinde toplayarak (integral) akıyı hesapladık. Artık hız hiç kullanılmıyor. (Dönen bobin sistemlerinde bu işlem genellikle **donanımla**, bir integratör devresiyle yapılır; biz aynı işi yazılımla yapıyoruz. Bunun çalışması için ADC ölçümlerinin düzgün aralıklarla ve hiç kayıpsız gelmesi şart; bkz. 5.6.)
+
+**Sonuç (merkez hatası):**
+
+| Hız dalgalanması (açı olarak) | Eski yöntem | Yeni yöntem |
 |---|---|---|
 | 0,25° | 88 µm | 0,04 µm |
-| 0,5° (~%1–2 hız dalgası) | 177 µm | 0,04 µm |
+| 0,5° | 177 µm | 0,04 µm |
 | 2° | 733 µm | 0,10 µm |
 
-**Çözüm:** gerilim zamanda toplanarak akı bulunur. Akı bobinin nerede olduğuna bağlıdır, ne hızla gittiğine değil. Dönen bobin sistemlerinde bu, donanım integratörüyle (dijital integratör kartı) yapılır; burada ADC örnekleri zamanda düzgün aralıklı olduğundan yazılımla yapılabiliyor.
+### 5.2 Gerilim ile açı arasındaki zaman farkı (B grubu)
 
-### 5.2 ADC–enkoder zaman gecikmesi (B sınıfı) — giderildi
+**Ne oluyor:** İki şey ölçümü geciktirir:
+- ADC'nin süzgeci, her ölçümü birkaç yüz mikrosaniye eskiden gösterir.
+- Enkoderin açısı da statordan dönen karta ulaşana kadar zaman geçer.
 
-**Kaynak:** gerilim örneği ADC filtresi yüzünden birkaç yüz µs eskidir. Enkoder değeri de rotora gecikmeli ulaşır. Sonuçta her örnek, yanında yazan açıdan L kadar farklı bir ana aittir (simülasyonda 0,18 ms; gerçek değer lab'da ölçülecek).
+Sonuç: her gerilim değerinin yanındaki açı etiketi, gerçekte o anki açı değildir. Aradaki fark **L**; simülasyonda 0,18 ms. (Gerçek değeri lab'da ölçeceğiz.)
 
-**Neden önemli:**
-- **Sabit hızda zararsız:** L yalnızca sabit bir açı kaymasıdır (23 Hz'de 1,5°) ve referans onu yutar.
-- **Hız dalgalanırken:** kayma da dalgalanır ve yine n = 2 → n = 1 karışması olur. 0,5° dalgada 4,5 µm, 2°'de 19 µm.
-- **Yön değişince:** kayma işaret değiştirir. Referans bir yönde, ölçüm öbür yönde alınırsa 8 µm (152 µm'lik bir merkezde).
+> **Benzetme:** Bir koşucuyu fotoğraflıyorsunuz ama fotoğraf makinesinin saati, kronometreden biraz geride. Her fotoğrafın üzerindeki "süre" etiketi biraz yanlış.
 
-**Çözüm:** iki yönlü ölçüm. Gecikme, harmonikleri bir yönde bir tarafa, öbür yönde öbür tarafa döndürür; iki yönün farkı L'yi verir (doğruluk: 0,1800'e karşı 0,1798 ms). Bilinen L ile her örneğin açısı zamanda kaydırılır; hata 0,04–0,10 µm'ye iner.
+**Neden kötüydü:**
+- **Motor sabit hızla dönerken zararsız:** etiket hep aynı miktarda yanlış; bu sabit bir açı kayması olur, referans mıknatıs bunu zaten yutar.
+- **Hız dalgalanırken zararlı:** kayma dalgalanır ve bölüm 5.1'deki gibi sahte merkez kayması çıkar. 0,5° dalgalanmada 4,5 µm, 2°'de 19 µm.
+- **Dönüş yönü değişince zararlı:** kayma yön değiştirir. Referansı bir yönde alıp ölçümü ters yönde yaparsanız yaklaşık 8 µm hata çıkar.
 
-Mil burulması ya da kaplin boşluğu gibi **yöne bağlı sabit bir açı farkı** da ölçülen "gecikme"nin içine girer ve aynı şekilde giderilir. Ama bu bileşen zaman değil açı olduğundan, L **ölçüldüğü hızda** geçerlidir. Hız değişirse yeniden ölçün.
+**Ne yaptık:** Gecikmeyi **iki yönlü ölçümle** buluyoruz. Motor ileri dönerken gecikme açıyı bir tarafa, geri dönerken öbür tarafa kaydırır. İki yönde ölçülen farkın yarısı gecikmeyi verir. Bulunan gecikmeyle her ölçüm zamanda geri çekilir (açı etiketi düzeltilir).
 
-### 5.3 Enkoder merdiveni (B sınıfı) — giderildi
+**Sonuç:** Simülasyonda gerçek gecikme 0,1800 ms; ölçülen 0,1798 ms. Düzeltmeden sonra merkez hatası 0,04–0,10 µm.
 
-**Kaynak:** açı ~1 ms'de bir güncellenir. 23 Hz'de bu 8,3°'lik basamaklar demektir; aradaki örnekler 0–8° eski açıyı taşır.
+**Dikkat:** Milin burulması ya da kaplindeki boşluk gibi **yöne bağlı sabit açı farkları** da bu ölçüme karışır ve aynı yöntemle giderilir. Ama onlar zaman değil açı olduğu için, bulunan değer yalnızca **ölçüldüğü hızda** doğrudur. Hız değiştirirseniz gecikmeyi tekrar ölçün.
 
-**Neden kötüydü:** basamaklı açı harmonikleri bozar. Merkezde 2,4 µm; n = 2 kazancında %0,25; n = 6'da 4 birim (1 birim = C₂'nin 10⁻⁴'ü).
+### 5.3 Enkoderin basamaklı çalışması (B grubu)
 
-**Çözüm:** okumalar stator saatine bağlı düzenli aralıklarla gelir. Program her yeni değerin geldiği ilk örneğe bir doğru oturtup okuma anlarını örnek altı hassasiyetle bulur, sonra açıyı kübik eğriyle enterpole eder. Kalan hata: merkezde 0,04 µm, n = 6'da 0,1 birim.
+**Ne oluyor:** Enkoder açısı yaklaşık 1 ms'de bir güncelleniyor, ADC ise 7200 kez/s ölçüyor. Yani her açı değeri yaklaşık 7 ölçümde aynı kalıyor; 23 Hz'de açı gerçekte 8°'ye kadar ilerlemiş olabiliyor.
 
-### 5.4 Yamuk toplamının kazanç kaybı (A sınıfı) — giderildi
+> **Benzetme:** Her dakika bir kez güncellenen bir saatle saniye ölçmek. Aradaki saniyeleri tahmin etmeniz gerekir.
 
-Gerilimi örnekten örneğe toplamak (yamuk kuralı), hızlı değişen bileşenleri biraz küçültür: n = 2'de 1,3·10⁻⁴, n = 6'da 1,2·10⁻³. Kesin formülü bilindiği için düzeltilir; kalan ~10⁻⁶.
+**Neden kötüydü:** Basamaklı açı, uydurmadaki sinüs dalgalarını bozar. Özellikle yüksek mertebeleri (n = 4, 5, 6) bozar. Simülasyonda merkezde 2,4 µm hata, n = 2'nin büyüklüğünde yüzde 0,25 hata.
 
-### 5.5 Dönüş yönünde işaret (A sınıfı) — giderildi
+**Ne yaptık:** Enkoder okumaları, stator kartının saatine bağlı olduğundan düzenli aralıklarla gelir. Program, her yeni açı değerinin geldiği ilk ölçümü bulur ve bunlara düzgün bir "okuma saati" uydurur. Böylece her açı okumasının tam olarak ne zaman yapıldığı, ölçüm aralığından çok daha ince bir hassasiyetle bilinir. Sonra açıyı bu anlar arasında pürüzsüz bir eğriyle (kübik eğri) doldurur.
 
-Eski kod hızın mutlak değerini kullandığı için ters yönde bütün harmoniklerin işareti ters çıkıyordu. Akı yönteminde yön sonucu etkilemez.
+**Sonuç:** Merkez hatası 2,4 µm → 0,04 µm. n = 6'daki bozulma 4,2 birimden 0,1 birime iner (1 birim = kuadrupolün on binde biri).
 
-### 5.6 Örnek kaybı (B sınıfı) — tespit ediliyor
+### 5.4 Toplama yönteminin küçük kazanç kaybı (A grubu)
 
-**Kaynak:** firmware örneklere sıra numarası koymuyor:
-- Stator, RS485'te bozulmuş gelen örnekleri sessizce atıyor.
-- PC tarafında alım kuyruğu dolarsa paket düşüyor.
+Gerilimi örnek örnek toplayarak akı bulmak, hızlı değişen bileşenleri çok küçük bir oranda eksik gösterir (n = 2'de on binde 1,3; n = 6'da binde 1,2). Kesin formülü bilindiği için hesaba katılıyor. Kalan hata milyonda bir mertebesi.
 
-Akı toplamı örneklerin kayıpsız olduğunu varsayar.
+### 5.5 Ters dönüşte işaret hatası (A grubu)
 
-**Etki:** tek bir kayıp, akıda bir basamak yaratır; merkezde **4–8 µm**.
+Eski kod hızın mutlak değerini kullanıyordu. Motor ters dönünce, bütün sonuçların işareti ters çıkıyordu. Akı yönteminde hız kullanılmadığı için dönüş yönü sonucu etkilemiyor.
 
-**Çözüm (tespit, onarım değil):** enkoder okumaları düzenli saatle geldiğinden, kayıp bir örnek sonraki bütün okumaları bir örnek erken gösterir. Program bu kaymayı ölçer ("saat sıçraması": sağlıklıda ~0,2, tek kayıpta ~1) ve ölçümü reddeder. Stator'un hata sayacı artarsa günlüğe uyarı düşer.
+### 5.6 Kayıp ölçümler (B grubu; tespit ediliyor, onarılamıyor)
 
-### 5.7 Diğer koruma ve düzeltmeler
+**Ne oluyor:** Ölçüm paketleri yolda kaybolabilir. Firmware ölçümlere sıra numarası koymuyor:
+- Stator kartı, bozuk gelen ölçümü sessizce atıyor; yalnızca bir sayaç artıyor.
+- Bilgisayar tarafında tampon dolarsa paket düşüyor.
 
-- **Çerçeve kilidi:** "Merkezleme'ye yaz" açıkken bobin, hız, referans, gecikme değiştirilemez.
-- **Faz ofseti bobin başına:** iki bobin karıştırılırsa merkez 90° dönük çıkıyordu; düzeltildi.
-- **Bağlantı kopması:** firmware bağlantı kopunca motoru **durdurmaz**. Program yeniden bağlanınca önce motoru durdurur, durunca servoyu kapatır.
-- **Zayıf sinyal:** gecikme ve referans, ancak fazları yeterince kesin ölçülmüşse uygulanır.
-- **Mıknatıs modülasyonu:** mıknatısın 1 kHz %1 modülasyonu açıkken uydurma artığı ~6,6·10⁻³ olur ama merkez etkilenmez (0,05 µm). Artık eşiği buna göre 2·10⁻²'ye ayarlandı.
+**Neden kötü:** Akı hesabı, ölçümlerin eşit aralıklarla ve eksiksiz geldiğini varsayar. Tek bir kayıp ölçüm bile akıda bir basamak yaratır; simülasyonda 4–8 µm merkez hatası.
+
+**Ne yaptık:** Kayıp ölçümü geri getiremeyiz ama **fark edebiliriz.** Enkoder okumaları düzenli aralıklarla geldiği için, bir ADC ölçümü kaybolduğunda sonraki bütün açı okumaları bir ölçüm erken görünür. Program bu kaymayı ölçer:
+- Sağlıklı veride yaklaşık 0,2
+- Tek kayıpta yaklaşık 1
+- Eşik 0,6
+
+Eşik aşılırsa ölçüm **merkezleme'ye yazılmaz.** Üst üste 3 kez olursa motor durdurulur. Ayrıca stator kartının "bozuk ölçüm attım" sayacı artarsa günlüğe uyarı düşer.
+
+### 5.7 Diğer korumalar
+
+- **Çerçeve kilidi:** Merkezleme'ye yazarken bobin, hız, referans, gecikme ve dönüş yönü değiştirilemez.
+- **Bağlantı koparsa:** Firmware, bağlantı kopunca motoru durdurmuyor. Program yeniden bağlanınca önce motoru durdurur, motor durunca servoyu kapatır.
+- **Zayıf sinyal:** Gecikme ve referans ölçümleri, ancak yeterince kesinlerse kullanılır. Mıknatıs takılı değilken yanlışlıkla basılırsa değer değiştirilmez.
+- **Mıknatıs modülasyonu:** Mıknatısın 1 kHz'de %1 modülasyonu açıkken uydurma artığı yaklaşık 6,6·10⁻³ çıkıyor ama merkez etkilenmiyor (0,05 µm). Artık eşiğini buna göre 2·10⁻²'ye ayarladık.
 
 ---
 
-## 6. Açık duran hatalar ve zayıf yanlar
+## 6. Hâlâ açık olan hatalar ve zayıf yanlar
 
-Önem sırasına göre. Her biri için sınıf (bölüm 4), büyüklük, nasıl fark edileceği ve ne yapılabileceği verilmiştir.
+Önem sırasına göre. Her biri için: ne olduğu, ne kadar kötü olabileceği, nasıl anlaşılacağı, ne yapılabileceği.
 
-### 6.1 Enkoderin tur başına açı hatası — B sınıfı, en önemli açık konu
+### 6.1 Enkoderin her turda tekrarlanan açı hatası — en önemli açık konu (B grubu)
 
-**Nedir:** enkoder diski mile tam ortalı değilse ya da enkoder ile bobin mili arasındaki kaplin her turda biraz salınıyorsa, okunan açı gerçek açıdan tur başına bir kez salınan bir hatayla sapar: ε·cos(θ + φ). Ucuz enkoderlerde ve kaplinli düzeneklerde birkaç açı dakikası olağandır.
+**Ne oluyor:** Enkoder diski mile tam ortalı değilse ya da enkoder ile bobin mili arasındaki bağlantı (kaplin) her turda biraz oynuyorsa, okunan açı gerçek açıdan **tur başına bir kez** küçük miktarda sapar. Ucuz enkoderlerde ve kaplinli düzeneklerde birkaç açı dakikası görmek olağandır.
 
-**Neden kritik:** bu açı hatası n = 2'yi doğrudan n = 1'e karıştırır. Simülasyonda sahte merkez kayması tam olarak
+**Neden kötü:** Açı yanlışsa kuadrupol sinyali dipole karışır. Simülasyonda:
 
-  **Δz = d · ε** (d = bobinin eksene uzaklığı = 20 mm)
+> **Sahte merkez kayması = bobinin eksene uzaklığı (20 mm) × açı hatası**
+>
+> - 1 açı dakikası → **5,8 µm**
+> - 5 açı dakikası → **29 µm**
 
-- 1 açı dakikası → **5,8 µm**
-- 5 açı dakikası → **29 µm**
+Bu hata dönüş yönünden bağımsızdır; iki yönlü ölçüm onu **gidermez.** Merkezleme mıknatısı bu kadar yanlış bir noktaya götürür ve bunu fark edemez.
 
-Bu hata **yönden bağımsızdır**; iki yönlü ölçüm onu gidermez. Merkezleme mıknatısı bu kadar yanlış bir noktaya götürür ve bunu fark edemez. 2 periyotlu (tur başına iki kez) açı hataları ise önemsizdir (1 açı dakikasında 0,05 µm).
+(Tur başına iki kez tekrarlanan açı hataları önemsiz: 1 açı dakikasında 0,05 µm.)
 
-**Nasıl fark edilir:** iki bobin bu hatayı birbirine **90° dönük** gösterir. Simülasyonda bobin 1'in sahte kayması s ise bobin 2'ninki i·s'dir. Mıknatıs merkeze yakınken iki bobin farklı merkez gösteriyorsa, büyük olasılıkla bu hata vardır. Fark z₁ − z₂ = s·(1 − i) ilişkisinden s hesaplanabilir.
+**Nasıl anlaşılır:** İki bobin birbirine 90° dönük olduğu için bu hatayı **farklı** gösterir. Simülasyonda bobin 1'in sahte kayması bir değerse, bobin 2'ninki aynı değerin 90° döndürülmüşüdür. Yani:
 
-**Ne yapılabilir:** iki bobinli bir **kalibrasyon** yazılıma eklenebilir:
-1. İki bobinle merkez ölçülür; açı farkları kendi referanslarından bilinir.
-2. Farktan sahte kayma çözülür.
-3. Kalıcı bir düzeltme olarak saklanır.
+> Mıknatıs aynı yerde dururken, bobin 1 ve bobin 2 **farklı merkez** gösteriyorsa, büyük olasılıkla bu hata vardır.
 
-Bu, mevcut donanımla yapılabilir. Alternatif: bobin milde 180° döndürülüp yeniden takılırsa sahte kayma işaret değiştirir; iki ölçümün ortalaması onu yok eder.
+(Bu karşılaştırma için her bobinin referansı ayrı alınmış olmalı; bu artık programda var.)
 
-### 6.2 Dönme ekseninin oynaması, titreşim — B ve C sınıfı
+**Ne yapılabilir:** İki bobinden gelen fark, hem hatayı hem gerçek merkezi çözmeye yetiyor. Yazılıma bir **kalibrasyon** eklenebilir: iki bobinle ölçüm yapar, sahte kaymayı bulur, kalıcı olarak düzeltir. Bu, mevcut donanımla yapılabilir. Lab'da önce farkın gerçekten var olup olmadığına bakalım (bölüm 7, test 5).
 
-**Nedir:** ölçülen merkez, **bobinin dönme eksenine göre**dir. Yatak boşluğu, mil eğilmesi, motor ya da zemin titreşimi bu ekseni oynatırsa, kuadrupol alanı bu oynamayı doğrudan dipol olarak gösterir. Eksen 1 µm kayarsa ölçülen merkez de ~1 µm değişir.
-- **Rastgele titreşim:** gürültü ekler.
-- **Dönmeyle eşzamanlı salınım** (örneğin mil turda bir kez yalpalıyorsa): sistematik karışma yapabilir.
+### 6.2 Dönme ekseninin oynaması ve titreşim (B ve C grubu)
 
-**Neden önemli:** büyük dönen bobin sistemlerinde (CERN, Fermilab) bu yüzden **kompanzasyon (bucking)** kullanılır. Birden çok bobin, ana harmoniği birbirini yok edecek biçimde bağlanır; titreşimin ana harmonik üzerinden yarattığı karışma büyük ölçüde iptal edilir. Bizim sistemde bucking yok; iki bobin ayrı ayrı okunuyor.
+**Ne oluyor:** Ölçülen merkez, **bobinin döndüğü eksene göre.** Eksen titrerse ya da yatakta oynarsa, bunu mıknatısın merkezi kaymış gibi görürüz.
+- Rastgele titreşim: gürültü ekler (C grubu).
+- Dönmeyle aynı ritimde bir sallanma (mil her turda yalpalıyorsa): sistematik karışma yapabilir (B grubu).
 
-**Nasıl fark edilir:** manyetik harmonikler hızdan bağımsızdır, mekanik titreşim etkileri genellikle hıza bağlıdır (rezonanslar). Aynı alanı 10, 15, 23 Hz'de ölçün; sonuçlar hıza göre değişiyorsa mekanik bir etki vardır.
+**Neden önemli:** Büyük laboratuvarlardaki dönen bobin sistemlerinde bunun için **kompanzasyon (bucking)** kullanılması yaygındır: birden çok bobin, ana sinyali birbirini yok edecek şekilde bağlanır, böylece titreşimin ana sinyal üzerinden yarattığı karışma büyük ölçüde iptal olur. Bizde bucking yok; iki bobin ayrı ayrı okunuyor.
 
-**Ne yapılabilir:** önce ölçmek. Gerekirse mekanik iyileştirme (yatak, kaplin) ya da bucking için ek bobin.
+**Nasıl anlaşılır:** Mıknatısın manyetik alanı motor hızından bağımsızdır; mekanik titreşim etkileri ise genellikle hıza bağlıdır. Aynı alanı 10, 15 ve 23 Hz'de ölçün. Sonuç hızla değişiyorsa mekanik bir etki var demektir.
 
-### 6.3 Mil sehimi (yerçekimi) — B sınıfı, hedefe bağlı
+**Ne yapılabilir:** Önce ölçmek. Gerekirse mekanik iyileştirme (yatak, kaplin) ya da bucking bobini.
 
-Uzun bir mil ortasında yerçekimiyle biraz sarkar. Ölçülen merkez sarkmış eksene göredir; yani program mıknatısı bu eksene ortalar. Sehim yönden bağımsızdır, iki yönlü ölçüm gidermez. Bunun hata olup olmadığı, merkezin hangi eksene göre istendiğine bağlıdır: ışın ekseni dış referanslarla (lazer izleyici vb.) tanımlanıyorsa, sehim bir ofset olarak hesaba katılmalıdır.
+### 6.3 Milin yerçekimiyle sarkması (B grubu; hedefe bağlı)
 
-### 6.4 Arka plan manyetik alanı — B sınıfı, kısmen çözülmüş
+Uzun bir mil ortasında yerçekimiyle biraz sarkar. Ölçülen merkez, **sarkmış eksene** göredir. Sarkma dönüş yönüne bağlı değil; iki yönlü ölçüm bunu gidermez.
 
-**Nedir:** Dünya'nın alanı (~50 µT) ve laboratuvardaki başıboş alanlar. Mıknatıs **demirsiz** olduğundan bunları perdelemez.
+Bunun "hata" olup olmadığı, hedef eksenin nasıl tanımlandığına bağlı. Işın ekseni başka bir yolla (örneğin lazer izleyici) belirleniyorsa, sarkma bir ofset olarak hesaba katılmalı.
 
-**Büyüklük:** 50 µT'lık bir dipol, G ≈ 0,095 T/m'lik bir kuadrupolde merkezi r_ref·C₁/C₂ ≈ **0,5 mm** kaydırır.
+### 6.4 Çevredeki manyetik alan (B grubu; kısmen çözülmüş)
 
-**Durum:** merkezleme programı mıknatıs kapalıyken arka plan ölçümü alıp çıkarıyor. Arka plan ölçümler arasında değişirse çıkarma eksik kalır: yakına demir taşınması, kapı ya da vinç, komşu mıknatısların açılıp kapanması. Arka plan ölçümünü sık tekrarlamak ve ortamı sabit tutmak önemlidir.
+Dünya'nın manyetik alanı (yaklaşık 50 µT) ve laboratuvardaki başıboş alanlar sistemde dipol gibi görünür. Mıknatısımız **demirsiz** olduğu için bunları perdelemez. 50 µT'lık bir dipol, bizim kuadrupolde merkezi yaklaşık **0,5 mm** kaydırır.
 
-### 6.5 Enkoder okuma zamanlamasının titreşimi — C sınıfı
+Merkezleme programı, mıknatıs kapalıyken bir "arka plan ölçümü" alıp çıkarıyor. Ama arka plan ölçümler arasında değişirse (yakına demirli bir şey taşınırsa, kapı ya da vinç hareket ederse, komşu mıknatıs açılıp kapanırsa) çıkarma yetersiz kalır. Arka plan ölçümünü sık tekrarlayın ve ortamı sabit tutun.
 
-**Nedir:** stator enkoderi ana döngüsünde okur. Bu döngü Ethernet gönderimi gibi işlerle zaman zaman gecikebilir; okuma anı düzenli saatten birkaç ya da birkaç on µs sapar. Program okuma anlarını düzenli saat varsayarak bulduğu için bu sapma açı hatasına dönüşür.
+### 6.5 Enkoderin okuma zamanındaki titreşim (C grubu)
 
-| Titreşim | 2 s pencere | 8 s pencere |
+Stator kartı enkoderi ana döngüsünde okuyor; bu döngü Ethernet gibi işlerle zaman zaman biraz gecikebilir. Okuma anı düzenli saatten birkaç on mikrosaniye sapabilir. Program okumaları düzenli saatle geldi varsayarak yerleştirdiği için, bu sapma küçük bir açı hatasına dönüşür.
+
+| Okuma titreşimi | 2 s pencerede | 8 s pencerede |
 |---|---|---|
 | 5 µs | 1,2 µm | 0,24 µm |
 | 20 µs | 4,7 µm | 1,0 µm |
 
-Rastgeledir; ölçüm süresi uzatılarak azalır. Gerçek düzeyi bilinmiyor. Lab'da tekrarlanabilirlikten anlaşılır; yazılım bunu doğrudan gösterecek şekilde genişletilebilir.
+Rastgele olduğu için ölçüm süresi uzadıkça azalır. Gerçek titreşim düzeyi **bilinmiyor**; lab'da tekrarlanabilirlikten anlaşılır.
 
-**Kalıcı çözüm (firmware):** enkoder okumasına zaman damgası eklemek, ya da rotorda açıyı örnek anına enterpole etmek.
+**Kalıcı çözüm (firmware):** enkoder okumasına zaman damgası eklemek ya da açıyı dönen kartta ölçüm anına enterpole etmek.
 
-### 6.6 Bobin geometrisi ve 3B etkiler — A sınıfı
+### 6.6 Bobinin geometrisi (A grubu, ama mutlak değeri etkiler)
 
-- **Duyarlılık hatası:** sarım, genişlik, eksene uzaklıktaki küçük hatalar duyarlılığı (K_n) değiştirir. Bu ölçek ve dönme hatasıdır; merkezleme sonucunu değiştirmez, raporlanan µm'leri değiştirir.
-- **Yana kayık bobin:** bobin 0,5 mm yana kayıksa n = 2'nin fazı ~1,4° kayar ve raporlanan merkez yönü o kadar döner.
-- **Mutlak doğruluk:** bilinen gradyenle (|C₂|/r_ref) ve bilinen bir mekanik kaydırmayla kalibre edilir.
-- **3B:** bobin 100 mm boyunca **ortalama** alanı ölçer. Mıknatıs boyu ya da uç alanları farklıysa, ya da mıknatıs eksene göre eğikse, ölçülen merkez bu uzunluk boyunca ortalamadır.
+- **Duyarlılık hatası:** Sarım sayısı, genişlik, eksene uzaklık gibi değerlerde küçük bir hata, raporlanan µm sayılarını ölçekler. Merkezleme'nin sıfıra yakınsamasını bozmaz. Mutlak doğruluk için **bilinen gradyenli bir mıknatıs** ve **bilinen bir mekanik kaydırma** ile kalibrasyon gerekir.
+- **Üç boyutlu etkiler:** Bobin 100 mm boyunca **ortalama** alanı ölçer. Mıknatısın uç alanları ya da eğikliği varsa ölçülen merkez bu uzunluk boyunca bir ortalamadır.
 
 ### 6.7 ADC ve elektronik
 
-- **Doyma:** kazanç 32'de tam ölçek ±78 mV. Pencere %80'de uyarır; doyarsa kazancı düşürün.
-- **Gürültü:** simülasyonda 1 µV gürültü merkezde ~0,2 µm (2 s) yapar. Yüksek gradyende etkisi azalır.
-- **Sinc4 filtresinin genlik düşümü:** yüksek mertebelerde ~10⁻³. Düzeltilmedi; merkezde ihmal edilebilir (0,03 µm).
-- **50 Hz şebeke ve motor sürücüsü paraziti:** dönmeyle eşzamanlı değilse uydurma onu harmonik saymaz, artığa gider. Eşzamanlıysa (sürücü akımı dönme açısına bağlıysa) harmonik gibi görünebilir. Motor kapalıyken ve farklı hızlarda karşılaştırılmalı.
-- **Ofset ve sürüklenme:** uydurmadaki zaman polinomuyla giderilir.
+- **Doyma:** Sinyal ADC'nin ölçebileceğinin %80'ini geçerse program uyarır. Bu durumda kazancı düşürün.
+- **Gürültü:** Simülasyonda 1 µV gürültü, merkezde yaklaşık 0,2 µm (2 saniyelik ölçümde). Daha uzun ölçümle azalır.
+- **Süzgecin yüksek mertebeleri biraz küçültmesi:** n = 6'da yaklaşık binde birkaç. Düzeltilmedi; merkezi etkilemez (0,03 µm).
+- **Şebeke ve motor sürücüsü paraziti:** Dönmeyle aynı ritimde olmayan parazit uydurma tarafından "bileşen" sayılmaz ve yalnızca artığa girer. Dönmeyle ilişkiliyse (sürücü akımı dönme açısına bağlıysa) sahte bir harmonik gibi görünebilir. Motor kapalıyken ve farklı hızlarda karşılaştırarak anlaşılabilir.
 
 ### 6.8 Firmware'den gelen sınırlar
 
 | Sınır | Sonuç | Öneri |
 |---|---|---|
-| Örnek sıra numarası yok | Kayıp tespit edilir ama ölçüm kaybolur | Rotorda örnek sayacı |
-| Enkoder ~1 ms'de bir, enterpolasyonsuz | Merdiven (yazılımla telafi) ve okuma titreşimi | Zaman damgası ya da rotorda enterpolasyon |
-| Bağlantı kopunca motor dönmeye devam eder | PC tarafı yeniden bağlanınca durduruyor | Firmware'de bağlantı bekçisi (rampalı durma) |
-| Enkoder artımlı, indekssiz | Her açılışta referans gerekir | İndeksli ya da mutlak enkoder |
+| Ölçümlerde sıra numarası yok | Kayıp tespit edilir ama ölçüm kaybolur | Dönen kartta ölçüm sayacı |
+| Enkoder ~1 ms'de bir güncelleniyor, arası boş | Merdiven (yazılımla telafi) ve okuma titreşimi | Zaman damgası ya da dönen kartta enterpolasyon |
+| Bağlantı kopunca motor durmuyor | PC yeniden bağlanınca durduruyor | Firmware'de bağlantı bekçisi (kopunca rampalı durma) |
+| Enkoder artımlı, indeks darbesi yok | Her açılışta referans gerekir | İndeksli ya da mutlak enkoder |
 
-### 6.9 Mıknatıs tarafı
+### 6.9 Mıknatıs tarafı (tahminler, ölçülmedi)
 
-- **Histerezis yok:** demirsiz mıknatısın avantajı; alan doğrudan akımla orantılıdır.
-- **Isınma:** bobin direnci değişir (sabit akım kaynağı bunu dengeler), mekanik genleşme merkezi kaydırabilir. Uzun çalışmalarda merkez zamanla sürükleniyorsa ısıl etki düşünülmeli.
-- **Güç kaynağı akım gürültüsü:** alan gürültüsüne dönüşür; C sınıfı.
+- Demirsiz mıknatısta histerezis (geçmişe bağlı alan) yok; alan doğrudan akımla orantılı.
+- Uzun çalışmada bobinler ısınır, mekanik genleşme merkezi yavaşça kaydırabilir. Merkez zamanla sürekli bir yöne gidiyorsa ısıl etkiyi düşünün.
+- Güç kaynağındaki akım gürültüsü alan gürültüsüne dönüşür.
 
 ---
 
-## 7. Lab'da yapılacak testler
+## 7. Lab'da neleri deneyeceksiniz
 
-Her test, belirli bir hatayı ortaya çıkarmak için tasarlanmıştır.
+Her test belirli bir hatayı ortaya çıkarmak için tasarlandı.
 
-| # | Test | Ne gösterir |
+| # | Test | Neyi gösterir |
 |---|---|---|
-| 1 | Sürekli ölçüm, 2 s ve 8 s pencere; x_c, y_c saçılımı | Rastgele hatalar (6.5, 6.7). 8 s'de saçılım ~yarıya inmeli. |
-| 2 | "Gecikme ölç" 2–3 kez | L'nin değeri ve tutarlılığı (µs düzeyinde). Sonuç yaml'a. |
-| 3 | Gecikme ayarlıyken +23 ve −23 Hz | Yöne bağlı kalan etkiler. Aynı çıkmalı. |
-| 4 | Aynı alan 10, 15, 23 Hz | Mekanik/titreşim etkileri (6.2). Manyetik sonuç hızdan bağımsız olmalı. |
-| 5 | **Merkeze yakınken bobin 1 ve bobin 2** (her biri kendi referansıyla) | Enkoder tur başına hatası (6.1). Fark ~0 olmalı; değilse kalibrasyon gerekir. |
-| 6 | Mıknatısı bilinen miktarda +x, sonra +y kaydırma | İşaret, el kuralı ve merkez ölçeği (6.6). |
-| 7 | Bilinen gradyenle karşılaştırma | Mutlak ölçek (K₂). |
-| 8 | Referans mıknatıs | b0 > 0, a0 ≈ 0; referans her iki bobin için ayrı alınmalı. |
-| 9 | Mıknatıs kapalı, motor dönüyor | Arka plan alanı ve parazit düzeyi (6.4, 6.7). |
-| 10 | Modülasyon açık / kapalı | Artığın ~6·10⁻³'e çıkıp merkezin değişmediği. |
-| 11 | Uzun süre (saatler) ölçüm | Isıl ve mekanik sürüklenme (6.9). |
-| 12 | "Artık / saat sıçr." değerleri, günlükte RS485 uyarıları | Sağlıklı düzeyler; eşiklerin uygunluğu; örnek kaybı sıklığı. |
+| 1 | Sürekli ölçüm; 2 s ve 8 s pencereyle merkez saçılımına bakın | Rastgele hatalar (6.5, 6.7). 8 s'de saçılım yaklaşık yarıya inmeli. |
+| 2 | "Gecikme ölç" düğmesini 2–3 kez | Gecikmenin değeri ve tutarlılığı (birkaç µs içinde aynı çıkmalı). Sonucu yaml dosyasına yazın. |
+| 3 | Gecikme ayarlıyken +23 ve −23 Hz'de aynı alan | Yöne bağlı kalan etkiler. İki yönde aynı sonuç çıkmalı. |
+| 4 | Aynı alanı 10, 15 ve 23 Hz'de ölçün | Mekanik etkiler (6.2). Manyetik sonuç hızdan bağımsız olmalı. |
+| 5 | **Mıknatıs aynı yerdeyken bobin 1 ve bobin 2'yi karşılaştırın** (her biri kendi referansıyla) | Enkoder açı hatası (6.1). İkisi aynı merkezi göstermeli; göstermiyorsa kalibrasyon gerekir. |
+| 6 | Mıknatısı bilinen miktarda +x yönünde, sonra +y yönünde kaydırın | İşaret, yön ve merkez ölçeği (6.6). Okunan değişim beklenenle uyuşmalı. |
+| 7 | Gradyeni bilinen mıknatısla karşılaştırma | Mutlak ölçek. |
+| 8 | Referans mıknatıs: b0 pozitif, a0 sıfıra yakın çıkmalı | Referansın doğru çalıştığı. Her iki bobin için ayrı yapın. |
+| 9 | Mıknatıs kapalı, motor dönüyor | Çevre alanı ve parazit düzeyi (6.4, 6.7). |
+| 10 | Mıknatıs modülasyonu açık ve kapalı | Artığın ~6·10⁻³'e çıkıp merkezin değişmediği. |
+| 11 | Saatlerce süren ölçüm | Isıl ve mekanik sürüklenme (6.9). |
+| 12 | Pencerede "Artık / saat sıçr." değerleri ve günlükteki RS485 uyarıları | Sağlıklı düzeyler, eşiklerin uygunluğu, kayıp sıklığı. |
 
 ---
 
-## 8. Önerilen iyileştirmeler
+## 8. Sonraki adımlar
 
 Öncelik sırasıyla:
 
 **Yazılım (mevcut donanımla):**
-1. **İki bobinli enkoder kalibrasyonu** (6.1): en önemli açık sistematik hatayı ölçüp düzeltir.
-2. **Okuma titreşimi göstergesi** (6.5): okuma saati uydurmasının sapmasından titreşimi µs olarak göstermek.
-3. **Hız dalgalanması göstergesi:** enkoder verisinden tur içi hız profilini çıkarıp göstermek (motorun gerçek davranışını görmek için).
+1. **İki bobinli enkoder kalibrasyonu** (6.1): en önemli açık hatayı ölçüp düzeltir.
+2. **Okuma titreşimi göstergesi** (6.5): titreşimi µs olarak pencerede göstermek.
+3. **Hız profili göstergesi:** motorun tur içindeki gerçek hız dalgalanmasını göstermek.
 
 **Firmware:**
-4. Rotorda örnek sayacı (kayıp tespiti yerine kayıp onarımı ya da kesin tespit).
-5. Enkoder okumasına zaman damgası ya da rotorda açı enterpolasyonu.
-6. Bağlantı kopunca motoru rampalı durduran bekçi.
+4. Dönen kartta ölçüm sayacı (kayıpları kesin tespit etmek için).
+5. Enkoder okumasına zaman damgası ya da dönen kartta açı enterpolasyonu.
+6. Bağlantı kopunca motoru yavaşça durduran bekçi.
 
 **Donanım:**
-7. Kompanzasyon (bucking) bobini: titreşim duyarlılığını azaltır, küçük harmonikleri daha iyi ölçer.
-8. İndeksli ya da mutlak enkoder: açılışta referans gereksinimini kaldırır.
+7. Kompanzasyon (bucking) bobini: titreşimden gelen karışmayı azaltır.
+8. İndeksli ya da mutlak enkoder: her açılışta referans gereksinimini azaltır.
 
 ---
 
@@ -412,22 +443,25 @@ Her test, belirli bir hatayı ortaya çıkarmak için tasarlanmıştır.
 
 | Terim | Anlamı |
 |---|---|
-| Akı (Φ) | Bobinden geçen manyetik alan toplamı. Gerilim akının zamana göre değişimidir. |
-| Artık (uydurma artığı) | Uydurmanın açıklayamadığı kısmın, harmonik içeriğe oranı. Ölçümün sağlığını gösterir. |
-| Bucking (kompanzasyon) | Ana harmoniği iptal edecek biçimde birleştirilmiş bobinler. |
-| Çerçeve | Ölçümün yapıldığı koşullar: bobin, faz ofseti, gecikme, yön, hız. |
-| Çok kutup (C_n) | Alanın dipol, kuadrupol, sekstupol... bileşenleri. |
-| Faz ofseti | Enkoder açısı ile mıknatısın x ekseni arasındaki açı. Referansla bulunur. |
-| Feed-down | Kaçık bir çok kutbun alt mertebeler üretmesi (kaçık kuadrupol → dipol). |
-| Gecikme (L) | Gerilim örneğinin, yanındaki açıya göre ne kadar eski olduğu. |
-| K_n (duyarlılık) | Bobinin n. harmoniğe ne kadar duyarlı olduğu; geometrisinden hesaplanır. |
-| Merdiven | Enkoder değerinin basamaklı güncellenmesi. |
-| Okuma saati sıçraması | Kayıp örnek göstergesi. |
-| Referans mıknatıs | Alanı bilinen yönde (düşey) bir dipol; açı sıfırını bulmak için. |
-| r_ref | Harmoniklerin verildiği referans yarıçap (25 mm). |
-| Skew / normal | Çok kutbun 90°/n döndürülmüş ve döndürülmemiş bileşenleri. |
-| Tepki matrisi | Merkezlemenin ölçtüğü, akım değişimleri ile C₁ değişimleri arasındaki ilişki. |
+| Akı | Bobinin içinden geçen toplam manyetik alan. Gerilim, akının değişim hızıyla orantılıdır. |
+| ADC | Analog sinyali (gerilimi) sayıya çeviren devre. |
+| Artık (uydurma artığı) | Uydurmanın açıklayamadığı kısmın, açıklanan kısma oranı. Ölçümün sağlıklı olup olmadığını gösterir. |
+| Bucking (kompanzasyon) | Ana sinyali birbirini yok edecek şekilde bağlanmış birden çok bobin. |
+| Çerçeve | Ölçümün yapıldığı koşullar: bobin, faz düzeltmesi, gecikme, dönüş yönü, hız. |
+| Çok kutup (C_n) | Alanın dipol (n=1), kuadrupol (n=2), ... bileşenleri. |
+| Dipol | Her yerde aynı yönde ve büyüklükte düzgün alan. |
+| Enkoder | Mil açısını ölçen sensör. |
+| Faz ofseti | Enkoderin sıfırı ile gerçek x ekseni arasındaki açı. Referans mıknatısla bulunur. |
+| Gecikme (L) | Bir gerilim ölçümünün, yanındaki açı etiketine göre ne kadar eski olduğu. |
+| Kuadrupol | Merkezde sıfır, uzaklaştıkça artan alan. Bizim mıknatısın asıl alanı. |
+| Merdiven | Enkoder değerinin basamaklı (aralıklı) güncellenmesi. |
+| Normal / skew | Bir çok kutbun iki bileşeni; skew, normalin 90/n derece çevrilmiş hâli. |
+| Okuma saati sıçraması | Kayıp ölçüm göstergesi: enkoder okumalarının beklenen düzenli ritme göre kayması. |
+| Referans mıknatıs | Alanı bilinen (düşey) bir dipol mıknatıs; açı sıfırını bulmak için kullanılır. |
+| RS485 | Dönen kart ile sabit kart arasındaki hızlı seri hat. |
+| Sehim | Milin yerçekimiyle sarkması. |
+| Tepki matrisi | Merkezleme'nin ölçtüğü, akım değişikliği ile dipol değişikliği arasındaki ilişki. |
 
 ---
 
-*İlgili belgeler: `README_SURUM.md` (kullanım ve lab planı), `SISTEMATIK_HATALAR_RAPORU.md` (giderilen hataların sayısal ayrıntısı), depo kökündeki `README.md` (merkezleme programı ve konvansiyonlar).*
+*İlgili belgeler: `README_SURUM.md` (kullanım ve lab planı), `SISTEMATIK_HATALAR_RAPORU.md` (giderilen hataların sayısal ayrıntısı), depo kökündeki `README.md` (merkezleme programı).*

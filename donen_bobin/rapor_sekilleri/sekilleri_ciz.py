@@ -185,3 +185,33 @@ ax.set_title("Bobin akısı, 8 Hz, 10 s (80 tur üst üste)", loc="left", color=
 fig.savefig(CIKTI / "6_aki_8hz.png")
 plt.close(fig)
 print("8 Hz akı: artık", round(s.artik_orani, 3), "C:", [round(abs(c) * 1e6, 2) for c in s.harmonikler])
+
+# 7) 13:39 kaydı: kalkış sırasında hız ve enkoder bozulması (0.5 s'lik dilimler)
+t, a, _ = yukle("ham_2026-11-04_133933.csv")
+taze = np.flatnonzero(np.diff(a) != 0) + 1
+dn = np.diff(taze)
+da = (np.diff(a[taze]) + 180) % 360 - 180
+tz = t[taze[1:]]
+dilim = np.arange(-10, 0, 0.5)
+hizlar, oranlar = [], []
+for s0 in dilim:
+    m = (tz >= s0) & (tz < s0 + 0.5)
+    w = da[m] / (dn[m] / SPS) / 360
+    med = float(np.median(w))
+    ok = np.abs(da[m] - med * 360 * dn[m] / SPS) <= 15
+    hizlar.append(float(np.sum(da[m][ok]) / np.sum(dn[m][ok]) * SPS / 360))
+    oranlar.append(100 * float(np.mean(~ok)))
+fig, (ust, alt) = plt.subplots(2, 1, figsize=(6.0, 3.8), sharex=True, gridspec_kw={"height_ratios": [1, 1]})
+ust.plot(dilim + 0.25, hizlar, "-o", color=MAVI, ms=4)
+ust.set_ylabel("Hız (Hz)")
+ust.set_ylim(0, 26)
+ust.set_title("13:39 kaydı: motor kalkarken hız (üst) ve tutarsız enkoder okuması (alt)", loc="left", color=YAZI, fontsize=9)
+alt.bar(dilim + 0.25, oranlar, width=0.4, color=TURUNCU)
+alt.set_ylabel("Tutarsız okuma (%)")
+alt.set_xlabel("Zaman (s, kaydın sonu 0)")
+alt.set_xlim(-10, 0)
+alt.set_ylim(0, max(oranlar[3:]) * 1.3)
+alt.text(-9.75, max(oranlar[3:]) * 1.15, "ilk 1 s: motor neredeyse duruyor,\noran güvenilmez", fontsize=7, color=YAZI2, va="top")
+fig.savefig(CIKTI / "7_kalkis_1339.png")
+plt.close(fig)
+print("kalkış:", [(round(float(s), 1), round(h, 2), round(o, 2)) for s, h, o in zip(dilim, hizlar, oranlar)])

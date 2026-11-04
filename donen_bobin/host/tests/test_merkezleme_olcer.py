@@ -664,6 +664,17 @@ def test_rs485_hata_sayaci_bildirilir(kurulum):
     assert any("2 bozuk ADC örneği" in m for m in gunluk)
 
 
+def test_enkoder_crc_sayaci_bildirilir(kurulum):
+    dunya, dongu, gunluk = kurulum
+    dongu.baglan()
+    dongu.engine.enc_crc_error_count = 65534  # sayaç 16 bit, taşar
+    calistir(dunya, dongu, 0.2)
+    assert not any("enkoder" in m for m in gunluk)  # ilk değer yalnızca kaydedilir
+    dongu.engine.enc_crc_error_count = 3
+    calistir(dunya, dongu, 0.1)
+    assert any("rotor 5 bozuk enkoder güncellemesi" in m for m in gunluk)
+
+
 # ---------------------------------------------------------------------------
 # Pencere (ekransız)
 # ---------------------------------------------------------------------------

@@ -64,6 +64,8 @@ Sistemin nasıl çalıştığı, zayıf yanları ve açık hatalar: [`DONEN_BOBI
 
 **Bilinen sınırlama (firmware):** örneklerde sıra numarası yok; stator ADC sağlama toplamı tutmayan örnekleri sessizce atıyor (yalnızca durum paketindeki sayaç artıyor) ve PC tarafında kuyruk dolarsa paket düşüyor. Akı integrali kayıpsız örnek varsayar; tek kayıp merkezde birkaç µm hata yapabilir. Okuma saati sıçraması bunu yakalar ve ölçüm reddedilir (onarılmaz). Kesin çözüm firmware'de örnek sayacı (ve tercihen enkoder okumasının zaman damgası).
 
+**Enkoder paketinde CRC (2026-11-04):** stator → rotor enkoder güncellemesine (`EncUpdatePacket`, 9 → 10 bayt) tip..sıra baytlarını kapsayan bir CRC-8 (`crc.h:crc8`, polinom 0x07) eklendi. Rotor CRC'si tutmayan güncellemeyi atar; o anlardaki açı host tarafında enterpolasyonla doldurulur (yanlış açı ise doldurulamazdı: 23 Hz'de güncellemelerin ~%9'u bozuk geliyordu). Atılanların sayısı rotor durum paketiyle (`StatusPacketRS485.enc_crc_err`, 14 → 16 bayt) statora, oradan `TcpStatus.rotor_error_count` alanıyla PC'ye gelir; ölçüm penceresi artışları günlüğe yazar ve ham kayıtların başlığına ekler. Bu sayaç rotorun `error_count`'undan ayrıdır, yani hat gürültüsü watchdog yeniden başlatmasını tetiklemez. **Rotor ve stator birlikte yeniden yüklenmelidir:** paket boyları değiştiği için yeni rotor eski statorla (ve eski rotor yeni statorla) doğru çalışmaz. Bilgisayarda test: `host/tests/test_firmware_crc.py` (`test_firmware/enkoder_crc_testi.cpp`'yi g++ ile derler; paketin bütün 1–3 bitlik hatalarında yanlış açı kabul edilmediğini doğrular).
+
 ### Testler
 
 ```bash

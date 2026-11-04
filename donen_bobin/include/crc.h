@@ -68,4 +68,21 @@ static inline uint32_t crc32_update(uint32_t crc, uint8_t data) {
     return (crc >> 8) ^ crc32_table[(crc ^ data) & 0xFF];
 }
 
+/**
+ * @brief CRC-8 (polinom 0x07, başlangıç 0x00; CRC-8/SMBUS)
+ * Kısa RS485 paketleri için (enkoder güncellemesi). Polinomun (x+1) çarpanı
+ * tek sayıda bit hatasının hepsini, 8 bitlik derecesi 8 bite kadar ardışık
+ * hata patlamalarının hepsini yakalar.
+ */
+static inline uint8_t crc8(const uint8_t *data, size_t len) {
+    uint8_t crc = 0x00;
+    while (len--) {
+        crc ^= *data++;
+        for (int i = 0; i < 8; i++) {
+            crc = (crc & 0x80) ? (uint8_t)((crc << 1) ^ 0x07) : (uint8_t)(crc << 1);
+        }
+    }
+    return crc;
+}
+
 #endif // CRC_H_

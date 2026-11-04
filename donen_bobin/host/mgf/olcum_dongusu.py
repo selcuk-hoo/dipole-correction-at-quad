@@ -121,6 +121,7 @@ class OlcumDongusu:
         self.doyma_uyarisi = False
         self.saglik: list[str] = []  # son ölçümün sağlık sorunları (boş: sağlıklı)
         self._rs485_hata_sayisi: int | None = None
+        self._enc_crc_hata_sayisi: int | None = None
         self.gecmis: deque[OlcumSonucu] = deque(maxlen=GECMIS_UZUNLUGU)
         self.kayit = OlcumKaydi(p.kayit_dizini)
         self.csv_kaydet = True
@@ -247,6 +248,8 @@ class OlcumDongusu:
             "hedef_hiz_hz": f"{self.yon * self.hedef_hiz_hz:g}",
             "rotor_online": self.engine.rotor_online,
             "ornek_akisi_sps": "—" if akis is None else f"{akis:.1f}",
+            "rs485_adc_hata_sayaci": getattr(self.engine, "rs485_error_count", None),
+            "enkoder_crc_hata_sayaci": getattr(self.engine, "enc_crc_error_count", None),
             "adc": f"kazanc={self.p.kazanc} filtre={self.p.filtre}",
         }
         try:
@@ -590,12 +593,19 @@ class OlcumDongusu:
         paketi, saniyede bir). Atılan örnek akı integralini bozar; saat
         sıçraması kontrolü onu ayrıca yakalar, burada yalnızca bildirilir."""
         sayi = getattr(self.engine, "rs485_error_count", None)
-        if sayi is None:
-            return
-        if self._rs485_hata_sayisi is not None and sayi != self._rs485_hata_sayisi:
-            fark = (sayi - self._rs485_hata_sayisi) % 65536
-            self.gunluk(f"UYARI: stator {fark} bozuk ADC örneği attı (RS485); o andaki ölçüm reddedilebilir.")
-        self._rs485_hata_sayisi = sayi
+        if sayi is not None:
+            if self._rs485_hata_sayisi is not None and sayi != self._rs485_hata_sayisi:
+                fark = (sayi - self._rs485_hata_sayisi) % 65536
+                self.gunluk(f"UYARI: stator {fark} bozuk ADC örneği attı (RS485); o andaki ölçüm reddedilebilir.")
+            self._rs485_hata_sayisi = sayi
+        # Rotor, CRC'si tutmayan enkoder güncellemelerini atar (açı o anlarda
+        # enterpolasyonla doldurulur). Eski firmware bu sayacı hep 0 gönderir.
+        sayi = getattr(self.engine, "enc_crc_error_count", None)
+        if sayi is not None:
+            if self._enc_crc_hata_sayisi is not None and sayi != self._enc_crc_hata_sayisi:
+                fark = (sayi - self._enc_crc_hata_sayisi) % 65536
+                self.gunluk(f"UYARI: rotor {fark} bozuk enkoder güncellemesi attı (RS485, CRC).")
+            self._enc_crc_hata_sayisi = sayi
 
     def _taze_ornek(self, baslangic: int) -> int:
         return self.engine.total_samples_received - baslangic

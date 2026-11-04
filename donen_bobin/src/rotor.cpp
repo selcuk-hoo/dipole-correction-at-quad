@@ -13,6 +13,7 @@
 #include <string.h>
 
 #include "ads1263.h"
+#include "crc.h"
 #include "mgf_protocol.h"
 #include "rs485_dma.h"
 #include "rs485_framing.h"
@@ -63,6 +64,9 @@ volatile bool stream_paused = false;
 
 uint16_t error_count = 0;
 uint16_t current_error_threshold = 20;
+// Encoder updates dropped for CRC mismatch. Kept apart from error_count: line
+// noise at high speed must not trigger the watchdog reboot.
+uint16_t enc_crc_error_count = 0;
 uint32_t sample_count = 0;
 uint32_t tx_overflow_count = 0;
 
@@ -251,6 +255,12 @@ void onCalibrationComplete(const ads1263_cal_event_t *event) {
 // ===== RX PACKET PARSER CALLBACK =====
 void handle_incoming(uint8_t type, const uint8_t *pkt, size_t len) {
   if (type == RS485_TYPE_ENC_UPDATE) {
+    // CRC covers type..seq; a corrupted angle is dropped (the host
+    // interpolates over a missing update, but not over a wrong one)
+    if (crc8(&pkt[2], sizeof(EncUpdatePacket) - 3) != pkt[sizeof(EncUpdatePacket) - 1]) {
+      enc_crc_error_count++;
+      return;
+    }
     EncUpdatePacket enc_pkt;
     memcpy(&enc_pkt.encoder, &pkt[3], 6); // encoder(4) + seq(2)
 
@@ -632,6 +642,7 @@ int main() {
       status.sample_cnt = sample_count;
       status.uptime = now_ms;
       status.adc_state = ads.getState();
+      status.enc_crc_err = enc_crc_error_count;
       queue_tx(RS485_TYPE_STATUS, &status.err_cnt,
                sizeof(StatusPacketRS485) - 3);
     }

@@ -32,6 +32,7 @@ import math
 import time
 from collections import deque
 from datetime import datetime
+from pathlib import Path
 from typing import Callable
 
 import numpy as np
@@ -43,9 +44,12 @@ from .merkezleme_koprusu import (
     HIZ_INDEKSI,
     KAZANC_INDEKSI,
     OlcumKaydi,
+    HamOzet,
     OlcumSonucu,
     Parametreler,
     cift_yon_hesapla,
+    ham_ozet,
+    ham_veriyi_kaydet,
     kilide_yaz,
     olcum_hesapla,
     referans_faz_ofseti,
@@ -64,6 +68,7 @@ MIN_DURMA_BEKLEMESI_S = 1.2
 # hatası 2 µs: 23 Hz'de 0.017° faz; merkez 150 µm'deyken yön değişiminde 0.09 µm.
 GECIKME_BELIRSIZLIK_SINIRI_S = 2e-6
 REFERANS_FAZ_SINIRI_DERECE = 0.05
+AKIS_PENCERESI_S = 2.0  # örnek akışı (örnek/s) bu kadar sürede ortalanır
 
 
 class Durum(enum.Enum):
@@ -131,6 +136,7 @@ class OlcumDongusu:
         self._beklenen_isaret: float | None = None  # ters çevirmeden sonra ölçülen hızın işareti
         self._ardisik_red = 0
         self._yazim_cercevesi: tuple | None = None
+        self._akis: deque[tuple[float, int]] = deque()  # (saat, toplam örnek)
 
     @property
     def donuyor(self) -> bool:
@@ -211,6 +217,67 @@ class OlcumDongusu:
 
     def gecmisi_sifirla(self) -> None:
         self.gecmis.clear()
+
+    # ------------------------------------------------------------------
+    # Ham sinyal (motor dönmese de; cihaza komut göndermez)
+    # ------------------------------------------------------------------
+    def ham_gerilim(self, saniye: float) -> tuple[np.ndarray, HamOzet] | None:
+        """Son `saniye`lik ham ADC gerilimi (V) ve özeti. Bağlı değilse, veri
+        yoksa ya da cihaz Voltage kipinde değilse None. Örnek akışı durmuşsa
+        tampondaki son veri döner; taze olup olmadığı `ornek_akisi_sps`'ten
+        anlaşılır."""
+        veri = self._ham_veri(saniye)
+        if veri is None:
+            return None
+        v = veri[1]
+        return v, ham_ozet(v, self.p.ornekleme_sps)
+
+    def ham_kaydet(self, saniye: float) -> Path | None:
+        """Son `saniye`lik ham örnekleri (zaman, açı, gerilim) koşullarıyla
+        birlikte kayıt dizinine ayrı bir CSV olarak yazar."""
+        veri = self._ham_veri(saniye)
+        if veri is None:
+            self.gunluk("Ham veri kaydedilemedi: bağlı değil ya da veri yok.")
+            return None
+        akis = self.ornek_akisi_sps()
+        bilgi = {
+            "kanal": self.kanal,
+            "durum": self.durum.value,
+            "motor_hizi_hz": f"{self.engine.motor_speed:.4f}",
+            "hedef_hiz_hz": f"{self.yon * self.hedef_hiz_hz:g}",
+            "rotor_online": self.engine.rotor_online,
+            "ornek_akisi_sps": "—" if akis is None else f"{akis:.1f}",
+            "adc": f"kazanc={self.p.kazanc} filtre={self.p.filtre}",
+        }
+        try:
+            yol = ham_veriyi_kaydet(self.p.kayit_dizini, *veri, self.p.ornekleme_sps, bilgi)
+        except OSError as hata:
+            self.gunluk(f"Ham veri kaydedilemedi: {hata}")
+            return None
+        self.gunluk(f"Ham veri kaydedildi ({len(veri[1])} örnek): {yol}")
+        return yol
+
+    def _ham_veri(self, saniye: float) -> tuple[np.ndarray, np.ndarray] | None:
+        if self.durum is Durum.BAGLI_DEGIL or self.engine.current_data_mode != 1:
+            return None
+        aci, v = self.engine.get_latest_data(max(1, int(saniye * self.p.ornekleme_sps)))
+        if not len(v):
+            return None
+        return np.asarray(aci, dtype=np.float64), np.asarray(v, dtype=np.float64)
+
+    def ornek_akisi_sps(self) -> float | None:
+        """Son `AKIS_PENCERESI_S` içinde gelen örnek/s; her çağrıda bir nokta
+        eklenir. Henüz yeterli süre geçmediyse None."""
+        simdi, toplam = self.saat(), self.engine.total_samples_received
+        if self._akis and (simdi < self._akis[-1][0] or toplam < self._akis[-1][1]):
+            self._akis.clear()  # saat ya da sayaç sıfırlandı (yeniden bağlanma)
+        self._akis.append((simdi, toplam))
+        while len(self._akis) > 2 and simdi - self._akis[1][0] >= AKIS_PENCERESI_S:
+            self._akis.popleft()
+        t0, n0 = self._akis[0]
+        if simdi - t0 < 0.2:
+            return None
+        return (toplam - n0) / (simdi - t0)
 
     # ------------------------------------------------------------------
     # Kullanıcı eylemleri

@@ -63,4 +63,4 @@ olcum:
   merkezleme_yapilandirmasi: yapilandirma.yaml   # açılışta r_ref/birim tutarlılık kontrolü
 
 arayuz:
-  tema: koyu                   # acik | koyu (pencereden de değiştirilebilir)
+  tema: acik                   # acik | koyu (pencereden de değiştirilebilir)

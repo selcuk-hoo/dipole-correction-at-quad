@@ -177,7 +177,7 @@ def parametreleri_yukle(yol: Path | str | None = None) -> Parametreler:
             kilit_dosyasi=_repo_yolu(o["kilit_dosyasi"]),
             kayit_dizini=_repo_yolu(o["kayit_dizini"]),
             merkezleme_yapilandirmasi=_repo_yolu(o["merkezleme_yapilandirmasi"]),
-            tema=str(v.get("arayuz", {}).get("tema", "koyu")),
+            tema=str(v.get("arayuz", {}).get("tema", "acik")),
             kaynak=yol,
         )
     except (KeyError, TypeError, ValueError, IndexError) as hata:
@@ -568,6 +568,36 @@ def saglik_sorunlari(sonuc: OlcumSonucu, p: "Parametreler") -> list[str]:
     return sorunlar
 
 
+@dataclass(frozen=True)
+class HamOzet:
+    """Ham ADC geriliminin özeti (V). Bobin sinyali hızla orantılıdır; motor
+    dururken ortalama sıfıra yakın olmalıdır. Sıfırdan uzak sabit bir ortalama
+    ADC ya da giriş ofsetidir (açık bir giriş de mV mertebesinde ofset gösterir)."""
+
+    ornek_sayisi: int
+    sure_s: float
+    ortalama_V: float
+    std_V: float  # ortalama çıkarılmış
+    en_kucuk_V: float
+    en_buyuk_V: float
+    tepe_V: float  # max |V|: "Sinyal tepesi" ile aynı tanım
+
+
+def ham_ozet(gerilim_V: np.ndarray, ornekleme_sps: float) -> HamOzet:
+    v = np.asarray(gerilim_V, dtype=np.float64)
+    if not len(v):
+        raise ValueError("Ham veri yok")
+    return HamOzet(
+        ornek_sayisi=len(v),
+        sure_s=len(v) / ornekleme_sps,
+        ortalama_V=float(v.mean()),
+        std_V=float(v.std()),
+        en_kucuk_V=float(v.min()),
+        en_buyuk_V=float(v.max()),
+        tepe_V=float(np.max(np.abs(v))),
+    )
+
+
 def referans_faz_ofseti(sonuc: OlcumSonucu, mevcut_ofset_derece: float) -> float:
     """Referans dipol mıknatısının alanını saf normal ve pozitif (b0 > 0,
     a0 = 0) gösterecek yeni faz ofseti."""
@@ -616,6 +646,34 @@ class OlcumKaydi:
                 + [f"{x:.6e}" for c in sonuc.harmonikler for x in (c.real, c.imag)]
             )
         self.satir_sayisi += 1
+
+
+def ham_veriyi_kaydet(
+    dizin: Path, aci_derece: np.ndarray, gerilim_V: np.ndarray, ornekleme_sps: float,
+    bilgi: dict[str, object],
+) -> Path:
+    """Ham örnekleri (zaman, enkoder açısı, gerilim) ayrı bir CSV'ye yazar.
+    Başta `#` ile başlayan satırlarda koşullar (`bilgi`) ve özet bulunur;
+    `numpy.loadtxt(yol, delimiter=",", skiprows=...)` ya da `comments="#"` ile okunur."""
+    dizin = Path(dizin)
+    dizin.mkdir(parents=True, exist_ok=True)
+    yol = dizin / f"ham_{datetime.now():%Y-%m-%d_%H%M%S}.csv"
+    v = np.asarray(gerilim_V, dtype=np.float64)
+    o = ham_ozet(v, ornekleme_sps)
+    t = (np.arange(len(v)) - (len(v) - 1)) / ornekleme_sps
+    with open(yol, "w", newline="", encoding="utf-8") as f:
+        f.write(f"# zaman: {datetime.now().isoformat(timespec='seconds')}\n")
+        for anahtar, deger in {**bilgi, "ornekleme_sps": ornekleme_sps}.items():
+            f.write(f"# {anahtar}: {deger}\n")
+        f.write(
+            f"# ozet: ornek={o.ornek_sayisi} sure_s={o.sure_s:.4f} ortalama_V={o.ortalama_V:.9e} "
+            f"std_V={o.std_V:.9e} min_V={o.en_kucuk_V:.9e} max_V={o.en_buyuk_V:.9e} tepe_V={o.tepe_V:.9e}\n"
+        )
+        yazici = csv.writer(f)
+        yazici.writerow(["zaman_s", "aci_derece", "gerilim_V"])
+        for ti, ai, vi in zip(t, np.asarray(aci_derece, dtype=np.float64), v):
+            yazici.writerow([f"{ti:.6f}", f"{ai:.5f}", f"{vi:.9e}"])
+    return yol
 
 
 def kuadrupol_olcumu_yaz(engine, p: Parametreler) -> OlcumSonucu:

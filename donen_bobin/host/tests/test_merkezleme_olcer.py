@@ -11,7 +11,7 @@ import pytest
 
 from mgf import protocol
 from mgf import merkezleme_koprusu as mk
-from mgf.olcum_dongusu import Durum, OlcumDongusu
+from mgf.olcum_dongusu import AKIS_PENCERESI_S, Durum, OlcumDongusu
 
 SPS = 7200.0
 
@@ -158,6 +158,7 @@ class SahteDunya:
         self.c1, self.c2 = complex(2e-6, -1e-6), complex(1.9e-3, 2e-5)
         self.ust: dict[int, complex] = {}  # n >= 3
         self.gurultu_V = 0.0
+        self.ofset_V = 0.0  # ADC/giriş ofseti: hızdan bağımsız sabit gerilim
         self.gecikme_s = 0.0  # gerilim örneği açıya göre bu kadar eski
         self.kayip = 0  # get_latest_data'da silinen örnek sayısı
         self.rng = np.random.default_rng(3)
@@ -191,6 +192,7 @@ class SahteDunya:
         v = -w * self.p.bobin.sarim_sayisi * self.p.bobin.uzunluk_m * np.real(toplam)
         if self.gurultu_V:
             v = v + self.rng.normal(0.0, self.gurultu_V, n)
+        v = v + self.ofset_V
         self.hiz, self.teta = float(hizlar[-1]), float(tetalar[-1])
         self.aci.extend((np.degrees(tetalar + w * self.gecikme_s) % 360).tolist())
         self.gerilim.extend(v.tolist())
@@ -665,6 +667,50 @@ def test_rs485_hata_sayaci_bildirilir(kurulum):
 # ---------------------------------------------------------------------------
 # Pencere (ekransız)
 # ---------------------------------------------------------------------------
+def test_ham_gerilim_motor_dururken_ofseti_gosterir(kurulum):
+    dunya, dongu, _ = kurulum
+    assert dongu.ham_gerilim(1.0) is None  # bağlı değil
+    dongu.baglan()
+    dunya.ofset_V, dunya.gurultu_V = 4.88e-3, 2e-6
+    komut_sayisi = len(dunya.komutlar)
+    assert dongu.ornek_akisi_sps() is None  # henüz süre geçmedi
+    calistir(dunya, dongu, 1.5)
+    assert dongu.durum is Durum.HAZIR and dunya.hiz == 0.0
+    v, o = dongu.ham_gerilim(1.0)
+    assert len(v) == o.ornek_sayisi == int(SPS) and o.sure_s == pytest.approx(1.0)
+    assert o.ortalama_V == pytest.approx(4.88e-3, abs=1e-7)
+    assert o.std_V == pytest.approx(2e-6, rel=0.1)
+    assert o.en_kucuk_V < o.ortalama_V < o.en_buyuk_V == pytest.approx(o.tepe_V)
+    assert dongu.ornek_akisi_sps() == pytest.approx(SPS, rel=0.05)
+    assert len(dunya.komutlar) == komut_sayisi  # okuma cihaza komut göndermez
+    # Akış durursa örnek/s sıfıra iner (tampondaki eski veri yine döner)
+    for _ in range(int(AKIS_PENCERESI_S / 0.05) + 2):
+        dunya.t += 0.05
+        dongu.ornek_akisi_sps()
+    assert dongu.ornek_akisi_sps() == 0.0
+    assert dongu.ham_gerilim(1.0) is not None
+
+
+def test_ham_veri_kaydedilir(kurulum, p):
+    dunya, dongu, gunluk = kurulum
+    assert dongu.ham_kaydet(1.0) is None  # bağlı değil
+    dongu.baglan()
+    dunya.ofset_V = 4.88e-3
+    dongu.baslat()
+    calistir(dunya, dongu, 3.0)
+    yol = dongu.ham_kaydet(0.5)
+    assert yol is not None and yol.parent == p.kayit_dizini and yol.name.startswith("ham_")
+    basliklar = [s for s in yol.read_text(encoding="utf-8").splitlines() if s.startswith("#")]
+    assert any("kanal: " + dongu.kanal in s for s in basliklar)
+    assert any(s.startswith("# ozet:") and "ortalama_V=" in s for s in basliklar)
+    veri = np.loadtxt(yol, delimiter=",", comments="#", skiprows=len(basliklar) + 1)
+    assert veri.shape == (int(0.5 * SPS), 3)
+    assert veri[-1, 0] == 0.0 and veri[0, 0] == pytest.approx(-0.5, abs=1e-3)
+    np.testing.assert_allclose(veri[:, 2], np.array(dunya.gerilim[-len(veri):]), rtol=1e-8, atol=1e-15)
+    np.testing.assert_allclose(veri[:, 1], np.array(dunya.aci[-len(veri):]), atol=1e-5)
+    assert "Ham veri kaydedildi" in gunluk[-1]
+
+
 def test_pencere_duman(kurulum, p, monkeypatch):
     pytest.importorskip("PySide6")
     monkeypatch.setenv("QT_QPA_PLATFORM", "offscreen")
@@ -744,6 +790,32 @@ def test_pencere_duman(kurulum, p, monkeypatch):
     assert pencere.cb_kanal.isEnabled() and pencere.btn_gecikme.isEnabled()
     x, y = pencere.ham_noktalar.getData()
     assert np.max(np.abs(y)) == pytest.approx(np.max(np.abs(pencere.dongu.son_sonuc.aki_Vs)) * 1e6, rel=0.05)
+    # Ham gerilim sekmesi: günlükten önce; açıkken canlı değerleri gösterir
+    assert [pencere.sekmeler.tabText(i) for i in range(pencere.sekmeler.count())][-2:] == [
+        "Ham gerilim", "Günlük"
+    ]
+    dunya.ofset_V = 4.88e-3
+    pencere.sekmeler.setCurrentWidget(pencere.sayfa_gerilim)
+    for _ in range(40):
+        dunya.ilerle(0.05)
+        pencere._tick()
+    assert "örnek/s" in pencere.lbl_akis.text()
+    tx, ty = pencere.gerilim_egrisi.getData()
+    assert tx[-1] == 0.0 and tx[0] == pytest.approx(-1.0, abs=1e-3)
+    assert float(np.mean(ty)) == pytest.approx(4.88, abs=0.1)  # mV; ofset + bobin sinyali
+    assert pencere.lbl_ham_ort.text().endswith(" mV")
+    # Kaydet: kırmızı nokta ve dosya adı, süre dolunca soluk "Son kayıt"
+    pencere.btn_ham_kaydet.click()
+    assert "●" in pencere.lbl_ham_kayit.text() and "ham_" in pencere.lbl_ham_kayit.text()
+    pencere._kayit_isareti_zamanlayici.timeout.emit()
+    assert "●" not in pencere.lbl_ham_kayit.text() and "Son kayıt: ham_" in pencere.lbl_ham_kayit.text()
+    pencere.chk_dondur.setChecked(True)
+    eski = pencere.lbl_ham_ort.text()
+    dunya.ofset_V = 0.0
+    for _ in range(40):
+        dunya.ilerle(0.05)
+        pencere._tick()
+    assert pencere.lbl_ham_ort.text() == eski
     # Kapanışta gerçek saatle beklenir; sahte motor yavaşlamasa da zaman
     # aşımından sonra servo kapatılmalı.
     import time as _time

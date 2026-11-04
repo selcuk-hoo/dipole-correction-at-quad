@@ -46,6 +46,8 @@ OLCEKLER = {
     "n2": ("n = 2'ye göre", 2, "|C_n| / |C₂|"),
 }
 _HAM_NOKTA_SAYISI = 4000  # bobin akısı grafiğinde gösterilen en fazla örnek
+_GERILIM_YENILEME_S = 0.5  # ham gerilim sekmesi bu aralıkla yenilenir
+_KAYIT_ISARETI_S = 5  # ham kayıttan sonra kırmızı noktanın görünür kaldığı süre
 
 TEMALAR = {
     "acik": {
@@ -237,7 +239,8 @@ class MerkezlemePenceresi(QMainWindow):
         self.lbl_hiz = self._deger_etiketi(g, 1, 0, "Ölçülen hız")
         self.lbl_sayac = self._deger_etiketi(g, 1, 2, "Yazılan ölçüm")
         self.lbl_faz = self._deger_etiketi(g, 2, 0, "Faz ofseti")
-        self.lbl_tepe = self._deger_etiketi(g, 2, 2, "Sinyal tepesi")
+        # Son ölçümün değeri: motor durunca güncellenmez (canlı değer: Ham gerilim sekmesi)
+        self.lbl_tepe = self._deger_etiketi(g, 2, 2, "Sinyal tepesi (son ölçüm)")
         self.lbl_gecikme = self._deger_etiketi(g, 3, 0, "Gecikme")
         self.lbl_artik = self._deger_etiketi(g, 3, 2, "Artık / saat sıçr.")
         g.addWidget(QLabel("Kayıt:"), 4, 0)
@@ -262,9 +265,10 @@ class MerkezlemePenceresi(QMainWindow):
         self.lbl_yc = self._deger_etiketi(g, 3, 2, "y_c")
         kok.addWidget(kutu)
 
-        # Sekmeler: çok kutuplar, ham sinyal, günlük
+        # Sekmeler: çok kutuplar, bobin akısı, ham gerilim, günlük
         self.sekmeler = QTabWidget()
         self._grafikleri_kur()
+        self._gerilim_sekmesini_kur()
         self.gunluk = QPlainTextEdit()
         self.gunluk.setReadOnly(True)
         self.gunluk.setMaximumBlockCount(500)
@@ -342,6 +346,126 @@ class MerkezlemePenceresi(QMainWindow):
         dikey.addWidget(self.grafik_ham)
         self.sekmeler.addTab(sayfa, "Bobin akısı")
 
+    def _gerilim_sekmesini_kur(self) -> None:
+        sayfa = QWidget()
+        dikey = QVBoxLayout(sayfa)
+        aciklama = QLabel(
+            "ADC'nin kaydettiği ham bobin gerilimi; motor dururken de güncellenir, cihaza "
+            "komut göndermez. Bobin sinyali hızla orantılıdır: motor dururken ortalama sıfıra "
+            "yakın olmalı. Sıfırdan uzak sabit bir ortalama ADC ya da giriş ofsetidir (bağlı "
+            "olmayan bir giriş de mV mertebesinde ofset gösterir). Örnek akışı sıfırsa "
+            "gösterilen veri eskidir (rotor çevrimdışı?)."
+        )
+        aciklama.setObjectName("aciklama")
+        aciklama.setWordWrap(True)
+        dikey.addWidget(aciklama)
+        ust = QHBoxLayout()
+        ust.addWidget(QLabel("Gösterilen süre:"))
+        self.gerilim_suresi = QDoubleSpinBox()
+        self.gerilim_suresi.setRange(0.1, round(self.dongu.max_pencere_s))
+        self.gerilim_suresi.setDecimals(1)
+        self.gerilim_suresi.setSingleStep(0.5)
+        self.gerilim_suresi.setSuffix(" s")
+        self.gerilim_suresi.setValue(1.0)
+        ust.addWidget(self.gerilim_suresi)
+        self.chk_dondur = QCheckBox("Dondur")
+        self.chk_dondur.setToolTip("İşaretliyken grafik ve değerler güncellenmez")
+        ust.addWidget(self.chk_dondur)
+        ust.addStretch()
+        self.btn_ham_kaydet = QPushButton("Kaydet")
+        self.btn_ham_kaydet.setToolTip(
+            f"Gösterilen süredeki ham örnekleri (zaman, açı, gerilim) koşullarıyla birlikte\n"
+            f"{self.p.kayit_dizini}/ham_<tarih>.csv dosyasına yazar."
+        )
+        self.btn_ham_kaydet.clicked.connect(self._ham_kaydet)
+        ust.addWidget(self.btn_ham_kaydet)
+        self.lbl_ham_kayit = QLabel()
+        self.lbl_ham_kayit.setTextFormat(Qt.RichText)
+        self.lbl_ham_kayit.setTextInteractionFlags(Qt.TextSelectableByMouse)
+        ust.addWidget(self.lbl_ham_kayit)
+        self._kayit_isareti_zamanlayici = QTimer(self)
+        self._kayit_isareti_zamanlayici.setSingleShot(True)
+        self._kayit_isareti_zamanlayici.timeout.connect(lambda: self._kayit_isareti(False))
+        self._son_ham_kayit: str | None = None
+        dikey.addLayout(ust)
+        g = QGridLayout()
+        self.lbl_akis = self._deger_etiketi(g, 0, 0, "Örnek akışı")
+        self.lbl_ham_sayi = self._deger_etiketi(g, 0, 2, "Örnek / süre")
+        self.lbl_ham_ort = self._deger_etiketi(g, 1, 0, "Ortalama (DC)")
+        self.lbl_ham_std = self._deger_etiketi(g, 1, 2, "Std (DC çıkarılmış)")
+        self.lbl_ham_minmax = self._deger_etiketi(g, 2, 0, "En küçük / en büyük")
+        self.lbl_ham_tepe = self._deger_etiketi(g, 2, 2, "Tepe |V|")
+        dikey.addLayout(g)
+        self.grafik_gerilim = pg.PlotWidget()
+        self.grafik_gerilim.setMenuEnabled(False)
+        self.gerilim_egrisi = self.grafik_gerilim.plot([], [])
+        self.gerilim_sifir = pg.InfiniteLine(pos=0.0, angle=0)
+        self.grafik_gerilim.addItem(self.gerilim_sifir)
+        dikey.addWidget(self.grafik_gerilim)
+        self.sayfa_gerilim = sayfa
+        self.sekmeler.addTab(sayfa, "Ham gerilim")
+        self._gerilim_zamani: float | None = None
+
+    def _ham_kaydet(self) -> None:
+        yol = self.dongu.ham_kaydet(self.gerilim_suresi.value())
+        if yol is None:
+            self._son_ham_kayit = None
+            self.lbl_ham_kayit.setText(
+                f"<span style='color:{self._renk('kotu')}'>Kaydedilemedi (Günlük'e bakın)</span>"
+            )
+            return
+        self._son_ham_kayit = f"{yol.name} ({datetime.now():%H:%M:%S})"
+        self._kayit_isareti(True)
+        self._kayit_isareti_zamanlayici.start(_KAYIT_ISARETI_S * 1000)
+
+    def _kayit_isareti(self, taze: bool) -> None:
+        """Kayıttan sonra birkaç saniye kırmızı nokta; sonra dosya adı soluk kalır."""
+        if self._son_ham_kayit is None:
+            return
+        if taze:
+            self.lbl_ham_kayit.setText(
+                f"<span style='color:{self._renk('kotu')}; font-size:14pt'>●</span> "
+                f"<b>Kaydedildi:</b> {self._son_ham_kayit}"
+            )
+        else:
+            self.lbl_ham_kayit.setText(
+                f"<span style='color:{self._renk('soluk')}'>Son kayıt: {self._son_ham_kayit}</span>"
+            )
+
+    def _gerilimi_ciz(self) -> None:
+        """Ham gerilim sekmesi: `_GERILIM_YENILEME_S`'de bir; grafik yalnızca
+        sekme açıkken ve dondurulmamışken güncellenir."""
+        simdi = self.dongu.saat()
+        if self._gerilim_zamani is not None and 0 <= simdi - self._gerilim_zamani < _GERILIM_YENILEME_S:
+            return
+        self._gerilim_zamani = simdi
+        akis = self.dongu.ornek_akisi_sps()  # sekme kapalıyken de izlenir
+        if self.chk_dondur.isChecked() or self.sekmeler.currentWidget() is not self.sayfa_gerilim:
+            return
+        bagli = self.dongu.durum is not Durum.BAGLI_DEGIL
+        if not bagli or akis is None:
+            self.lbl_akis.setText("—")
+            self.lbl_akis.setStyleSheet("")
+        else:
+            self.lbl_akis.setText(f"{akis:.0f} örnek/s (beklenen {self.p.ornekleme_sps:g})")
+            self.lbl_akis.setStyleSheet(f"color: {self._renk('kotu' if akis <= 0 else 'yazi')};")
+        veri = self.dongu.ham_gerilim(self.gerilim_suresi.value())
+        if veri is None:
+            self.gerilim_egrisi.setData([], [])
+            for lbl in (self.lbl_ham_sayi, self.lbl_ham_ort, self.lbl_ham_std,
+                        self.lbl_ham_minmax, self.lbl_ham_tepe):
+                lbl.setText("—")
+            return
+        v, o = veri
+        adim = max(1, len(v) // _HAM_NOKTA_SAYISI)
+        t = (np.arange(len(v)) - (len(v) - 1)) / self.p.ornekleme_sps
+        self.gerilim_egrisi.setData(t[::adim], v[::adim] * 1e3)
+        self.lbl_ham_sayi.setText(f"{o.ornek_sayisi} / {o.sure_s:.2f} s")
+        self.lbl_ham_ort.setText(f"{o.ortalama_V * 1e3:+.4f} mV")
+        self.lbl_ham_std.setText(f"{o.std_V * 1e6:.2f} µV")
+        self.lbl_ham_minmax.setText(f"{o.en_kucuk_V * 1e3:+.4f} / {o.en_buyuk_V * 1e3:+.4f} mV")
+        self.lbl_ham_tepe.setText(f"{o.tepe_V * 1e3:.4f} mV")
+
     def _seri_kur(self, kayma: float, genislik: float) -> dict:
         x = np.arange(1, HARMONIK_SAYISI + 1) + kayma
         sifir = np.zeros(HARMONIK_SAYISI)
@@ -357,7 +481,7 @@ class MerkezlemePenceresi(QMainWindow):
 
     def _grafik_temasi(self) -> None:
         t = TEMALAR[self.tema]
-        for grafik in (self.grafik_cok, self.grafik_ham):
+        for grafik in (self.grafik_cok, self.grafik_ham, self.grafik_gerilim):
             grafik.setBackground(t["panel"])
             grafik.showGrid(x=False, y=True, alpha=0.25)
             for kenar in ("left", "bottom"):
@@ -368,6 +492,10 @@ class MerkezlemePenceresi(QMainWindow):
         self.grafik_cok.setLabel("bottom", "n (1 dipol, 2 kuadrupol, 3 sekstupol, ...)", color=t["yazi"])
         self.grafik_ham.setLabel("left", "Bobin akısı (µV·s)", color=t["yazi"])
         self.grafik_ham.setLabel("bottom", "Açı (°, faz ofsetli)", color=t["yazi"])
+        self.grafik_gerilim.setLabel("left", "Bobin gerilimi (mV)", color=t["yazi"])
+        self.grafik_gerilim.setLabel("bottom", "Zaman (s, son örnek 0)", color=t["yazi"])
+        self.gerilim_egrisi.setPen(pg.mkPen(t["vurgu"], width=1))
+        self.gerilim_sifir.setPen(pg.mkPen(t["soluk"], width=1, style=Qt.DashLine))
         for seri in self.seriler.values():
             seri["hata"].setData(pen=pg.mkPen(t["yazi"], width=1))
             for yazi in seri["yazilar"]:
@@ -571,6 +699,7 @@ class MerkezlemePenceresi(QMainWindow):
         self.lbl_baglanti.setStyleSheet(f"color: {renk};")
 
         self.btn_baslat.setEnabled(d.durum in (Durum.HAZIR, Durum.HATA) and bagli)
+        self.btn_ham_kaydet.setEnabled(bagli)
         self.btn_durdur.setEnabled(d.donuyor)
         kilitli = d.cerceve_kilitli
         self.btn_tek.setEnabled(d.donuyor and not d.gecikme_olculuyor)
@@ -599,6 +728,7 @@ class MerkezlemePenceresi(QMainWindow):
             self.lbl_kayit.setText(f"{d.kayit.yol.name} ({d.kayit.satir_sayisi} satır)")
         else:
             self.lbl_kayit.setText("henüz yok" if d.csv_kaydet else "kapalı")
+        self._gerilimi_ciz()
 
         s = d.son_sonuc
         if s is not self._cizilen:

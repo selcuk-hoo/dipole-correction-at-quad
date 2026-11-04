@@ -1,6 +1,6 @@
 """Merkezleme için minimal dönen bobin ölçüm penceresi.
 
-    cd donen_bobin_surum_24_eylul_2026/host
+    cd donen_bobin/host
     python merkezleme_olcer.py                      # ../merkezleme_olcer.yaml
     python merkezleme_olcer.py --parametreler P.yaml
 

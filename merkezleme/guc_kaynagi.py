@@ -1,6 +1,6 @@
 """Güç kaynağı kontrolü (ITECH IT-M3233, sabit akım kipi).
 
-`eski/guc_kaynagi_orijinal.py` dosyasındaki sınıf temel alınmıştır; kullanılan
+`eski-surumler/eski/guc_kaynagi_orijinal.py` dosyasındaki sınıf temel alınmıştır; kullanılan
 SCPI komut kümesi AYNIDIR ve genişletilmemiştir:
 
     *CLS, *IDN?, SYST:REM, VOLT, CURR, SYST:ERR?, OUTP ON/OFF,

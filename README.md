@@ -11,7 +11,7 @@ Donanım: dört bobin, her biri ayrı bir **ITECH IT-M3233** DC güç kaynağıy
 rotating coil yazılımıyla ölçülür; sonuçlar bu programın arayüzüne **elle**
 girilebilir, ya da aynı bilgisayarda çalışan dönen bobin programı bir kilit
 dosyası üzerinden otomatik besleyebilir (`--dosyadan`, bkz. §4 ve
-`donen_bobin_surum_24_eylul_2026/README_SURUM.md`). Polarite her enjeksiyondan önce ayrı röle donanımıyla değiştirilir;
+`donen_bobin/README_SURUM.md`). Polarite her enjeksiyondan önce ayrı röle donanımıyla değiştirilir;
 mıknatıs ayrıca ayrı bir modülatör kartıyla 1 kHz'de %1 derinlikle modüle edilir
 (program bu ikisini kontrol etmez, yalnızca durumu kaydeder ve gerektiğinde
 kullanıcıdan değiştirmesini ister).
@@ -386,8 +386,8 @@ aynı sözleşme). Dosya yolu ve zamanlamalar `dosya_girisi` bölümünde
 (bkz. §7) ayarlanır.
 
 Dönen bobin tarafında bu dosyayı yazan program
-`donen_bobin_surum_24_eylul_2026/host/merkezleme_olcer.py`'dir (tek pencerelik
-minimal arayüz; ayrıntılar `donen_bobin_surum_24_eylul_2026/README_SURUM.md`).
+`donen_bobin/host/merkezleme_olcer.py`'dir (tek pencerelik
+minimal arayüz; ayrıntılar `donen_bobin/README_SURUM.md`).
 Değerleri Tesla cinsinden yazar; bu yüzden `harmonikler.birim` `T` kalmalıdır.
 
 `--dosyadan` tek başına **yarı otomatik** çalışır: arayüz açık kalır, alanlar
@@ -426,7 +426,7 @@ testler `otomatik_yurut` ile döngüden çağırır — aynı durum makinesi.
 
 ### Güç kaynağı katmanı
 
-`eski/guc_kaynagi_orijinal.py` temel alınmıştır; **kullanılan SCPI komut kümesi
+`eski-surumler/eski/guc_kaynagi_orijinal.py` temel alınmıştır; **kullanılan SCPI komut kümesi
 aynıdır ve genişletilmemiştir**: `*CLS`, `*IDN?`, `SYST:REM`, `VOLT`, `CURR`,
 `SYST:ERR?`, `OUTP ON/OFF`, `MEAS:VOLT?`, `MEAS:CURR?`.
 
@@ -561,7 +561,7 @@ amaçlıdır** ve aşağıdaki bölümü sayısal olarak gösterir.
 
 Bu depoda önce farklı bir yaklaşım denenmişti: `[Bx, By, G, SQ]` üzerinde doğrudan
 4×4 response matrix, `ΔI` üzerinde Tikhonov regularizasyonu ve yüksek damping.
-Eski dosyalar `eski/` klasöründe, o dönemin belgesi `eski/README_eski.md`
+Eski dosyalar `eski-surumler/eski/` klasöründe, o dönemin belgesi `eski-surumler/eski/README_eski.md`
 içindedir. Bırakılma nedenleri, testlerle de doğrulanmış hâlde:
 
 1. **Skew kuadrupol dört bobin akımıyla kontrol edilemez.** 4 katlı simetrik

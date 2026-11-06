@@ -1,0 +1,96 @@
+# 2026-11-06 şaft sabitlendikten sonra 4 Hz'de 7 A merkezleme; değişenler '7A ÇALIŞTIRMASI'.
+# =============================================================================
+#  Dönen bobin -> merkezleme ölçüm programı parametreleri
+#
+#  Bu dosyayı hem host/merkezleme_olcer.py (minimal pencere) hem de büyük
+#  arayüzün makro sistemindeki MERKEZLEME_OLCUM komutu okur. Göreli dosya
+#  yolları depo köküne göredir.
+# =============================================================================
+
+baglanti:
+  ip: 169.254.1.177
+  port: 5000
+
+bobin:
+  # İki bobin var, dönme eksenine göre simetrik yerleştirilmiş; sarım sayıları ve
+  # geometrileri aynı. Ölçümde yalnızca düz bobin A kullanılıyor.
+  # Her bobin, yarıçapı 20 mm olan silindirin yüzeyine 90°'lik yay boyunca
+  # sarılmış (kullanıcı, 2026-11-06). Akı yalnızca iki iletkenin konumuna bağlı:
+  # iletkenler 20 mm yarıçapta, bobinin orta çizgisinden ±45°'de. Teğet modelde:
+  #   genislik       = 2·20·sin45° = 28.28 mm  (iki iletken arası kiriş)
+  #   eksene_uzaklik =   20·cos45° = 14.14 mm  (kirişin ortası)
+  # 2026-11-06 öncesi: 100 mm boy, 20 mm genişlik, eksene 20 mm (yanlıştı; dipol
+  # ~1.9, kuadrupol ~1.35 kat fazla raporlanıyordu).
+  kanallar:
+    # Dört ADC kanalı (adlar eski arayüzün, radarMGF, adlandırması). Merkezleme
+    # düz (Regular) bobinle yapılır. 9 Ekim - 6 Kasım arası yanlışlıkla AIN0-AIN1
+    # (Morgan A) "düz bobin" diye okundu. 6 Kasım kanal testi (./merkezle
+    # kanal_testi, dört bobin 9.5 A, kayitlar/2026-11-06_124402):
+    #   AIN2-AIN3 G = 0.0961 T/m, AIN6-AIN7 0.0910 (beklenen ~0.095),
+    #   AIN0-AIN1 0.0079, AIN4-AIN5 0.0088; ortam alanı düz bobinlerde ~32 µT.
+    # Aşağıdaki geometri düz bobinlerindir; Morgan kanallarının değerleri bu
+    # geometriyle ölçeklenir, yalnızca karşılaştırma içindir.
+    "Düz bobin A (AIN2-AIN3)": [2, 3]
+    "Düz bobin B (AIN6-AIN7)": [6, 7]
+    "Morgan A (AIN0-AIN1)": [0, 1]
+    "Morgan B (AIN4-AIN5)": [4, 5]
+  varsayilan_kanal: "Düz bobin A (AIN2-AIN3)"
+  sarim_sayisi: 5
+  uzunluk_mm: 135.0            # dönme ekseni boyunca
+  genislik_mm: 28.28
+  eksene_uzaklik_mm: 14.14     # iki iletkeni birleştiren kirişin ortasının eksene uzaklığı
+  # teget : bobin düzlemi yarıçapa dik; iki iletken aynı yarıçapta
+  # radyal: bobin düzlemi dönme eksenini içeren yarı düzlemde; iletkenler
+  #         eksene_uzaklik -/+ genislik/2 yarıçaplarında
+  # Seçim n=1 ile n=2 duyarlılığı arasındaki göreli fazı (90°) belirler;
+  # ölçeği değiştirmez.
+  tip: teget
+
+adc:
+  kazanc: 32                   # 1 | 2 | 4 | 8 | 16 | 32
+  ornekleme_sps: 7200          # 2400 | 4800 | 7200 | 14400 | ...
+  filtre: Sinc4                # Sinc1 | Sinc2 | Sinc3 | Sinc4 | FIR
+  doyma_uyari_orani: 0.8       # sinyal tepesi tam ölçeğin bu oranını aşarsa uyar
+
+motor:
+  hiz_hz: 4.0   # 7A ÇALIŞTIRMASI: 8 -> 4 Hz (14:06 taraması: 2-4 Hz'de merkez kaymıyor)
+  max_hiz_hz: 23.0             # pencereden bunun üstü girilemez
+  hiz_toleransi_hz: 0.3        # ölçülen hız hedefe bu kadar yakınsa "oturdu"
+  oturma_suresi_s: 3.0         # hız oturduktan sonra ek bekleme
+  durma_zaman_asimi_s: 15.0    # Durdur'da servo kapatmadan önce en fazla bekleme
+
+olcum:
+  pencere_s: 5.0   # 7A ÇALIŞTIRMASI: 5 s = 20 tur
+  faz_ofseti_derece: 0.0       # enkoder açısından çıkarılır; "Referans" düğmesiyle ayarlanır
+  # ADC örneği ile enkoder açısı arasındaki sabit zaman gecikmesi (ADC filtresi
+  # - enkoder iletimi). Pencerede "Gecikme ölç (iki yön)" ile ölçülür; ölçülen
+  # değeri buraya yazın. Bilinmezse 0: sabit hızda yalnızca bir açı ofsetidir
+  # (referansla giderilir) ama hız dalgalanırken n=2'yi n=1/n=3'e karıştırır.
+  gecikme_ms: 0.0
+  # Akı uydurmasının artığı / harmonik içerik (rms). Sağlıklı ölçümde ~1e-4..1e-3;
+  # mıknatısın 1 kHz %1 modülasyonu açıksa ~6e-3 (merkezi etkilemez). Bunu aşan
+  # ölçüm merkezleme'ye yazılmaz: yanlış kanal, doyma, açı bozukluğu. (Tek örnek
+  # kaybını ~1e-2 ile sınırda bırakır; onu sicrama_esigi doğrudan yakalar.)
+  artik_esigi: 2.0e-2
+  # ...ya da mutlak artık bu tabanın altında olmalı (µV·s, akı rms). Akım sıfırken
+  # (merkezleme'nin arka plan ölçümü) alan zayıftır ve bağıl oran büyür (~0.1);
+  # mutlak artık ise ~0.1 µV·s'dir. 0.36 µV·s = nominal kuadrupol akısının
+  # (G = 0.095 T/m, r_ref = 25 mm: 2.4 mT; bu bobinle 18.1 µV·s rms) %2'si.
+  # Bobin geometrisi değişirse yeniden hesaplanmalı. 0: taban yok.
+  artik_tabani_uVs: 0.5   # 7A ÇALIŞTIRMASI: 0.36 -> 0.5 (arka planda ~0.1-0.3 µV·s)
+  # Enkoder okumaları stator saatine bağlı düzenli aralıklarla gelir; bir ADC
+  # örneği kaybolursa sonraki okumalar bir örnek kayar. Bu kaymanın (örnek
+  # cinsinden) eşiği: sağlıklı veride ~0.2, tek kayıpta ~1.
+  sicrama_esigi: 0.85   # 7A ÇALIŞTIRMASI: 0.6 -> 0.85 (bugün sağlıklı veride 0.5-0.73; kayıpta ~1)
+  r_ref_mm: 25.0               # merkezleme yapilandirma.yaml -> harmonikler.r_ref_mm ile AYNI olmalı
+  kilit_dosyasi: veri_kilidi/.kilit
+  # Her program oturumu kayitlar/<tarih_saat>/ altında ayrı klasör: olcumler.csv
+  # (bütün ölçüm sonuçları), ham_*.csv (ham gerilim + açı) ve gunluk.txt.
+  kayit_dizini: kayitlar
+  # Motor hızı her oturduğunda bu kadar saniyelik ham veri otomatik kaydedilir
+  # (ham_<saat>_hiz_oturdu.csv, 7200 sps'te ~2.7 MB / 10 s). 0: kapalı.
+  hiz_oturunca_kayit_s: 10.0
+  merkezleme_yapilandirmasi: yapilandirma_7A.yaml   # 7A ÇALIŞTIRMASI: 
+
+arayuz:
+  tema: acik                   # acik | koyu (pencereden de değiştirilebilir)

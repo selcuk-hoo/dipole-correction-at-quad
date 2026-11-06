@@ -84,3 +84,34 @@ Ayrıntılar:
 3. **Referans mıknatısla faz ofseti:** x/y yönlerini laboratuvara bağlamak ve mekanik hizalamaya yön vermek için.
 4. **Mekanik hizalama:** ~8 mm'yi mekanik olarak kapatıp nominal 9.5 A ve varsayılan %5 sınırına dönmek. Asıl tasarım ~0.1 mm'lik ofsetler içindir.
 5. **Okuma saati sıçraması:** sağlıklı veride bile 0.5–0.73 çıkıyor (raporda ~0.2 bekleniyordu). Varsayılan 0.6 eşiği bu yüzden sık sık sınırda kalıyor. Nedeni araştırılmalı.
+
+## 6. Gürültü, hız ve şaft sabitlemesi (öğleden sonra)
+
+**Ölçüm süresi** [ÖLÇÜLDÜ, kanal testi ham verisi]: akım açıkken merkez saçılımı 1 s'nin üstünde süreyle azalmıyor, ~20 µm'de kalıyor. Arka plandaki saçılım ise süreyle azalıyor.
+
+**Güç kaynakları gürültünün kaynağı değil** [ÖLÇÜLDÜ, `gurultu_testi.py`]: ölçümler sırasında dört akım da 0.01 mA içinde sabit. Bunun merkezde yaratacağı oynama 0.1 µm'nin altında.
+
+**Hız taraması, şaft sabitlenmeden önce** [ÖLÇÜLDÜ, `kayitlar/2026-11-06_140636`, her hızda 2 dk oturma]:
+- 2 ve 4 Hz'de merkez dakikalarca sabit, saçılım 13–17 µm.
+- 6 ve 10 Hz'de 2 dakikada ~1.2 mm sürükleniyor.
+- 8 Hz'de önceki hızın izi yavaşça sönümleniyor.
+- Düşük hızdaki ortalama, 8 Hz'deki ilk değerden ~1.1 mm farklı.
+
+**Şaft sabitlendikten sonra** [ÖLÇÜLDÜ]:
+- 4 Hz'de, 5 s pencereyle sıfırdan merkezleme yapıldı (`calistirmalar/2026-11-06_150208`): 6.30 mm → 75 µm, 3 iterasyon (x +72, y −21 µm). Son akımlar 7.757 / 6.286 / 6.410 / 7.881 A.
+- Son akımlarda kararlılık testi (`kayitlar/2026-11-06_151703`, 4 → 8 → 4 Hz, her hızda 1 dk oturma):
+
+| Hız | Saçılım x / y | Ortalama x / y |
+|---|---|---|
+| 4 Hz | 8.8 / 15.1 µm | −678 / +125 µm |
+| 8 Hz | **3.1 / 1.8 µm** | −672 / +128 µm |
+| 4 Hz | 12.1 / 14.2 µm | −682 / +140 µm |
+
+Hıza bağlı kayma yok (farklar gürültü içinde), oturma sürelerinde de geçiş görülmedi. 8 Hz'de gürültü 3 / 2 µm'ye indi. Ortalamalarda arka plan çıkarılmadı.
+
+**Bobinin konumu değişmiş görünüyor:**
+- Benzer akımlarda ölçülen kuadrupol 1.77–1.86 mT'den 1.06 mT'ye düştü (%42).
+- Ortam alanı değişmedi (33.5 → 32.1 µT). Yani ölçüm ölçeği sağlam, bobinin gördüğü gradyen azalmış.
+- Başlangıç ofseti de 7.87 mm'den 6.30 mm'ye inmiş ve yönü değişmiş.
+
+Sabitleme sırasında dönen bobin mıknatısa göre kaymış olabilir. Örneğin eksen boyunca, kısmen mıknatısın dışına çıkmış olabilir [HİPOTEZ]. Bu doğruysa ölçülen merkez, mıknatısın yalnızca bobinin içinde kalan kısmının ortalamasıdır.

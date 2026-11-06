@@ -71,7 +71,6 @@ struct EncUpdatePacket {
     uint8_t  type;      // RS485_TYPE_ENC_UPDATE
     int32_t  encoder;
     uint16_t seq;
-    uint8_t  crc;       // CRC-8 (crc.h:crc8) of type..seq (7 bytes); rotor drops mismatches
 };
 
 // Stator -> Rotor: Command
@@ -111,7 +110,6 @@ struct StatusPacketRS485 {
     uint32_t sample_cnt;
     uint32_t uptime;
     uint8_t  adc_state;
-    uint16_t enc_crc_err; // encoder updates dropped for CRC mismatch (wraps)
 };
 
 
@@ -309,11 +307,11 @@ inline float cmd_param_float(uint32_t p) {
 
 // Optional compile-time checks for C++ environments
 #ifdef __cplusplus
-static_assert(sizeof(EncUpdatePacket) == 10, "EncUpdatePacket padding error");
+static_assert(sizeof(EncUpdatePacket) == 9, "EncUpdatePacket padding error");
 static_assert(sizeof(CmdPacketRS485) == 9, "CmdPacketRS485 padding error");
 static_assert(sizeof(FusedSamplePacket) == 15, "FusedSamplePacket padding error");
 static_assert(sizeof(AckPacketRS485) == 5, "AckPacketRS485 padding error");
-static_assert(sizeof(StatusPacketRS485) == 16, "StatusPacketRS485 padding error");
+static_assert(sizeof(StatusPacketRS485) == 14, "StatusPacketRS485 padding error");
 static_assert(sizeof(TcpAdcConfig) == 19, "TcpAdcConfig padding error");
 static_assert(sizeof(AdcConfigPacketRS485) == 22, "AdcConfigPacketRS485 padding error");
 

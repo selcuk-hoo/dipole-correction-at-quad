@@ -316,7 +316,6 @@ mgf::SPSCQueue<TcpBufferItem, 2048> tcp_queue;
 
 uint32_t tcp_queue_loss_count = 0;
 uint16_t rs485_crc_error_count = 0;
-uint16_t rotor_enc_crc_error_count = 0; // from rotor status: encoder updates it dropped (CRC)
 uint16_t tcp_seq = 0;
 static uint8_t sequence_to_cmd[256] = {0};
 
@@ -424,9 +423,7 @@ void on_rs485_packet(uint8_t type, const uint8_t *pkt, size_t len) {
                     sizeof(TcpAdcConfig));
 
   } else if (type == RS485_TYPE_STATUS) {
-    StatusPacketRS485 rotor_status;
-    memcpy(&rotor_status, pkt, sizeof(StatusPacketRS485));
-    rotor_enc_crc_error_count = rotor_status.enc_crc_err;
+    // Status updates can be merged into host telemetry
   }
 }
 
@@ -874,7 +871,6 @@ int main() {
         pkt.type = RS485_TYPE_ENC_UPDATE;
         pkt.encoder = enc;
         pkt.seq = enc_seq++;
-        pkt.crc = crc8(&pkt.type, sizeof(pkt) - 3); // type..seq; sync and crc excluded
 
         TxItem item;
         memcpy(item.data, &pkt, sizeof(pkt));
@@ -918,7 +914,7 @@ int main() {
       status.encoder_ppr = current_enc_ppr;
       status.rotor_online = rotor_online;
       status.rs485_error_count = rs485_crc_error_count;
-      status.rotor_error_count = rotor_enc_crc_error_count;
+      status.rotor_error_count = 0;
       status.tcp_queue_depth = tcp_queue.count();
       push_tcp_packet(TCP_TYPE_STATUS, &status, sizeof(TcpStatus));
     }

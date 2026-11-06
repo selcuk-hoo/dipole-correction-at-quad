@@ -11,3 +11,7 @@ ekran_goruntuleri/
 
 # Donen bobin olcum penceresinin CSV kayitlari
 donen_bobin/olcumler/
+
+# Firmware derleme klasorleri (VS Code: build/, pico_yukle.sh: build_pico_yukle/)
+donen_bobin/build/
+donen_bobin/build_pico_yukle/

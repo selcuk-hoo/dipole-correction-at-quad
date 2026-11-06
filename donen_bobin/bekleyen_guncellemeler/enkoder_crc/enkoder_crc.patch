@@ -1,0 +1,409 @@
+Enkoder guncelleme paketine CRC-8 (firmware + bilgisayar)
+
+Ilk yazildigi commit: 6937741 (2026-11-04). 2026-11-06'da geri alindi, cunku
+donanima henuz yuklenemiyor. Bu yama o commit'in aynisidir; tek fark,
+README_SURUM.md'deki "bekleyen guncelleme" notunu CRC paragrafiyla degistirmesi.
+Uygulamak icin: ./uygula.sh  (git apply bu aciklama satirlarini yok sayar)
+
+diff --git b/donen_bobin/README_SURUM.md a/donen_bobin/README_SURUM.md
+index 8582e97..00527dc 100644
+--- b/donen_bobin/README_SURUM.md
++++ a/donen_bobin/README_SURUM.md
+@@ -64,7 +64,7 @@ Sistemin nasıl çalıştığı, zayıf yanları ve açık hatalar: [`DONEN_BOBI
+ 
+ **Bilinen sınırlama (firmware):** örneklerde sıra numarası yok; stator ADC sağlama toplamı tutmayan örnekleri sessizce atıyor (yalnızca durum paketindeki sayaç artıyor) ve PC tarafında kuyruk dolarsa paket düşüyor. Akı integrali kayıpsız örnek varsayar; tek kayıp merkezde birkaç µm hata yapabilir. Okuma saati sıçraması bunu yakalar ve ölçüm reddedilir (onarılmaz). Kesin çözüm firmware'de örnek sayacı (ve tercihen enkoder okumasının zaman damgası).
+ 
+-**Bekleyen güncelleme, enkoder paketinde CRC:** hazır ve test edilmiş, ama donanıma yüklenemediği için firmware'den ve bilgisayar tarafından geri alındı (2026-11-06). Uygulamak ve Pico'lara yüklemek için: [`bekleyen_guncellemeler/enkoder_crc/`](bekleyen_guncellemeler/enkoder_crc/README.md).
++**Enkoder paketinde CRC (2026-11-04):** stator → rotor enkoder güncellemesine (`EncUpdatePacket`, 9 → 10 bayt) tip..sıra baytlarını kapsayan bir CRC-8 (`crc.h:crc8`, polinom 0x07) eklendi. Rotor CRC'si tutmayan güncellemeyi atar; o anlardaki açı host tarafında enterpolasyonla doldurulur (yanlış açı ise doldurulamazdı: 23 Hz'de güncellemelerin ~%9'u bozuk geliyordu). Atılanların sayısı rotor durum paketiyle (`StatusPacketRS485.enc_crc_err`, 14 → 16 bayt) statora, oradan `TcpStatus.rotor_error_count` alanıyla PC'ye gelir; ölçüm penceresi artışları günlüğe yazar ve ham kayıtların başlığına ekler. Bu sayaç rotorun `error_count`'undan ayrıdır, yani hat gürültüsü watchdog yeniden başlatmasını tetiklemez. **Rotor ve stator birlikte yeniden yüklenmelidir:** paket boyları değiştiği için yeni rotor eski statorla (ve eski rotor yeni statorla) doğru çalışmaz. Bilgisayarda test: `host/tests/test_firmware_crc.py` (`test_firmware/enkoder_crc_testi.cpp`'yi g++ ile derler; paketin bütün 1–3 bitlik hatalarında yanlış açı kabul edilmediğini doğrular).
+ 
+ ### Testler
+ 
+diff --git b/donen_bobin/host/mgf/data_engine.py a/donen_bobin/host/mgf/data_engine.py
+index 01f0c9a..d6fb708 100644
+--- b/donen_bobin/host/mgf/data_engine.py
++++ a/donen_bobin/host/mgf/data_engine.py
+@@ -72,6 +72,7 @@ class DataEngine:
+         self.adc_status_state = 'ok'
+         self.last_adc_error = None
+         self.rs485_error_count = None  # durum paketinden (stator ADC sağlama toplamı hataları)
++        self.enc_crc_error_count = None  # durum paketinden (rotorun CRC'den attığı enkoder güncellemeleri)
+         self.pending_adc_config = None
+         
+     # ADS1263 gain table (matches ads1263_types.h ADS1263_GAIN_VALUES)
+@@ -301,6 +302,7 @@ class DataEngine:
+                     self.motor_speed = spd
+                     self.encoder_ppr = ppr
+                     self.rs485_error_count = r_err  # stator'un attığı bozuk ADC örnekleri
++                    self.enc_crc_error_count = ro_err  # rotorun attığı bozuk enkoder güncellemeleri
+                     self.rotor_online = (r_on != 0)
+                     
+                 elif pkt_type == protocol.TCP_TYPE_HELLO_ACK:
+diff --git b/donen_bobin/host/mgf/olcum_dongusu.py a/donen_bobin/host/mgf/olcum_dongusu.py
+index a2861ad..31a1855 100644
+--- b/donen_bobin/host/mgf/olcum_dongusu.py
++++ a/donen_bobin/host/mgf/olcum_dongusu.py
+@@ -121,6 +121,7 @@ class OlcumDongusu:
+         self.doyma_uyarisi = False
+         self.saglik: list[str] = []  # son ölçümün sağlık sorunları (boş: sağlıklı)
+         self._rs485_hata_sayisi: int | None = None
++        self._enc_crc_hata_sayisi: int | None = None
+         self.gecmis: deque[OlcumSonucu] = deque(maxlen=GECMIS_UZUNLUGU)
+         self.kayit = OlcumKaydi(p.kayit_dizini)
+         self.csv_kaydet = True
+@@ -247,6 +248,8 @@ class OlcumDongusu:
+             "hedef_hiz_hz": f"{self.yon * self.hedef_hiz_hz:g}",
+             "rotor_online": self.engine.rotor_online,
+             "ornek_akisi_sps": "—" if akis is None else f"{akis:.1f}",
++            "rs485_adc_hata_sayaci": getattr(self.engine, "rs485_error_count", None),
++            "enkoder_crc_hata_sayaci": getattr(self.engine, "enc_crc_error_count", None),
+             "adc": f"kazanc={self.p.kazanc} filtre={self.p.filtre}",
+         }
+         try:
+@@ -590,12 +593,19 @@ class OlcumDongusu:
+         paketi, saniyede bir). Atılan örnek akı integralini bozar; saat
+         sıçraması kontrolü onu ayrıca yakalar, burada yalnızca bildirilir."""
+         sayi = getattr(self.engine, "rs485_error_count", None)
+-        if sayi is None:
+-            return
+-        if self._rs485_hata_sayisi is not None and sayi != self._rs485_hata_sayisi:
+-            fark = (sayi - self._rs485_hata_sayisi) % 65536
+-            self.gunluk(f"UYARI: stator {fark} bozuk ADC örneği attı (RS485); o andaki ölçüm reddedilebilir.")
+-        self._rs485_hata_sayisi = sayi
++        if sayi is not None:
++            if self._rs485_hata_sayisi is not None and sayi != self._rs485_hata_sayisi:
++                fark = (sayi - self._rs485_hata_sayisi) % 65536
++                self.gunluk(f"UYARI: stator {fark} bozuk ADC örneği attı (RS485); o andaki ölçüm reddedilebilir.")
++            self._rs485_hata_sayisi = sayi
++        # Rotor, CRC'si tutmayan enkoder güncellemelerini atar (açı o anlarda
++        # enterpolasyonla doldurulur). Eski firmware bu sayacı hep 0 gönderir.
++        sayi = getattr(self.engine, "enc_crc_error_count", None)
++        if sayi is not None:
++            if self._enc_crc_hata_sayisi is not None and sayi != self._enc_crc_hata_sayisi:
++                fark = (sayi - self._enc_crc_hata_sayisi) % 65536
++                self.gunluk(f"UYARI: rotor {fark} bozuk enkoder güncellemesi attı (RS485, CRC).")
++            self._enc_crc_hata_sayisi = sayi
+ 
+     def _taze_ornek(self, baslangic: int) -> int:
+         return self.engine.total_samples_received - baslangic
+diff --git b/donen_bobin/host/tests/test_firmware_crc.py a/donen_bobin/host/tests/test_firmware_crc.py
+new file mode 100644
+index 0000000..88e1b20
+--- /dev/null
++++ a/donen_bobin/host/tests/test_firmware_crc.py
+@@ -0,0 +1,39 @@
++"""Firmware'deki enkoder paketi CRC'sinin bilgisayarda testi.
++
++test_firmware/enkoder_crc_testi.cpp, stator'un paket kurulumunu, RS485
++ayrıştırıcısını ve rotorun CRC kontrolünü aynen kullanır; bütün 1-3 bitlik
++hataları dener. Pico SDK gerekmez, yalnızca g++.
++"""
++from __future__ import annotations
++
++import shutil
++import subprocess
++from pathlib import Path
++
++import pytest
++
++DONEN_BOBIN = Path(__file__).resolve().parents[2]
++KAYNAK = DONEN_BOBIN / "test_firmware" / "enkoder_crc_testi.cpp"
++
++
++def _derle_calistir(tmp_path: Path, *ek: str) -> subprocess.CompletedProcess:
++    cikti = tmp_path / "enkoder_crc_testi"
++    subprocess.run(
++        ["g++", "-std=c++17", "-Wall", "-Werror", f"-I{DONEN_BOBIN / 'include'}", *ek, str(KAYNAK), "-o", str(cikti)],
++        check=True, capture_output=True, text=True,
++    )
++    return subprocess.run([str(cikti)], capture_output=True, text=True, timeout=120)
++
++
++@pytest.mark.skipif(shutil.which("g++") is None, reason="g++ yok")
++def test_bit_hatalari_yanlis_aci_olarak_kabul_edilmez(tmp_path):
++    sonuc = _derle_calistir(tmp_path)
++    assert sonuc.returncode == 0, sonuc.stdout + sonuc.stderr
++    assert "yanlis_kabul=0" in sonuc.stdout
++
++
++@pytest.mark.skipif(shutil.which("g++") is None, reason="g++ yok")
++def test_crc_kontrolu_olmadan_hatalar_gecer(tmp_path):
++    # Testin kendisi sınıyor mu: CRC kontrolü kapalıyken yanlış kabuller görülmeli
++    sonuc = _derle_calistir(tmp_path, "-DCRC_KONTROLU_KAPALI")
++    assert sonuc.returncode == 1 and "yanlis_kabul=0" not in sonuc.stdout
+diff --git b/donen_bobin/host/tests/test_merkezleme_olcer.py a/donen_bobin/host/tests/test_merkezleme_olcer.py
+index 41204a6..31ba886 100644
+--- b/donen_bobin/host/tests/test_merkezleme_olcer.py
++++ a/donen_bobin/host/tests/test_merkezleme_olcer.py
+@@ -664,6 +664,17 @@ def test_rs485_hata_sayaci_bildirilir(kurulum):
+     assert any("2 bozuk ADC örneği" in m for m in gunluk)
+ 
+ 
++def test_enkoder_crc_sayaci_bildirilir(kurulum):
++    dunya, dongu, gunluk = kurulum
++    dongu.baglan()
++    dongu.engine.enc_crc_error_count = 65534  # sayaç 16 bit, taşar
++    calistir(dunya, dongu, 0.2)
++    assert not any("enkoder" in m for m in gunluk)  # ilk değer yalnızca kaydedilir
++    dongu.engine.enc_crc_error_count = 3
++    calistir(dunya, dongu, 0.1)
++    assert any("rotor 5 bozuk enkoder güncellemesi" in m for m in gunluk)
++
++
+ # ---------------------------------------------------------------------------
+ # Pencere (ekransız)
+ # ---------------------------------------------------------------------------
+diff --git b/donen_bobin/include/crc.h a/donen_bobin/include/crc.h
+index b814b62..5527157 100644
+--- b/donen_bobin/include/crc.h
++++ a/donen_bobin/include/crc.h
+@@ -68,4 +68,21 @@ static inline uint32_t crc32_update(uint32_t crc, uint8_t data) {
+     return (crc >> 8) ^ crc32_table[(crc ^ data) & 0xFF];
+ }
+ 
++/**
++ * @brief CRC-8 (polinom 0x07, başlangıç 0x00; CRC-8/SMBUS)
++ * Kısa RS485 paketleri için (enkoder güncellemesi). Polinomun (x+1) çarpanı
++ * tek sayıda bit hatasının hepsini, 8 bitlik derecesi 8 bite kadar ardışık
++ * hata patlamalarının hepsini yakalar.
++ */
++static inline uint8_t crc8(const uint8_t *data, size_t len) {
++    uint8_t crc = 0x00;
++    while (len--) {
++        crc ^= *data++;
++        for (int i = 0; i < 8; i++) {
++            crc = (crc & 0x80) ? (uint8_t)((crc << 1) ^ 0x07) : (uint8_t)(crc << 1);
++        }
++    }
++    return crc;
++}
++
+ #endif // CRC_H_
+\ No newline at end of file
+diff --git b/donen_bobin/include/mgf_protocol.h a/donen_bobin/include/mgf_protocol.h
+index ebe32be..4a41515 100644
+--- b/donen_bobin/include/mgf_protocol.h
++++ a/donen_bobin/include/mgf_protocol.h
+@@ -71,6 +71,7 @@ struct EncUpdatePacket {
+     uint8_t  type;      // RS485_TYPE_ENC_UPDATE
+     int32_t  encoder;
+     uint16_t seq;
++    uint8_t  crc;       // CRC-8 (crc.h:crc8) of type..seq (7 bytes); rotor drops mismatches
+ };
+ 
+ // Stator -> Rotor: Command
+@@ -110,6 +111,7 @@ struct StatusPacketRS485 {
+     uint32_t sample_cnt;
+     uint32_t uptime;
+     uint8_t  adc_state;
++    uint16_t enc_crc_err; // encoder updates dropped for CRC mismatch (wraps)
+ };
+ 
+ 
+@@ -307,11 +309,11 @@ inline float cmd_param_float(uint32_t p) {
+ 
+ // Optional compile-time checks for C++ environments
+ #ifdef __cplusplus
+-static_assert(sizeof(EncUpdatePacket) == 9, "EncUpdatePacket padding error");
++static_assert(sizeof(EncUpdatePacket) == 10, "EncUpdatePacket padding error");
+ static_assert(sizeof(CmdPacketRS485) == 9, "CmdPacketRS485 padding error");
+ static_assert(sizeof(FusedSamplePacket) == 15, "FusedSamplePacket padding error");
+ static_assert(sizeof(AckPacketRS485) == 5, "AckPacketRS485 padding error");
+-static_assert(sizeof(StatusPacketRS485) == 14, "StatusPacketRS485 padding error");
++static_assert(sizeof(StatusPacketRS485) == 16, "StatusPacketRS485 padding error");
+ static_assert(sizeof(TcpAdcConfig) == 19, "TcpAdcConfig padding error");
+ static_assert(sizeof(AdcConfigPacketRS485) == 22, "AdcConfigPacketRS485 padding error");
+ 
+diff --git b/donen_bobin/src/rotor.cpp a/donen_bobin/src/rotor.cpp
+index 675a4b3..bb413a1 100644
+--- b/donen_bobin/src/rotor.cpp
++++ a/donen_bobin/src/rotor.cpp
+@@ -13,6 +13,7 @@
+ #include <string.h>
+ 
+ #include "ads1263.h"
++#include "crc.h"
+ #include "mgf_protocol.h"
+ #include "rs485_dma.h"
+ #include "rs485_framing.h"
+@@ -63,6 +64,9 @@ volatile bool stream_paused = false;
+ 
+ uint16_t error_count = 0;
+ uint16_t current_error_threshold = 20;
++// Encoder updates dropped for CRC mismatch. Kept apart from error_count: line
++// noise at high speed must not trigger the watchdog reboot.
++uint16_t enc_crc_error_count = 0;
+ uint32_t sample_count = 0;
+ uint32_t tx_overflow_count = 0;
+ 
+@@ -251,6 +255,12 @@ void onCalibrationComplete(const ads1263_cal_event_t *event) {
+ // ===== RX PACKET PARSER CALLBACK =====
+ void handle_incoming(uint8_t type, const uint8_t *pkt, size_t len) {
+   if (type == RS485_TYPE_ENC_UPDATE) {
++    // CRC covers type..seq; a corrupted angle is dropped (the host
++    // interpolates over a missing update, but not over a wrong one)
++    if (crc8(&pkt[2], sizeof(EncUpdatePacket) - 3) != pkt[sizeof(EncUpdatePacket) - 1]) {
++      enc_crc_error_count++;
++      return;
++    }
+     EncUpdatePacket enc_pkt;
+     memcpy(&enc_pkt.encoder, &pkt[3], 6); // encoder(4) + seq(2)
+ 
+@@ -632,6 +642,7 @@ int main() {
+       status.sample_cnt = sample_count;
+       status.uptime = now_ms;
+       status.adc_state = ads.getState();
++      status.enc_crc_err = enc_crc_error_count;
+       queue_tx(RS485_TYPE_STATUS, &status.err_cnt,
+                sizeof(StatusPacketRS485) - 3);
+     }
+diff --git b/donen_bobin/src/stator.cpp a/donen_bobin/src/stator.cpp
+index c1c6078..76513ac 100644
+--- b/donen_bobin/src/stator.cpp
++++ a/donen_bobin/src/stator.cpp
+@@ -316,6 +316,7 @@ mgf::SPSCQueue<TcpBufferItem, 2048> tcp_queue;
+ 
+ uint32_t tcp_queue_loss_count = 0;
+ uint16_t rs485_crc_error_count = 0;
++uint16_t rotor_enc_crc_error_count = 0; // from rotor status: encoder updates it dropped (CRC)
+ uint16_t tcp_seq = 0;
+ static uint8_t sequence_to_cmd[256] = {0};
+ 
+@@ -423,7 +424,9 @@ void on_rs485_packet(uint8_t type, const uint8_t *pkt, size_t len) {
+                     sizeof(TcpAdcConfig));
+ 
+   } else if (type == RS485_TYPE_STATUS) {
+-    // Status updates can be merged into host telemetry
++    StatusPacketRS485 rotor_status;
++    memcpy(&rotor_status, pkt, sizeof(StatusPacketRS485));
++    rotor_enc_crc_error_count = rotor_status.enc_crc_err;
+   }
+ }
+ 
+@@ -871,6 +874,7 @@ int main() {
+         pkt.type = RS485_TYPE_ENC_UPDATE;
+         pkt.encoder = enc;
+         pkt.seq = enc_seq++;
++        pkt.crc = crc8(&pkt.type, sizeof(pkt) - 3); // type..seq; sync and crc excluded
+ 
+         TxItem item;
+         memcpy(item.data, &pkt, sizeof(pkt));
+@@ -914,7 +918,7 @@ int main() {
+       status.encoder_ppr = current_enc_ppr;
+       status.rotor_online = rotor_online;
+       status.rs485_error_count = rs485_crc_error_count;
+-      status.rotor_error_count = 0;
++      status.rotor_error_count = rotor_enc_crc_error_count;
+       status.tcp_queue_depth = tcp_queue.count();
+       push_tcp_packet(TCP_TYPE_STATUS, &status, sizeof(TcpStatus));
+     }
+diff --git b/donen_bobin/test_firmware/enkoder_crc_testi.cpp a/donen_bobin/test_firmware/enkoder_crc_testi.cpp
+new file mode 100644
+index 0000000..a709221
+--- /dev/null
++++ a/donen_bobin/test_firmware/enkoder_crc_testi.cpp
+@@ -0,0 +1,105 @@
++// Enkoder güncelleme paketindeki CRC-8'in bilgisayarda testi (Pico SDK gerekmez).
++//
++// Stator'un paketi kurduğu ve rotorun doğruladığı kod yolunu aynen kullanır:
++// paket RS485 ayrıştırıcısından geçirilir, rotorun CRC kontrolü uygulanır.
++// Bütün 1, 2 ve 3 bitlik hatalar (sync dahil, paketin her bitinde) denenir;
++// hiçbirinin YANLIŞ bir enkoder değeri olarak kabul edilmemesi gerekir.
++//
++//   g++ -std=c++17 -I../include enkoder_crc_testi.cpp -o /tmp/enkoder_crc_testi && /tmp/enkoder_crc_testi
++//   (-DCRC_KONTROLU_KAPALI ile derlenirse yanlış kabuller görülmeli: test gerçekten sınıyor)
++//
++// host/tests/test_firmware_crc.py bunu pytest içinden derleyip çalıştırır.
++#include <cstdio>
++#include <cstring>
++
++#include "crc.h"
++#include "mgf_protocol.h"
++#include "rs485_framing.h"
++
++static int32_t kabul_edilen_enkoder;
++static uint16_t kabul_edilen_seq;
++static int kabul_sayisi;
++
++// rotor.cpp:handle_incoming içindeki enkoder dalının aynısı
++static void rotor_geri_cagirma(uint8_t type, const uint8_t *pkt, size_t) {
++    if (type != RS485_TYPE_ENC_UPDATE) return;
++#ifndef CRC_KONTROLU_KAPALI  // testin kendisini sınamak için: kapalıyken yanlış kabuller görülmeli
++    if (crc8(&pkt[2], sizeof(EncUpdatePacket) - 3) != pkt[sizeof(EncUpdatePacket) - 1]) return;
++#endif
++    EncUpdatePacket p;
++    memcpy(&p.encoder, &pkt[3], 6);
++    kabul_edilen_enkoder = p.encoder;
++    kabul_edilen_seq = p.seq;
++    kabul_sayisi++;
++}
++
++// stator.cpp'deki paket kurulumunun aynısı
++static EncUpdatePacket paket_kur(int32_t enc, uint16_t seq) {
++    EncUpdatePacket pkt;
++    pkt.sync = RS485_SYNC_WORD;
++    pkt.type = RS485_TYPE_ENC_UPDATE;
++    pkt.encoder = enc;
++    pkt.seq = seq;
++    pkt.crc = crc8(&pkt.type, sizeof(pkt) - 3);
++    return pkt;
++}
++
++// Paketi (ardından aynı değerde sağlam bir paket) ayrıştırıcıdan geçirir.
++// Dönen: bozuk paketten yanlış bir değer kabul edildi mi.
++static bool yanlis_kabul(const uint8_t *bayt, int32_t enc, uint16_t seq) {
++    static uint8_t halka[64];
++    mgf::RS485Parser ayristirici(halka, sizeof(halka));
++    kabul_sayisi = 0;
++    bool yanlis = false;
++    memcpy(halka, bayt, sizeof(EncUpdatePacket));
++    ayristirici.parse(sizeof(EncUpdatePacket), [](uint8_t t, const uint8_t *p, size_t n) {
++        rotor_geri_cagirma(t, p, n);
++    });
++    if (kabul_sayisi > 0 && (kabul_edilen_enkoder != enc || kabul_edilen_seq != seq)) yanlis = true;
++    return yanlis;
++}
++
++int main() {
++    static_assert(sizeof(EncUpdatePacket) == 10, "paket boyu");
++    const int32_t degerler[] = {0, 1, -1, 123456, -7654321, 0x55AA55AA, 2147483647};
++    const int nbit = sizeof(EncUpdatePacket) * 8;
++    long deneme = 0, yanlis = 0;
++    int seq = 0;
++
++    for (int32_t enc : degerler) {
++        EncUpdatePacket pkt = paket_kur(enc, (uint16_t)seq);
++        uint8_t sag[sizeof(pkt)];
++        memcpy(sag, &pkt, sizeof(pkt));
++
++        // Sağlam paket kabul edilmeli
++        kabul_sayisi = 0;
++        yanlis_kabul(sag, enc, (uint16_t)seq);
++        if (kabul_sayisi != 1 || kabul_edilen_enkoder != enc) {
++            printf("HATA: saglam paket kabul edilmedi (enc=%d)\n", enc);
++            return 1;
++        }
++        for (int a = 0; a < nbit; a++) {
++            for (int b = a; b < nbit; b++) {
++                for (int c = b; c < nbit; c++) {
++                    // a == b == c: tek bit; a < b == c: iki bit; a < b < c: üç bit
++                    if (a == b && b != c) continue;
++                    uint8_t boz[sizeof(pkt)];
++                    memcpy(boz, sag, sizeof(pkt));
++                    boz[a / 8] ^= 1u << (a % 8);
++                    if (b != a) boz[b / 8] ^= 1u << (b % 8);
++                    if (c != b) boz[c / 8] ^= 1u << (c % 8);
++                    deneme++;
++                    if (yanlis_kabul(boz, enc, (uint16_t)seq)) {
++                        yanlis++;
++                        if (yanlis <= 5)
++                            printf("YANLIS KABUL: enc=%d bitler %d %d %d -> %d\n", enc, a, b, c,
++                                   kabul_edilen_enkoder);
++                    }
++                }
++            }
++        }
++        seq += 7919;
++    }
++    printf("deneme=%ld yanlis_kabul=%ld\n", deneme, yanlis);
++    return yanlis == 0 ? 0 : 1;
++}

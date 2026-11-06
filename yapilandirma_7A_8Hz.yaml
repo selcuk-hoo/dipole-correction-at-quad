@@ -1,0 +1,173 @@
+# 2026-11-06 akşam: şaft sabitlenip bobin merkeze taşındıktan sonra, 8 Hz, sıkı tolerans.
+# Nominal 7 A, yüksek asimetri (mıknatıs ~7.7 mm kaçık, mekanik hizalama sonra).
+# Değişen satırlar '7A ÇALIŞTIRMASI' ile işaretli; geri kalanı yapilandirma.yaml.
+# =============================================================================
+#  pEDM air-core kuadrupol - elektriksel merkezleme yapılandırması
+#
+#  Bütün fiziksel sabitler, sınırlar ve konvansiyon seçimleri bu dosyada.
+#  Kodda gizli sabit yoktur.
+#
+#  Birim kuralı: anahtar adları birimi taşır (..._A, ..._mm, ..._T, ..._derece).
+#  Birimsiz (bağıl) büyüklükler ..._bagil ya da oran olarak adlandırılır.
+# =============================================================================
+
+genel:
+  # kuru  : komutlar kaydedilir ama cihaza gönderilmez (VARSAYILAN)
+  # canli : gerçek donanım. Yalnızca --canli bayrağı ile seçilebilir.
+  kip: kuru
+  # 1 kHz modülatör durumu. Program modülatörü KONTROL ETMEZ, yalnızca kaydeder.
+  modulator_acik: false
+  calistirma_kok_dizini: calistirmalar
+  durum_dosyasi_adi: durum.json
+  # Arayüz teması (arayüzden de değiştirilebilir):
+  #   varsayilan     : sistem teması
+  #   fosfor_yesil   : eskilerin fosfor yeşili monokrom CRT'si
+  #   fosfor_turuncu : fosfor amber (turuncu) monokrom CRT
+  tema: varsayilan
+
+miknatis:
+  nominal_akim_A: 7.0   # 7A ÇALIŞTIRMASI: 9.5 -> 7.0 (asimetri payı; 7 A x 1.35 = 9.45 A < 10 A)
+  # Bobinler, çerçevedeki etiketlere göre (etiketli taraftan bakıldığında):
+  #   1 sağ üst, 2 sol üst, 3 sol alt, 4 sağ alt
+  bobin_acilari_derece: [45.0, 135.0, 225.0, 315.0]
+  # Her bobinin nominal kuadrupol polaritesi (işaretli akım tanımı için).
+  nominal_polarite: [1, -1, 1, -1]
+  # Hedef gradyen: "ilk_olcum" ise nominal akımlardaki ilk ölçümden alınır.
+  gradyen_hedefi_kaynagi: ilk_olcum
+  nominal_gradyen_T_m: 0.095         # yalnızca gradyen_hedefi_kaynagi: yapilandirma ise
+                                      # kullanılır (kaba tahmin yeter); simülatör kendi
+                                      # geometrisinden nominal akımdaki gerçek |C_2|'yi
+                                      # hesaplar, bu değere bağımlı değildir
+  endustans_mH: 6.5                 # yalnızca belgeleme/uyarı amaçlı
+
+modlar:
+  # Modlar, fiziksel akım GENLİKLERİNE uygulanan pertürbasyon desenleridir.
+  # İşaretli akımda (genlik x nominal_polarite) şunlara karşılık gelirler:
+  #   Q -> nominal kuadrupol deseni  (gradyen)
+  #   H -> yatay dipol   (sağ çift 1,4  <->  sol çift 2,3)
+  #   V -> düşey dipol   (üst çift 1,2  <->  alt çift 3,4)
+  #   M -> üniform       (net dolaşan akım = monopol; dipol ve gradyene katkısız)
+  # Dördü birbirine ortogonaldir (Hadamard bazı).
+  Q: [1, 1, 1, 1]
+  H: [1, -1, -1, 1]
+  V: [1, 1, -1, -1]
+  M: [1, -1, 1, -1]
+
+harmonikler:
+  r_ref_mm: 25.0
+  # Arayüzde hangi giriş biçimiyle başlanacağı (arayüzden değiştirilebilir):
+  #   genlik_faz   : |C_n| ve faz
+  #   normal_skew  : B_n ve A_n
+  giris_bicimi: genlik_faz
+  # T | mT | units   (units: b_n = B_n / B_(units_referans_n) * 1e4)
+  birim: T
+  units_referans_n: 2
+  # units biçiminde mutlak ölçek için gereken gradyen (T/m). null ise
+  # G_hedef olarak nominal_gradyen_T_m kullanılır.
+  units_mutlak_gradyen_T_m: null
+
+  # --- Faz konvansiyonu (yalnızca giris_bicimi: genlik_faz için) ---
+  faz_birimi: derece               # derece | radyan
+  # true  : C_n = |C_n| * exp(i * n * faz)      (faz = multipol açısı)
+  # false : C_n = |C_n| * exp(i * faz)          (faz = doğrudan elektriksel faz)
+  faz_n_carpani: true
+  faz_isareti: 1                   # +1 | -1
+
+  # --- Merkez (feed-down) konvansiyonu ---
+  # z_c = feed_down_isareti * (-r_ref * C_1 / C_2)
+  # eslenik: true ise C_n yerine eşleniği kullanılır (B_x + i*B_y konvansiyonu).
+  feed_down_isareti: 1
+  eslenik: false
+  # Gradyen hangi bileşenden okunur: normal (B_2/r_ref) | genlik (|C_2|/r_ref)
+  gradyen_kaynagi: normal
+
+  # Arka plan çıkarma: tum | yalniz_dipol
+  arka_plan_cikarma: tum
+  # Yalnızca izleme için kaydedilecek ek harmonikler (zorunlu değil)
+  opsiyonel_harmonikler: [3, 4]
+
+guc_kaynaklari:
+  # ITECH IT-M3233, sabit akım kipi. Sıra bobin numaralandırmasıyla aynı (1..4).
+  visa_adresleri:   # ./merkezle eslestir, 2026-11-06 11:48
+    - ASRL/dev/serial/by-id/usb-ITECH_Electronics_IT-M3233_803981033797250004-if00::INSTR   # bobin 1 (sağ üst)
+    - ASRL/dev/serial/by-id/usb-ITECH_Electronics_IT-M3233_803981033797250001-if00::INSTR   # bobin 2 (sol üst)
+    - ASRL/dev/serial/by-id/usb-ITECH_Electronics_IT-M3233_803981033797250002-if00::INSTR   # bobin 3 (sol alt)
+    - ASRL/dev/serial/by-id/usb-ITECH_Electronics_IT-M3233_803981033797250003-if00::INSTR   # bobin 4 (sağ alt)
+  # Sabit akım kipinde VOLT bir uyum (compliance) sınırdır; akımdan ÖNCE yazılır.
+  uyum_gerilimi_V: 20.0
+  rampa_hizi_A_s: 0.5
+  rampa_adim_suresi_s: 0.1
+  oturma_suresi_s: 2.0
+  akim_tolerans_A: 0.02
+  oturma_dogrulama_denemesi: 5
+
+guvenlik:
+  bobin_basi_max_akim_A: 10.0
+  adim_basi_max_bagil_degisim: 0.30   # 7A ÇALIŞTIRMASI: 0.02 -> 0.30 (simülatörde 7.6 mm için ilk adım %21.6)
+  nominale_gore_max_asimetri: 0.35   # 7A ÇALIŞTIRMASI: 0.05 -> 0.35 (en fazla 7 x 1.35 = 9.45 A < 10 A)
+
+kalibrasyon:
+  modlar: [H, V, Q]                      # zorunlu üç mod
+  m_modu_kontrolu: true                  # M modu: isteğe bağlı kontrol
+  nokta_sayisi: 3                        # 3  (-D, 0, +D)  |  5  (-2D .. +2D)
+  delta_bagil: 0.02   # 7A ÇALIŞTIRMASI: 0.005 -> 0.02 (7 A'da sinyal/gürültü için)
+  ortak_sifir_noktasi: true              # sıfır noktası modlar arasında paylaşılır
+  monoton_olmayan_sira: true             # sürüklenmeyi eğimden ayırmak için
+  arka_plan_her_n_noktada: 1             # 1 = her noktada (varsayılan)
+  olcum_basi_tahmini_sure_dk: 5.0        # süre tahmini için
+  kosul_sayisi_esigi: 20.0               # üstünde kalibrasyon şüpheli
+  m_sutunu_esigi_bagil: 0.10             # M sütunu, H/V sütunlarının bu katından büyükse şüpheli
+  lineerlik_r2_esigi: 0.98               # altında fit lineer sayılmaz
+  dosya_adi: kalibrasyon.json
+
+duzeltme:
+  alpha: 0.8   # 7A ÇALIŞTIRMASI: 0.9 -> 0.8
+  max_iterasyon: 12   # 7A ÇALIŞTIRMASI: 5 -> 12
+  merkez_toleransi_um: 10.0   # 7A ÇALIŞTIRMASI: 5 -> 10 (sabitlemeden sonra 8 Hz'de gürültü 3/2 µm)
+  g_toleransi: 0.002   # 7A ÇALIŞTIRMASI: 0.001 -> 0.002
+  monopol_cikar: true                    # her adımda (I - I_nominal)'in M bileşeni atılır
+  tekrarlanabilirlik_N: 3                # sabit akımlarda tekrar ölçüm sayısı
+  tolerans_tekrarlanabilirlik_carpani: 2.5   # tolerans < çarpan * tekrarlanabilirlik ise uyar
+
+dogrulama:
+  # Girilen değer, kalibrasyondan beklenen y'den bu kattan fazla saparsa
+  # "olası yazım hatası" uyarısı verilir ve yeniden onay istenir.
+  yazim_hatasi_sapma_carpani: 5.0
+  # Mertebe kontrolü: |C_1| ve |C_2| için makul aralıklar (birim: yapılandırılan birim)
+  c1_makul_aralik: [1.0e-9, 1.0e-2]
+  c2_makul_aralik: [1.0e-6, 1.0e+0]
+
+simulator:
+  # 2D çizgi akımı modeli. Yalnızca test ve deneme kipinde kullanılır.
+  bobin_yaricapi_m: 0.10                 # a
+  demet_yari_acisi_derece: 30.0          # alpha; R_eff = a*sqrt(2)/(4*cos(alpha))
+  sarim_sayisi: 72                       # 10 A'da G ~ 0.1 T/m
+  # Bildirilen harmonik çerçevesinin dönüşü (C_n -> C_n * exp(i*n*aci)).
+  # Varsayılan 0: racetrack bobinin iki demeti zıt yönlü olduğu için, köşegen
+  # yerleşimde (45/135/225/315) nominal desen zaten NORMAL kuadrupol verir ve
+  # H -> x_c, V -> y_c doğrudan sağlanır. Gerçek düzenek farklı bir faz
+  # referansı kullanıyorsa bu açı ile ayarlanır.
+  olcum_cercevesi_acisi_derece: 0.0
+  miknatis_ofseti_mm: [0.10, -0.05]      # dx, dy
+  roll_mrad: 1.0
+  arka_plan_T: [1.0e-6, -0.4e-6]         # üniform B_y, B_x
+  arka_plan_surukleme_T_s: 0.0
+  # Ölçüm gürültüsü: her harmonik bileşenine eklenen sigma = bu değer * |C_2|.
+  # 3e-5, |C_2| = 2.5 mT için ~0.075 uT ve ~0.75 um merkez saçılımı demektir;
+  # bu, 5 um toleransın tekrarlanabilirlik çarpanı kontrolünü geçer.
+  harmonik_gurultu_bagil: 3.0e-5
+  harmonik_surukleme_bagil_s: 0.0
+  # Bobin başına yerleşim ve sarım hataları (0 = kusursuz)
+  yerlesim_hatasi_radyal_mm: [0.0, 0.0, 0.0, 0.0]
+  yerlesim_hatasi_acisal_mrad: [0.0, 0.0, 0.0, 0.0]
+  sarim_hatasi_bagil: [0.0, 0.0, 0.0, 0.0]
+  tohum: 12345
+
+# İsteğe bağlı bölüm: dönen bobin programıyla aynı bilgisayarda, paylaşımlı bir
+# dosya/kilit üzerinden otomatik ölçüm alışverişi (--dosyadan bayrağı ile).
+# Bölüm YAML'da yoksa aşağıdaki varsayımlarla çalışılır.
+dosya_girisi:
+  kilit_dosyasi: veri_kilidi/.kilit      # yok = "ölç" (sıra dönen bobinde)
+                                          # var = "veri hazır" (sıra bu programda)
+  zaman_asimi_s: 60.0   # 7A ÇALIŞTIRMASI: 30 -> 60
+  yoklama_araligi_s: 0.2                 # kilit dosyasını bu aralıkla yokla

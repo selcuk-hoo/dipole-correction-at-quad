@@ -115,3 +115,30 @@ Hıza bağlı kayma yok (farklar gürültü içinde), oturma sürelerinde de ge�
 - Başlangıç ofseti de 7.87 mm'den 6.30 mm'ye inmiş ve yönü değişmiş.
 
 Sabitleme sırasında dönen bobin mıknatısa göre kaymış olabilir. Örneğin eksen boyunca, kısmen mıknatısın dışına çıkmış olabilir [HİPOTEZ]. Bu doğruysa ölçülen merkez, mıknatısın yalnızca bobinin içinde kalan kısmının ortalamasıdır.
+
+## 7. Bobin merkeze taşındıktan sonra: 8 Hz, 10 µm tolerans
+
+Kullanıcı dönen bobini mıknatısın merkezine doğru taşıdı. Merkezleme 8 Hz'de, 5 s pencereyle, sıfırdan kalibrasyon ve 10 µm toleransla yapıldı (`calistirmalar/2026-11-06_152726`) [ÖLÇÜLDÜ]:
+
+| Adım | x_c (µm) | y_c (µm) |
+|---|---|---|
+| Başlangıç | +252 | +459 |
+| İterasyon 1 | +62 | +99 |
+| İterasyon 2 | +5 | +18 |
+| İterasyon 3 | +11 | +3 |
+| **İterasyon 4** | **−3.0** | **−0.7** |
+
+- Son akımlar 7.082 / 7.041 / 6.923 / 6.964 A. Nominalden sapma en fazla %1.2.
+- Kuadrupol geri geldi: |C2| = 1.857 mT, G_hedef = 0.069 T/m. Bu, 7 A için beklenen ~0.07 T/m. Bölüm 6'daki %42'lik düşüş, bobinin konumundan geliyormuş [YORUM].
+- Kalibrasyon uyarısı: "M modu fiti lineer değil (R² = 0.95 / 0.91)". M modu merkezi neredeyse hiç kaydırmadığı için (M sütunu oranı 0.037) eğim gürültü düzeyinde. Zararsız.
+
+**Son akımlarda kararlılık testi** (`kayitlar/2026-11-06_154308`, 8 → 4 → 8 Hz, her hızda 1 dk oturma, 10'ar ölçüm). Merkez, merkezleme çalıştırmasındaki ortalama arka plan çıkarılarak hesaplandı. Arka plan 33.07 µT, saçılımı 0.17 / 0.09 µT [ÖLÇÜLDÜ]:
+
+| Hız | n | Merkez x / y (ortalamanın hatasıyla) | Tek ölçüm saçılımı |
+|---|---|---|---|
+| 8 Hz | 20 | **+0.0 ± 0.9 / +5.4 ± 0.9 µm** | 3–5 µm |
+| 4 Hz | 10 | −3.2 ± 2.8 / −4.7 ± 2.4 µm | 8–9 µm |
+
+Merkez 8 Hz'de x'te sıfırda, y'de ~5 µm kaçık. 4 Hz ile 8 Hz arasında y'de ~10 µm'lik bir fark kalıyor (~4σ). Hıza bağlı mekanik etkinin küçük bir kalıntısı olabilir [YORUM]. Sabitlemeden önceki ~1 mm'lik farkla karşılaştırıldığında ihmal edilebilir.
+
+**Bugünün sonucu:** merkez, 8 Hz'de bobin eksenine göre ~5 µm içinde. Bu, tasarım hedefi olan 5 µm'nin sınırında. Akımların nominalden sapması %1.2'yi geçmiyor, yani varsayılan güvenlik sınırları (%5) içinde. Bir sonraki çalıştırma nominal 9.5 A ve varsayılan yapılandırmayla yapılabilir.

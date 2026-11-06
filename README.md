@@ -34,7 +34,9 @@ tutarlıysa adresleri `yapilandirma.yaml`'a yazar. Pencere cihazlara komut gönd
 `./merkezle` tek bir pencere açar. "Dönen bobin" sekmesi Pico'ya bağlanır;
 motoru o sekmedeki "Başlat" ile siz çalıştırırsınız (açılışta motor dönmez). "Merkezleme" sekmesinde **nominal akım** ve **merkez toleransı**
 seçilip "Merkezlemeyi başlat"a basılır (dönen bobin dönüp hızı oturunca etkin
-olur); bitince "Yeni çalıştırma" akımları sıfırlayıp ayarlara döner. Akımlar
+olur); bitince "Yeni çalıştırma" akımları sıfırlayıp ayarlara döner. "Otomatik"
+işaretliyse ölçümler ve düzeltme önerileri onay beklemeden geçilir (çalışırken
+açılıp kapatılabilir); röle/modülatör gibi kullanıcı eylemleri yine size bırakılır. Akımlar
 5 A/s ile rampalanır, ardından 1 s aralıkla `MEAS:CURR?` ile oturması kontrol
 edilir. Aşağıdaki "`otomatik`" kipinde (merkezleme penceresiz) eski sıra geçerlidir:
 `merkezle` önce dönen bobin penceresini açar, Pico'ya bağlanır ve motoru

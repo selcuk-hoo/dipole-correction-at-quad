@@ -27,6 +27,7 @@ from typing import Callable
 from PySide6.QtCore import Qt, QTimer
 from PySide6.QtWidgets import (
     QApplication,
+    QCheckBox,
     QDoubleSpinBox,
     QFormLayout,
     QGroupBox,
@@ -97,6 +98,11 @@ class MerkezlemeSekmesi(QWidget):
         self.calisma_etiketi = QLabel()
         ust.addWidget(self.calisma_etiketi)
         ust.addStretch()
+        self.otomatik_calisma = QCheckBox("Otomatik (onay beklemeden)")
+        self.otomatik_calisma.setToolTip(
+            "Ölçümleri ve düzeltme önerilerini kendiliğinden onaylar. Röle/modülatör gibi\n"
+            "kullanıcı eylemleri ve duraklatma yine size bırakılır. İstediğiniz an kapatılabilir.")
+        ust.addWidget(self.otomatik_calisma)
         self.yeni_dugmesi = QPushButton("Yeni çalıştırma (akımları sıfırla, ayarlara dön)")
         self.yeni_dugmesi.clicked.connect(self.yeni_calistirma)
         ust.addWidget(self.yeni_dugmesi)
@@ -109,6 +115,9 @@ class MerkezlemeSekmesi(QWidget):
         self.zamanlayici = QTimer(self)
         self.zamanlayici.timeout.connect(self._durumu_yenile)
         self.zamanlayici.start(500)
+        self.otomatik_zamanlayici = QTimer(self)
+        self.otomatik_zamanlayici.timeout.connect(self._otomatik_ilerle)
+        self.otomatik_zamanlayici.start(300)
         self._durumu_yenile()
 
     # ------------------------------------------------------------------
@@ -139,6 +148,8 @@ class MerkezlemeSekmesi(QWidget):
         self.tolerans_kutusu.setSuffix(" µm")
         self.tolerans_kutusu.setValue(k.duzeltme.merkez_toleransi_um)
         form.addRow("Merkez toleransı", self.tolerans_kutusu)
+        self.otomatik_kutusu = QCheckBox("onay beklemeden baştan sona yürü (çalışırken de değiştirilebilir)")
+        form.addRow("Otomatik", self.otomatik_kutusu)
         self.sinir_etiketi = QLabel()
         self.sinir_etiketi.setWordWrap(True)
         form.addRow("Sınırlar", self.sinir_etiketi)
@@ -158,6 +169,10 @@ class MerkezlemeSekmesi(QWidget):
         duzen.addStretch()
         return sayfa
 
+    def _otomatik_ilerle(self) -> None:
+        if self.pencere is not None and self.otomatik_calisma.isChecked():
+            self.pencere.otomatik_adim()
+
     def _durumu_yenile(self) -> None:
         g = self.kfg.guvenlik
         n = self.nominal_kutusu.value()
@@ -173,9 +188,12 @@ class MerkezlemeSekmesi(QWidget):
         self.baslat_dugmesi.setEnabled(hazir and not self.donanim_sorunu and self.pencere is None)
         if self.pencere is not None:
             a = self.pencere.akis
+            ek = ""
+            if self.otomatik_calisma.isChecked() and a.bekleme.name == "KULLANICI_EYLEMI":
+                ek = " — KULLANICI EYLEMİ BEKLENİYOR (otomatik geçilmez)"
             self.calisma_etiketi.setText(
                 f"Nominal {a.kfg.miknatis.nominal_akim_A:g} A, tolerans {a.kfg.duzeltme.merkez_toleransi_um:g} µm"
-                f" — faz: {a.faz.value}"
+                f" — faz: {a.faz.value}{ek}"
             )
 
     # ------------------------------------------------------------------
@@ -195,11 +213,13 @@ class MerkezlemeSekmesi(QWidget):
             f"kip: {kfg.genel.kip}\n"
             f"nominal_akim_A: {kfg.miknatis.nominal_akim_A}\n"
             f"merkez_toleransi_um: {kfg.duzeltme.merkez_toleransi_um}\n"
+            f"otomatik (başlangıçta): {self.otomatik_kutusu.isChecked()}\n"
             "(yapilandirma.yaml bu iki değer dışında aynen kullanıldı)\n",
             encoding="utf-8",
         )
         akis = IsAkisi(kfg, grup, self.olcum_kaynagi_uret(kfg, konvansiyon), calistirma,
                        konvansiyon, ModBazi(kfg.modlar, kfg.miknatis))
+        self.otomatik_calisma.setChecked(self.otomatik_kutusu.isChecked())
         self.yigin.setCurrentWidget(self.calisma_sayfasi)
         # Pencere kurulurken akış başlar ve ilk ölçümü bekler (olay döngüsü işler)
         self.pencere = MerkezlemePencere(kfg, akis, otomatik_kaynak_etiketi="OTOMATİK ÖLÇÜM (dönen bobin sekmesi)")

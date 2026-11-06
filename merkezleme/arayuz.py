@@ -693,6 +693,38 @@ class MerkezlemePencere(QWidget):
 
         self._mesgul_calistir(self._olcumu_gonder, olcum)
 
+    def otomatik_adim(self) -> bool:
+        """Otomatik kip (birleşik pencere): bekleyen adımı onaylar, pencere AÇMADAN.
+
+        Ölçüm alanları otomatik kaynaktan doluysa ölçümü gönderir; düzeltme
+        önerisini uygular. Ölçümler elle yazılmadığı için "olası yazım hatası"
+        uyarısı (`./merkezle otomatik`'teki gibi) kabul edilir ve nota yazılır.
+        Kullanıcı eylemi (röle, modülatör) ve duraklatma kullanıcıya bırakılır.
+        Döner: bir adım atıldı mı."""
+        if self._mesgul or self.akis.bitti_mi():
+            return False
+        bekleme = self.akis.bekleme
+        if bekleme is Bekleme.DUZELTME_ONAYI:
+            self._mesgul_calistir(self.akis.duzeltmeyi_onayla)
+            return True
+        if bekleme not in (Bekleme.ARKA_PLAN_GIRISI, Bekleme.OLCUM_GIRISI):
+            return False
+        try:
+            olcum = alanlardan_olcum(
+                self._alanlari_oku(),
+                self.akis.konvansiyon,
+                self.bicim,
+                zorunlu=self.kfg.harmonikler.zorunlu_harmonikler,
+                opsiyonel=self.kfg.harmonikler.opsiyonel_harmonikler,
+            )
+        except AlanHatasi:
+            return False  # alanlar henüz dolmadı (ölçüm bekleniyor)
+        dogrulama = self.akis.olcum_dogrula(olcum)
+        if dogrulama.onay_gerekli:
+            self.akis.notlar.append("Otomatik kip, doğrulama uyarısı kabul edildi: " + dogrulama.metin())
+        self._mesgul_calistir(self._olcumu_gonder, olcum)
+        return True
+
     def _olcumu_gonder(self, olcum: HarmonikOlcumu) -> None:
         self.akis.olcum_gonder(olcum)
         self._alanlari_temizle()

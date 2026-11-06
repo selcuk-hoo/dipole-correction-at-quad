@@ -79,3 +79,32 @@ def test_pencere_kapaninca_iki_sekme_de_kapanir(qt_uygulama, kfg_tmp):
     assert pencere.sekmeler.count() == 2 and pencere.sekmeler.tabText(1) == "Merkezleme"
     pencere.close()
     assert kapandi == ["bobin"] and sekme.pencere is None and akis.bitti_mi()
+
+
+def test_otomatik_kip_onaysiz_sonuna_kadar_yurur(qt_uygulama, kfg_tmp):
+    from PySide6.QtWidgets import QApplication
+
+    from merkezleme.is_akisi import Faz
+
+    hizli = dataclasses.replace(
+        kfg_tmp,
+        guc_kaynaklari=dataclasses.replace(kfg_tmp.guc_kaynaklari, rampa_hizi_A_s=1e4, oturma_suresi_s=0.0,
+                                           oturma_kontrol_periyodu_s=0.0),
+    )
+    sekme = MerkezlemeSekmesi(hizli, False, lambda: (True, "dönüyor"), olcum_kaynagi_uret=_simulator)
+    sekme.otomatik_kutusu.setChecked(True)
+    sekme.otomatik_zamanlayici.stop()  # testte adımları elle sür
+    sekme.baslat()
+    assert sekme.otomatik_calisma.isChecked()
+    akis = sekme.pencere.akis
+    for _ in range(500):
+        if akis.bitti_mi():
+            break
+        sekme._otomatik_ilerle()
+        QApplication.processEvents()
+    assert akis.faz is Faz.TAMAMLANDI, akis.notlar
+    assert any("Yakınsadı" in n for n in akis.notlar)
+    # Otomatik kapatılınca adım atılmaz
+    sekme.otomatik_calisma.setChecked(False)
+    assert sekme.pencere.otomatik_adim() is False  # akış bitti
+    sekme.kapat()

@@ -1007,3 +1007,29 @@ def test_kanal_testi_duz_bobini_ayirt_eder(kurulum, p):
     assert np.all(grup.ayar_akimlari_A == 0)
     grup.guvenli_kapat()
     assert all(not k.cikis_acik for k in grup.kaynaklar)
+
+
+def test_gurultu_testi_sahte_cihazla(kurulum, p):
+    from gurultu_testi import GurultuTesti
+    from merkezleme.guc_kaynagi import KaynakGrubu, KomutGunlugu
+    from merkezleme.yapilandirma import yapilandirma_yukle
+
+    dunya, dongu, _ = kurulum
+    kfg = yapilandirma_yukle(Path(__file__).resolve().parents[3] / "yapilandirma_7A.yaml")
+    grup = KaynakGrubu.olustur(kfg.guc_kaynaklari, kfg.guvenlik, canli=False,
+                               gunluk=KomutGunlugu(), bekle=lambda s: None)
+    dunya.gurultu_V = 2e-6
+    dongu.baglan()
+    R = np.array([[-0.0167, 0.0116, 0.017, -0.0121], [-0.0108, -0.0185, 0.012, 0.0175], [0.21, 0.23, 0.29, 0.26]])
+    yazilan: list[str] = []
+    test = GurultuTesti(p, dongu, grup, akim_A=7.0, pencere_s=2.0, hizlar=(8, 11, 8), n=3, R=R,
+                        bekle=dunya.ilerle, saat=lambda: dunya.t, yaz=yazilan.append)
+    grup.baslat()
+    satirlar = test.calistir()
+    assert len(satirlar) == 3 * 3 and {s["hiz_hz"] for s in satirlar} == {8, 11}
+    assert all(s["akim_okuma_sayisi"] >= 1 for s in satirlar)
+    ozet = test.rapor()
+    assert len(ozet) == 3 and all(np.isfinite(o["sigma_x_um"]) for o in ozet)
+    klasor = test.raporu_yaz(ozet)
+    assert (klasor / "gurultu_testi.csv").exists() and (klasor / "gurultu_testi_ozet.csv").exists()
+    assert np.all(grup.ayar_akimlari_A == 0)

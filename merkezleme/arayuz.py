@@ -535,11 +535,26 @@ class MerkezlemePencere(QWidget):
     # ==================================================================
     def _paneli_yenile(self) -> None:
         panel = self.akis.durum_paneli()
-        self.adim_etiketi.setText(
-            f"Adım {panel['adim_no']} / {panel['toplam_adim']}"
-            + (f"  -  {panel['etiket']}" if panel["etiket"] else "")
-            + (f"   (faz: {panel['faz']}, iterasyon: {panel['iterasyon']})")
-        )
+        # "Adım n / toplam" yalnızca kalibrasyonda doğru: toplam kalibrasyon
+        # noktalarının tahminidir, düzeltme iterasyonları onu aşar (12/14 gibi
+        # görünüp bitmemiş sanılırdı). Düzeltmede iterasyon sayısı, bitince açık bir sonuç gösterilir.
+        max_it = self.kfg.duzeltme.max_iterasyon
+        if self.akis.bitti_mi():
+            durum = "TAMAMLANDI" if self.akis.faz is Faz.TAMAMLANDI else "DURDURULDU"
+            self.adim_etiketi.setText(
+                f"{durum} — {panel['iterasyon']} düzeltme iterasyonu, toplam {panel['adim_no']} ölçüm noktası"
+            )
+        elif self.akis.faz is Faz.KALIBRASYON:
+            self.adim_etiketi.setText(
+                f"Kalibrasyon: nokta {panel['adim_no']} / {panel['toplam_adim']}"
+                + (f"  -  {panel['etiket']}" if panel["etiket"] else "")
+            )
+        else:
+            self.adim_etiketi.setText(
+                f"Düzeltme: iterasyon {panel['iterasyon']} / en fazla {max_it}"
+                + (f"  -  {panel['etiket']}" if panel["etiket"] else "")
+                + f"   (faz: {panel['faz']})"
+            )
         self.eylem_etiketi.setText("Sonraki eylem: " + panel["sonraki_eylem"])
 
         nominal = self.kfg.miknatis.nominal_akim_A

@@ -36,7 +36,15 @@ motoru o sekmedeki "Başlat" ile siz çalıştırırsınız (açılışta motor 
 seçilip "Merkezlemeyi başlat"a basılır (dönen bobin dönüp hızı oturunca etkin
 olur); bitince "Yeni çalıştırma" akımları sıfırlayıp ayarlara döner. "Otomatik"
 işaretliyse ölçümler ve düzeltme önerileri onay beklemeden geçilir (çalışırken
-açılıp kapatılabilir); röle/modülatör gibi kullanıcı eylemleri yine size bırakılır. Akımlar
+açılıp kapatılabilir); röle/modülatör gibi kullanıcı eylemleri yine size bırakılır.
+
+Merkezleme TAMAMLANDI olunca **"Kararlılık"** sekmesinden izleme başlatılır: quad akımları
+açık kalır, dönen bobin sürekli ölçüme geçer ve her N saniyede (varsayılan 10) arka plan
+çıkarılmış merkez (x, y), dipol, kuadrupol ve dört güç kaynağının gerçek akımı
+`kayitlar/<oturum>/izleme_<saat>.csv`'ye yazılıp çizilir; sürüklenme (µm/saat) hesaplanır.
+Akımlar pencereyi kapatana ya da "Yeni çalıştırma"ya kadar açık kalır. Dönen bobin
+sekmesindeki "Alan grafiğinden arka planı çıkar" kutusu, quad en son sıfırken ölçülen alanı
+(merkezleme'nin son arka plan ölçümü) grafikten çıkarır; yalnızca gösterimi etkiler. Akımlar
 5 A/s ile rampalanır, ardından 1 s aralıkla `MEAS:CURR?` ile oturması kontrol
 edilir. Aşağıdaki "`otomatik`" kipinde (merkezleme penceresiz) eski sıra geçerlidir:
 `merkezle` önce dönen bobin penceresini açar, Pico'ya bağlanır ve motoru

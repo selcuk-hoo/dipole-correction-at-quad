@@ -16,10 +16,13 @@ akımlar rampa ile sıfıra iner, çıkışlar kapanır, motor durur.
 from __future__ import annotations
 
 import argparse
+import csv
 import dataclasses
+import math
 import os
 import signal
 import sys
+import time
 from datetime import datetime
 from pathlib import Path
 from typing import Callable
@@ -36,6 +39,7 @@ from PySide6.QtWidgets import (
     QMainWindow,
     QMessageBox,
     QPushButton,
+    QSpinBox,
     QStackedWidget,
     QTabWidget,
     QVBoxLayout,
@@ -89,6 +93,7 @@ class MerkezlemeSekmesi(QWidget):
         # sekmesininkini geri getirmek için (main bunu verir)
         self.merkezleme_acilinca = merkezleme_acilinca or (lambda: None)
         self.pencere: MerkezlemePencere | None = None
+        self.kapanis_kancalari: list[Callable[[], None]] = []  # kapat() önce bunları çağırır
 
         self.yigin = QStackedWidget()
         self.yigin.addWidget(self._ayar_panelini_kur())
@@ -239,14 +244,175 @@ class MerkezlemeSekmesi(QWidget):
         self.yigin.setCurrentIndex(0)
         self._durumu_yenile()
 
+    def arka_plan(self) -> dict[int, complex] | None:
+        """Quad akımları en son sıfırken ölçülen alan (n -> C_n, Tesla); yoksa None.
+
+        Yalnızca birim T iken (dönen bobin Tesla yazar) ve merkezleme akışı
+        en az bir arka plan ölçümü aldıysa."""
+        if self.pencere is None or self.kfg.harmonikler.birim != "T":
+            return None
+        ark = self.pencere.akis.son_arka_plan
+        return dict(ark.bilesenler) if ark is not None else None
+
     def kapat(self) -> None:
         """Akış varsa durdurur, akımları sıfırlar, özeti yazar (pencerenin closeEvent'i)."""
+        for kanca in self.kapanis_kancalari:
+            kanca()
         if self.pencere is None:
             return
         self.pencere.close()
         self.pencere.setParent(None)
         self.pencere.deleteLater()
         self.pencere = None
+
+
+class KararlilikSekmesi(QWidget):
+    """Merkezleme bittikten sonra quad akımları AÇIK tutulur; alanın saatler içindeki
+    kararlılığı izlenir. Dönen bobin sürekli ölçüm kipine alınır; her `aralik` saniyede
+    bir ölçüm (arka plan çıkarılmış merkez, dipol, kuadrupol, hız) ve dört güç
+    kaynağının gerçek akımı `izleme.csv`'ye yazılır ve grafiğe çizilir."""
+
+    def __init__(self, bobin: QMainWindow, merkezleme: MerkezlemeSekmesi) -> None:
+        super().__init__()
+        import pyqtgraph as pg
+
+        self.bobin, self.merkezleme = bobin, merkezleme
+        self.calisiyor = False
+        self._onceki_yaz = True
+        self._son_sonuc = None
+        self._son_kayit_t = 0.0
+        self._t0 = 0.0
+        self.t: list[float] = []
+        self.x: list[float] = []
+        self.y: list[float] = []
+        self.dI: list[list[float]] = [[], [], [], []]
+        self._I0: list[float] | None = None
+        self._csv: Path | None = None
+
+        duzen = QVBoxLayout(self)
+        ust = QHBoxLayout()
+        self.dugme = QPushButton("İzlemeyi başlat")
+        self.dugme.clicked.connect(self.degistir)
+        ust.addWidget(self.dugme)
+        ust.addWidget(QLabel("Kayıt aralığı"))
+        self.aralik = QSpinBox()
+        self.aralik.setRange(1, 3600)
+        self.aralik.setValue(10)
+        self.aralik.setSuffix(" s")
+        ust.addWidget(self.aralik)
+        ust.addStretch()
+        duzen.addLayout(ust)
+        self.bilgi = QLabel(
+            "Merkezleme TAMAMLANDI olduktan sonra başlatın. Akımlar açık kalır; pencereyi kapatana ya da "
+            "'Yeni çalıştırma'ya basana kadar sürer. Arka plan: quad en son sıfırken ölçülen alan.")
+        self.bilgi.setWordWrap(True)
+        duzen.addWidget(self.bilgi)
+        self.ozet = QLabel("—")
+        self.ozet.setWordWrap(True)
+        duzen.addWidget(self.ozet)
+        self.grafik_merkez = pg.PlotWidget(title="Merkez (arka plan çıkarılmış)")
+        self.grafik_merkez.setLabel("bottom", "süre", units="dk")
+        self.grafik_merkez.setLabel("left", "µm")
+        self.grafik_merkez.addLegend()
+        self.egri_x = self.grafik_merkez.plot(pen="r", name="x_c")
+        self.egri_y = self.grafik_merkez.plot(pen="b", name="y_c")
+        duzen.addWidget(self.grafik_merkez)
+        self.grafik_akim = pg.PlotWidget(title="Güç kaynağı akımı: ilk değerden sapma")
+        self.grafik_akim.setLabel("bottom", "süre", units="dk")
+        self.grafik_akim.setLabel("left", "mA")
+        self.grafik_akim.addLegend()
+        self.egri_akim = [self.grafik_akim.plot(pen=pg.mkPen(c), name=f"I{i + 1}")
+                          for i, c in enumerate("rgbm")]
+        duzen.addWidget(self.grafik_akim)
+
+        self.zamanlayici = QTimer(self)
+        self.zamanlayici.timeout.connect(self._ornekle)
+        self.zamanlayici.start(1000)
+        merkezleme.kapanis_kancalari.append(self.durdur)
+
+    # ------------------------------------------------------------------
+    def degistir(self) -> None:
+        self.durdur() if self.calisiyor else self.baslat()
+
+    def baslat(self) -> None:
+        akis = self.merkezleme.pencere.akis if self.merkezleme.pencere else None
+        if akis is None or akis.faz.value != "tamamlandi":
+            QMessageBox.information(self, "Kararlılık izleme",
+                                    "Önce merkezleme TAMAMLANMALI (akımlar merkezlenmiş değerlerde açık kalır).")
+            return
+        d = self.bobin.dongu
+        self._onceki_yaz = d.otomatik_yaz
+        d.otomatik_yaz_ayarla(False)       # sürekli ölçüm: her pencere_s'de bir
+        self._t0 = time.monotonic()
+        self._son_kayit_t = 0.0
+        self._son_sonuc = d.son_sonuc      # mevcut sonuç yeni sayılmasın
+        self.t, self.x, self.y = [], [], []
+        self.dI = [[], [], [], []]
+        self._I0 = None
+        self._csv = d.oturum.klasor() / f"izleme_{datetime.now():%H%M%S}.csv"
+        with open(self._csv, "w", newline="", encoding="utf-8") as f:
+            csv.writer(f).writerow(["zaman", "gecen_dk", "x_c_um", "y_c_um", "C1_net_uT", "C2_mT", "hiz_hz",
+                                    "artik_orani", "I1_A", "I2_A", "I3_A", "I4_A"])
+        self.calisiyor = True
+        self.dugme.setText("İzlemeyi durdur")
+        self.ozet.setText(f"İzleniyor... kayıt: {self._csv.name}")
+
+    def durdur(self) -> None:
+        if not self.calisiyor:
+            return
+        self.calisiyor = False
+        self.bobin.dongu.otomatik_yaz_ayarla(self._onceki_yaz)
+        self.dugme.setText("İzlemeyi başlat")
+
+    # ------------------------------------------------------------------
+    def _ornekle(self) -> None:
+        if not self.calisiyor:
+            return
+        d = self.bobin.dongu
+        s = d.son_sonuc
+        simdi = time.monotonic()
+        if s is None or s is self._son_sonuc or d.saglik:
+            return
+        self._son_sonuc = s
+        if simdi - self._son_kayit_t < self.aralik.value() - 0.01:
+            return
+        self._son_kayit_t = simdi
+        c = list(s.harmonikler)
+        for n, ark in (self.merkezleme.arka_plan() or {}).items():
+            if 1 <= n <= len(c):
+                c[n - 1] = c[n - 1] - ark
+        z = -self.bobin.p.r_ref_m * c[0] / c[1] if abs(c[1]) > 0 else complex(math.nan, math.nan)
+        try:
+            akim = self.merkezleme.pencere.akis.kaynaklar.akimlari_oku()
+        except Exception:  # noqa: BLE001 - izleme akım okuyamazsa da devam eder
+            akim = [math.nan] * 4
+        dk = (simdi - self._t0) / 60.0
+        if self._I0 is None:
+            self._I0 = [float(a) for a in akim]
+        self.t.append(dk); self.x.append(z.real * 1e6); self.y.append(z.imag * 1e6)
+        for i in range(4):
+            self.dI[i].append((float(akim[i]) - self._I0[i]) * 1e3)
+        with open(self._csv, "a", newline="", encoding="utf-8") as f:
+            csv.writer(f).writerow([datetime.now().isoformat(timespec="seconds"), f"{dk:.3f}", f"{z.real * 1e6:.2f}",
+                                    f"{z.imag * 1e6:.2f}", f"{abs(c[0]) * 1e6:.2f}", f"{abs(c[1]) * 1e3:.4f}",
+                                    f"{s.hiz_hz:.3f}", f"{s.artik_orani:.2e}"] + [f"{a:.5f}" for a in akim])
+        self._ciz()
+
+    def _ciz(self) -> None:
+        import numpy as np
+
+        self.egri_x.setData(self.t, self.x)
+        self.egri_y.setData(self.t, self.y)
+        for e, v in zip(self.egri_akim, self.dI):
+            e.setData(self.t, v)
+        n = len(self.t)
+        metin = f"{n} örnek, {self.t[-1]:.1f} dk. Son: x = {self.x[-1]:+.1f} µm, y = {self.y[-1]:+.1f} µm."
+        if n >= 5:
+            ax, ay = np.polyfit(self.t, self.x, 1)[0] * 60, np.polyfit(self.t, self.y, 1)[0] * 60
+            metin += (f" Ortalama ± σ: x {np.mean(self.x):+.1f} ± {np.std(self.x, ddof=1):.1f}, "
+                      f"y {np.mean(self.y):+.1f} ± {np.std(self.y, ddof=1):.1f} µm. "
+                      f"Sürüklenme: x {ax:+.1f}, y {ay:+.1f} µm/saat.")
+        self.ozet.setText(metin)
 
 
 class BirlesikPencere(QMainWindow):
@@ -259,6 +425,12 @@ class BirlesikPencere(QMainWindow):
         self.sekmeler = QTabWidget()
         self.sekmeler.addTab(self.bobin, "Dönen bobin")
         self.sekmeler.addTab(self.merkezleme, "Merkezleme")
+        self.kararlilik = None
+        if hasattr(self.bobin, "dongu"):
+            self.kararlilik = KararlilikSekmesi(self.bobin, self.merkezleme)
+            self.sekmeler.addTab(self.kararlilik, "Kararlılık")
+            if hasattr(self.bobin, "arka_plan_kaynagi"):
+                self.bobin.arka_plan_kaynagi = self.merkezleme.arka_plan
         self.setCentralWidget(self.sekmeler)
 
     def closeEvent(self, olay) -> None:  # noqa: N802 - Qt adı

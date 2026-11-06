@@ -1054,3 +1054,34 @@ def test_pencere_baglan_motoru_baslatmaz(kurulum, p, monkeypatch):
     assert pencere.dongu.durum is Durum.HAZIR and not pencere.dongu.donuyor and dunya.hiz == 0.0
     assert not dunya.servo
     pencere.close()
+
+
+def test_alan_grafiginden_arka_plan_cikarilir(kurulum, p, monkeypatch):
+    pytest.importorskip("PySide6")
+    monkeypatch.setenv("QT_QPA_PLATFORM", "offscreen")
+    from PySide6.QtWidgets import QApplication
+
+    from mgf.merkezleme_penceresi import MerkezlemePenceresi
+
+    QApplication.instance() or QApplication([])
+    dunya, _, _ = kurulum
+    dunya.c1 = complex(40e-6, 0)
+    pencere = MerkezlemePenceresi(p, SahteBaglanti(dunya), SahteMotor(dunya))
+    pencere.zamanlayici.stop()
+    pencere.dongu.saat = lambda: dunya.t
+    pencere.dongu.otomatik_yaz_ayarla(False)  # sürekli ölçüm
+    pencere.baglan_ve_baslat()
+    for _ in range(240):
+        dunya.ilerle(0.05)
+        pencere._tick()
+    assert pencere.dongu.gecmis
+    pencere.chk_arka_cikar.setChecked(True)
+    assert "ARKA PLAN ÇIKARILMIŞ" not in pencere.lbl_cok_kutup.text()  # kaynak yok: değişmez
+    pencere.arka_plan_kaynagi = lambda: {1: complex(40e-6, 0)}
+    pencere._grafikleri_ciz()
+    metin = pencere.lbl_cok_kutup.text()
+    assert "ARKA PLAN ÇIKARILMIŞ" in metin and "|C<sub>1</sub>| = " in metin
+    c1 = float(metin.split("|C<sub>1</sub>| = ")[1].split(" T")[0])
+    assert c1 < 1e-6  # 40 µT'lik alan çıkarıldı
+    pencere.dongu.saat = time.monotonic  # kapanışta gerçek saat
+    pencere.close()

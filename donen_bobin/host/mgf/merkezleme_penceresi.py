@@ -108,6 +108,9 @@ class MerkezlemePenceresi(QMainWindow):
         self.p = p
         self.tema = p.tema
         self.dongu = OlcumDongusu(p, baglanti, motor, gunluk=self._gunluge_yaz)
+        # Birleşik arayüz verir: quad akımları en son sıfırken görülen alan
+        # (n -> C_n, Tesla; yoksa None). Alan grafiğinden çıkarılır.
+        self.arka_plan_kaynagi = lambda: None
         self.setWindowTitle("Dönen bobin — merkezleme ölçümü")
         self._kur()
         self._temayi_uygula(self.tema)
@@ -195,6 +198,12 @@ class MerkezlemePenceresi(QMainWindow):
             "Kapalıyken merkezleme'ye yazılmaz; her ölçüm süresinde bir sürekli ölçüm alınır.\n"
             "Açıkken ve motor dönerken bobin, hız, referans ve gecikme değiştirilemez."
         )
+        self.chk_arka_cikar = QCheckBox("Alan grafiğinden arka planı çıkar")
+        self.chk_arka_cikar.setToolTip(
+            "Birleşik arayüzde: merkezleme'nin quad akımları en son sıfırken ölçtüğü alan\n"
+            "(ortam alanı) grafikteki ortalamadan çıkarılır. Yalnızca gösterimi etkiler;\n"
+            "kayıtlar ve merkezleme'ye yazılan değerler ham kalır.")
+        self.chk_arka_cikar.toggled.connect(lambda _: self._grafikleri_ciz())
         self.chk_csv = QCheckBox("Kaydet")
         self.chk_csv.setChecked(True)
         self.chk_csv.toggled.connect(lambda acik: setattr(self.dongu, "csv_kaydet", acik))
@@ -232,6 +241,7 @@ class MerkezlemePenceresi(QMainWindow):
         satir.addStretch()
         satir.addWidget(self.chk_yaz)
         satir.addWidget(self.chk_csv)
+        satir.addWidget(self.chk_arka_cikar)
         kok.addLayout(satir)
 
         # Durum
@@ -564,6 +574,12 @@ class MerkezlemePenceresi(QMainWindow):
         d = self.dongu
         t = TEMALAR[self.tema]
         n_olcum, ortalama, sigma = d.harmonik_istatistigi()  # Tesla
+        arka = self.arka_plan_kaynagi() if getattr(self, "chk_arka_cikar", None) and self.chk_arka_cikar.isChecked() else None
+        if arka and n_olcum:
+            ortalama = ortalama.copy()
+            for n, c in arka.items():
+                if 1 <= n <= len(ortalama):
+                    ortalama[n - 1] = ortalama[n - 1] - c
         genlik = np.abs(ortalama)
         referans = OLCEKLER[self.olcek][1]
         for seri in self.seriler.values():
@@ -597,7 +613,8 @@ class MerkezlemePenceresi(QMainWindow):
                 self._seri_ciz(self.seriler[ad], deger, s, taban_us, renk, referans is None)
             self.grafik_cok.setYRange(taban_us, np.log10(en_buyuk) + 0.6, padding=0)
             self.lbl_cok_kutup.setText(
-                f"Son {n_olcum} ölçümün ortalaması ± σ (tek ölçüm saçılımı) &nbsp;·&nbsp; "
+                ("<b>ARKA PLAN ÇIKARILMIŞ</b> &nbsp;·&nbsp; " if arka else "")
+                + f"Son {n_olcum} ölçümün ortalaması ± σ (tek ölçüm saçılımı) &nbsp;·&nbsp; "
                 f"|C<sub>1</sub>| = {genlik[0]:.3e} T, |C<sub>2</sub>| = {genlik[1]:.3e} T"
                 f" &nbsp;·&nbsp; {aciklama}"
             )

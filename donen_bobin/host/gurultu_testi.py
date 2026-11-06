@@ -2,6 +2,8 @@
 
     cd donen_bobin/host && python gurultu_testi.py [--hizlar 8 11 13 8] [--n 8] [--pencere 3]
 
+    python gurultu_testi.py --hizlar 2 4 6 8 10 --oturma 120   # hız taraması
+
 Akımları verilen değerlere (varsayılan: 6 Kasım 7 A merkezlemesinin sonu) rampa
 ile getirir; her hızda düz bobinle N ölçüm alır. Her ölçüm süresince ayrı bir
 iş parçacığı dört güç kaynağının MEAS:CURR? değerini okur. Ölçülen merkez
@@ -68,9 +70,11 @@ class AkimOkuyucu:
 
 
 class GurultuTesti(KanalTesti):
-    def __init__(self, *a, akimlar=SON_AKIMLAR_7A, hizlar=(8, 11, 13, 8), n=8, R=None, nominal_A=7.0, **k) -> None:
+    def __init__(self, *a, akimlar=SON_AKIMLAR_7A, hizlar=(8, 11, 13, 8), n=8, R=None, nominal_A=7.0,
+                 oturma_s: float = 0.0, min_tur: float = 0.0, **k) -> None:
         super().__init__(*a, **k)
         self.akimlar = np.asarray(akimlar, dtype=float)
+        self.oturma_s, self.min_tur = oturma_s, min_tur
         self.hizlar, self.n, self.R, self.nominal_A = list(hizlar), n, R, nominal_A
         self.satirlar: list[dict] = []
 
@@ -85,8 +89,14 @@ class GurultuTesti(KanalTesti):
         for blok, hz in enumerate(self.hizlar):
             d.hiz_ayarla(hz)
             self._tick_bekle(lambda: d.durum is Durum.DONUYOR, 60, f"{hz} Hz'de hızın oturması")
-            self._sure(1.0)
-            self.yaz(f"Blok {blok + 1}/{len(self.hizlar)}: {hz:g} Hz, {self.n} ölçüm")
+            # Pencere en az `min_tur` tur (düşük hızda düşük mertebeler sürüklenme
+            # polinomundan ayrılabilsin); oturma süresince sürekli ölçümler kaydedilir.
+            pencere = max(self.pencere_s, self.min_tur / hz if hz else 0.0)
+            d.pencere_ayarla(pencere)
+            if self.oturma_s:
+                self.yaz(f"Blok {blok + 1}/{len(self.hizlar)}: {hz:g} Hz, {self.oturma_s:g} s oturma")
+            self._sure(max(1.0, self.oturma_s))
+            self.yaz(f"Blok {blok + 1}/{len(self.hizlar)}: {hz:g} Hz, {self.n} ölçüm ({pencere:.1f} s)")
             for i in range(self.n):
                 with AkimOkuyucu(self.grup.kaynaklar) as ok:
                     s = self._olc()
@@ -145,7 +155,9 @@ def main(argv=None) -> int:
     a = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     a.add_argument("--hizlar", type=float, nargs="+", default=[8, 11, 13, 8])
     a.add_argument("--n", type=int, default=8)
-    a.add_argument("--pencere", type=float, default=3.0)
+    a.add_argument("--pencere", type=float, default=3.0, help="en kısa ölçüm süresi (s)")
+    a.add_argument("--min-tur", type=float, default=20.0, help="ölçüm penceresine en az bu kadar tur")
+    a.add_argument("--oturma", type=float, default=0.0, help="her hızda ölçümden önce bekleme (s)")
     a.add_argument("--akimlar", type=float, nargs=4, default=list(SON_AKIMLAR_7A))
     a.add_argument("--parametreler", default=str(KOK / "donen_bobin" / "merkezleme_olcer_7A.yaml"))
     a.add_argument("--yapilandirma", default=str(KOK / "yapilandirma_7A.yaml"))
@@ -176,7 +188,8 @@ def main(argv=None) -> int:
     scpi = KomutGunlugu()
     grup = KaynakGrubu.olustur(kfg.guc_kaynaklari, kfg.guvenlik, canli=True, gunluk=scpi)
     test = GurultuTesti(p, dongu, grup, akim_A=float(np.mean(g.akimlar)), pencere_s=g.pencere,
-                        akimlar=g.akimlar, hizlar=g.hizlar, n=g.n, R=R, nominal_A=kfg.miknatis.nominal_akim_A)
+                        akimlar=g.akimlar, hizlar=g.hizlar, n=g.n, R=R, nominal_A=kfg.miknatis.nominal_akim_A,
+                        oturma_s=g.oturma, min_tur=g.min_tur)
     kod = 0
     try:
         grup.baslat()

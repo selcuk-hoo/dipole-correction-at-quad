@@ -1,17 +1,18 @@
 #!/usr/bin/env bash
 # Tek komutla merkezleme: dönen bobin alanı ölçer, merkezleme kuadrupol
-# bobinlerinin akımlarını düzeltir. İki programı doğru sırayla açar:
+# bobinlerinin akımlarını düzeltir.
 #
-#   ./merkezle            GERÇEK DONANIM; her adımı merkezleme penceresinden onaylarsınız
-#   ./merkezle otomatik   GERÇEK DONANIM; onay beklemeden baştan sona yürür (pencere yok)
-#   ./merkezle kuru       dönen bobin gerçek, güç kaynaklarına komut GİTMEZ (yalnızca günlük)
+#   ./merkezle            GERÇEK DONANIM; tek pencere, iki sekme (dönen bobin + merkezleme)
+#   ./merkezle kuru       aynı pencere; güç kaynaklarına komut GİTMEZ (yalnızca günlük)
+#   ./merkezle otomatik   GERÇEK DONANIM; onay beklemeden baştan sona yürür (merkezleme penceresi yok)
 #   ./merkezle deneme     donanım yok; alanlar simülatörden
 #   ./merkezle eslestir   güç kaynaklarını bobinlerle eşleştir (USB takıldıktan sonra bir kez)
 #   ./merkezle kanal_testi  dört ADC kanalını akım 0 / eşit nominal akımda ölç (hangisi düz bobin?)
 #
-# Sıra: önce dönen bobin penceresi açılır, Pico'ya bağlanır, motoru başlatır.
-# İlk sağlıklı ölçümü yazınca (= zincir çalışıyor) merkezleme açılır. Merkezleme
-# kapanınca dönen bobin de motoru durdurup kapanır.
+# Pencerede dönen bobin sekmesi Pico'ya bağlanıp motoru başlatır; merkezleme
+# sekmesinde nominal akım ve tolerans seçilip "Merkezlemeyi başlat"a basılır.
+# otomatik kipte: dönen bobin açılır, ilk sağlıklı ölçümü yazınca merkezleme
+# arayüzsüz başlar, bitince dönen bobin de kapanır.
 #
 # Kayıtlar kendiliğinden kayitlar/<tarih_saat>/ altına gider (ham veri, ölçümler,
 # günlük); merkezleme'nin çıktı klasörü de oraya "merkezleme" adıyla bağlanır.
@@ -27,9 +28,9 @@ PY=python3
 
 kip=${1:-}
 case "$kip" in
-    "")       bayraklar=(--dosyadan --canli) ;;
+    "")       exec "$PY" -m merkezleme.birlesik --canli ;;
+    kuru)     exec "$PY" -m merkezleme.birlesik ;;
     otomatik) bayraklar=(--otomatik --dosyadan --canli) ;;
-    kuru)     bayraklar=(--dosyadan) ;;
     deneme)   exec "$PY" -m merkezleme --deneme ;;
     eslestir) exec "$PY" -m merkezleme --eslestir ;;
     kanal_testi)
@@ -39,7 +40,7 @@ case "$kip" in
         "$PY" -c 'import sys; from merkezleme.eslestirme import adresleri_denetle; sys.exit(adresleri_denetle("yapilandirma.yaml"))' || exit 1
         shift
         cd donen_bobin/host && exec "$PY" kanal_testi.py "$@" ;;
-    -h|--help|yardim) sed -n '2,14p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    -h|--help|yardim) sed -n '2,15p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
     *) echo "Bilinmeyen kip: $kip  (seçenekler: otomatik, kuru, deneme, eslestir, kanal_testi)" >&2; exit 2 ;;
 esac
 

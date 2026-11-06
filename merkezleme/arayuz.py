@@ -1,4 +1,4 @@
-"""PyQt5 masaüstü arayüzü.
+"""PySide6 masaüstü arayüzü.
 
 Ekranda her zaman bulunanlar:
   * mevcut adım / toplam adım ve adım etiketi
@@ -26,9 +26,9 @@ import time
 import traceback
 from typing import Any
 
-from PyQt5.QtCore import Qt
-from PyQt5.QtGui import QFont
-from PyQt5.QtWidgets import (
+from PySide6.QtCore import Qt
+from PySide6.QtGui import QFont
+from PySide6.QtWidgets import (
     QApplication,
     QComboBox,
     QFrame,

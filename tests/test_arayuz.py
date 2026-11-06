@@ -1,6 +1,6 @@
 """Arayüz testleri (offscreen Qt).
 
-PyQt5 kurulu değilse atlanır. Modal diyaloglar offscreen kipte bloklayacağı
+PySide6 kurulu değilse atlanır. Modal diyaloglar offscreen kipte bloklayacağı
 için `QMessageBox` yanıtları yamanır; böylece "olası yazım hatası" onayı ve
 durdurma onayı da sınanabilir.
 """
@@ -13,9 +13,9 @@ import pytest
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
-pytest.importorskip("PyQt5", reason="PyQt5 kurulu değil")
+pytest.importorskip("PySide6", reason="PySide6 kurulu değil")
 
-from PyQt5.QtWidgets import QApplication, QMessageBox  # noqa: E402
+from PySide6.QtWidgets import QApplication, QMessageBox  # noqa: E402
 
 from merkezleme.duzeltme import yakinsama_durumu  # noqa: E402
 from merkezleme.is_akisi import Bekleme, Faz  # noqa: E402
@@ -236,7 +236,7 @@ def test_durdur_dugmesi_akimlari_sifirlar(pencere_uret, diyalog_yanitlari):
 
 
 def test_pencere_kapanisinda_akimlar_sifirlanir_ve_ozet_yazilir(pencere_uret):
-    from PyQt5.QtGui import QCloseEvent
+    from PySide6.QtGui import QCloseEvent
 
     pencere, akis, _, calistirma, _ = pencere_uret()
     pencere._onayla()

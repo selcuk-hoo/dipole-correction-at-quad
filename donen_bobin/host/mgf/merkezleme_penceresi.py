@@ -655,6 +655,12 @@ class MerkezlemePenceresi(QMainWindow):
         self.dongu.hiz_ayarla(self.hiz.value())
         self.dongu.baslat()
 
+    def baglan(self) -> None:
+        """Yalnızca bağlan; motoru başlatmaz (birleşik pencere açılışta çağırır)."""
+        if self.dongu.durum is Durum.BAGLI_DEGIL:
+            self._baglan_kes()
+        self._yenile()
+
     def baglan_ve_baslat(self) -> None:
         """Bağlan + Başlat (merkezle başlatıcısı açılışta çağırır)."""
         if self.dongu.durum is Durum.BAGLI_DEGIL:

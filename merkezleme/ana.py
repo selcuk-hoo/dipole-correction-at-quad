@@ -205,7 +205,7 @@ def calistir(argumanlar: argparse.Namespace) -> int:
         return 0
 
     # Arayüzlü koşu
-    from PyQt5.QtWidgets import QApplication
+    from PySide6.QtWidgets import QApplication
 
     from .arayuz import MerkezlemePencere, qt_bekle
 
@@ -253,7 +253,7 @@ def calistir(argumanlar: argparse.Namespace) -> int:
     print(f"Çıktı klasörü: {calistirma.dizin}")
     pencere.resize(980, 900)
     pencere.show()
-    return int(uygulama.exec_())
+    return int(uygulama.exec())
 
 
 def main(argv: list[str] | None = None) -> int:

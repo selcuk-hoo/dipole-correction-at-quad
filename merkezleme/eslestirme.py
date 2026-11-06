@@ -190,8 +190,8 @@ def adresleri_denetle(yol: str | Path) -> int:
 # Pencere
 # ---------------------------------------------------------------------------
 def pencere_olustur(yapilandirma_yolu: str | Path, okuyucu: Callable[[], list[Okuma]], tema_adi: str):
-    from PyQt5.QtCore import QTimer
-    from PyQt5.QtWidgets import (
+    from PySide6.QtCore import QTimer
+    from PySide6.QtWidgets import (
         QApplication,
         QHBoxLayout,
         QHeaderView,
@@ -296,7 +296,7 @@ def pencere_olustur(yapilandirma_yolu: str | Path, okuyucu: Callable[[], list[Ok
 
 
 def calistir(yapilandirma_yolu: str | Path) -> int:
-    from PyQt5.QtWidgets import QApplication
+    from PySide6.QtWidgets import QApplication
 
     kfg = yapilandirma_yukle(yapilandirma_yolu)
     uygulama = QApplication([])
@@ -305,6 +305,6 @@ def calistir(yapilandirma_yolu: str | Path) -> int:
     pencere.resize(820, 420)
     pencere.show()
     try:
-        return int(uygulama.exec_())
+        return int(uygulama.exec())
     finally:
         okuyucu.kapat()

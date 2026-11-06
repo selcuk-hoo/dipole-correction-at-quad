@@ -1033,3 +1033,24 @@ def test_gurultu_testi_sahte_cihazla(kurulum, p):
     klasor = test.raporu_yaz(ozet)
     assert (klasor / "gurultu_testi.csv").exists() and (klasor / "gurultu_testi_ozet.csv").exists()
     assert np.all(grup.ayar_akimlari_A == 0)
+
+
+def test_pencere_baglan_motoru_baslatmaz(kurulum, p, monkeypatch):
+    # Birleşik pencere açılışta yalnızca bağlanır; motor kullanıcı "Başlat" deyince
+    pytest.importorskip("PySide6")
+    monkeypatch.setenv("QT_QPA_PLATFORM", "offscreen")
+    from PySide6.QtWidgets import QApplication
+
+    from mgf.merkezleme_penceresi import MerkezlemePenceresi
+
+    QApplication.instance() or QApplication([])
+    dunya, _, _ = kurulum
+    pencere = MerkezlemePenceresi(p, SahteBaglanti(dunya), SahteMotor(dunya))
+    pencere.zamanlayici.stop()
+    pencere.baglan()
+    for _ in range(40):
+        dunya.ilerle(0.05)
+        pencere._tick()
+    assert pencere.dongu.durum is Durum.HAZIR and not pencere.dongu.donuyor and dunya.hiz == 0.0
+    assert not dunya.servo
+    pencere.close()

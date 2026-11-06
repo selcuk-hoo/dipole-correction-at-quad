@@ -95,11 +95,12 @@ guc_kaynaklari:
     - ASRL/dev/serial/by-id/usb-ITECH_Electronics_IT-M3233_803981033797250003-if00::INSTR   # bobin 4 (sağ alt)
   # Sabit akım kipinde VOLT bir uyum (compliance) sınırdır; akımdan ÖNCE yazılır.
   uyum_gerilimi_V: 20.0
-  rampa_hizi_A_s: 0.5
-  rampa_adim_suresi_s: 0.1
-  oturma_suresi_s: 2.0
+  rampa_hizi_A_s: 5.0             # 0.5 -> 5 (2026-11-06): 9.5 A ~2 s; L ≈ 6.5 mH'de L·dI/dt ≈ 0.03 V
+  rampa_adim_suresi_s: 0.05
+  oturma_suresi_s: 0.5            # akımlar oturduktan sonra ek bekleme (eskiden 2 s)
   akim_tolerans_A: 0.02
-  oturma_dogrulama_denemesi: 5
+  oturma_dogrulama_denemesi: 10   # rampa sonrası en fazla bu kadar MEAS:CURR? kontrolü...
+  oturma_kontrol_periyodu_s: 1.0  # ...bu aralıkla (eskiden 0.1 s arayla 5 kez, gerilimle birlikte)
 
 guvenlik:
   bobin_basi_max_akim_A: 10.0

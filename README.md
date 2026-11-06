@@ -19,9 +19,9 @@ kullanıcıdan değiştirmesini ister).
 ## Çalıştırma: tek komut
 
 ```bash
-./merkezle            # gerçek donanım; her adımı pencereden onaylarsınız
-./merkezle otomatik   # gerçek donanım; onay beklemeden baştan sona
-./merkezle kuru       # dönen bobin gerçek, güç kaynaklarına komut gitmez
+./merkezle            # gerçek donanım; tek pencere, iki sekme (dönen bobin + merkezleme)
+./merkezle kuru       # aynı pencere, güç kaynaklarına komut gitmez
+./merkezle otomatik   # gerçek donanım; onay beklemeden baştan sona (merkezleme penceresi yok)
 ./merkezle deneme     # donanım yok, simülatör
 ./merkezle eslestir   # güç kaynaklarını bobinlerle eşleştir (bir kez)
 ```
@@ -31,6 +31,12 @@ kaynağının ön panelinden beslediği bobinin numarası kadar akım ayarlayın
 1 A, ... bobin 4 → 4 A; çıkışı açmak gerekmez). Pencere ayarları okur, eşleşme
 tutarlıysa adresleri `yapilandirma.yaml`'a yazar. Pencere cihazlara komut göndermez.
 
+`./merkezle` tek bir pencere açar. "Dönen bobin" sekmesi Pico'ya bağlanır;
+motoru o sekmedeki "Başlat" ile siz çalıştırırsınız (açılışta motor dönmez). "Merkezleme" sekmesinde **nominal akım** ve **merkez toleransı**
+seçilip "Merkezlemeyi başlat"a basılır (dönen bobin dönüp hızı oturunca etkin
+olur); bitince "Yeni çalıştırma" akımları sıfırlayıp ayarlara döner. Akımlar
+5 A/s ile rampalanır, ardından 1 s aralıkla `MEAS:CURR?` ile oturması kontrol
+edilir. Aşağıdaki "`otomatik`" kipinde (merkezleme penceresiz) eski sıra geçerlidir:
 `merkezle` önce dönen bobin penceresini açar, Pico'ya bağlanır ve motoru
 başlatır (8 Hz). Dönen bobin ilk sağlıklı ölçümü yazınca merkezleme açılır;
 bobin ölçemezse (Pico bağlı değil, ölçüm reddediliyor) merkezleme hiç açılmaz,
@@ -340,7 +346,7 @@ edilir. Duraklat/Devam ve "DURDUR ve akımları sıfırla" her an kullanılabili
 ## 4. Kurulum ve çalıştırma
 
 ```bash
-pip install numpy pyyaml PyQt5          # arayüz için
+pip install numpy pyyaml PySide6        # arayüz için (2026-11-06'ya kadar PyQt5)
 pip install pyvisa pyvisa-py            # yalnızca gerçek donanım için
 pip install pytest                      # testler için
 ```
@@ -442,7 +448,8 @@ programı yanıt vermezse) akımlar güvenli şekilde sıfıra indirilir.
 | `dogrulama.py` | Mertebe kontrolü ve "olası yazım hatası" |
 | `olcum_kaynagi.py` | Soyut ölçüm kaynağı (`ElleGiris` / `SimulatorGirisi` / `DosyaGirisi`), alan dönüşümleri |
 | `is_akisi.py` | Adım sırası durum makinesi, görev kuyruğu, durum dosyası, rutinler |
-| `arayuz.py` | PyQt5 arayüzü |
+| `arayuz.py` | merkezleme arayüzü (PySide6) |
+| `birlesik.py` | tek pencere: dönen bobin + merkezleme sekmeleri (`./merkezle`) |
 | `tema.py` | Arayüz temaları ve **bütün renkler** (varsayılan + iki fosfor CRT) |
 | `simulator.py` | 2D çizgi akımı mıknatıs modeli |
 | `kayit.py` | Tarihli çalıştırma klasörü, CSV/JSON/SCPI günlüğü/Markdown özeti |

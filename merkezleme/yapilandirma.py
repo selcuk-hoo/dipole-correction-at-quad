@@ -122,6 +122,7 @@ class GucKaynaklariYapilandirmasi:
     oturma_suresi_s: float
     akim_tolerans_A: float
     oturma_dogrulama_denemesi: int
+    oturma_kontrol_periyodu_s: float = 1.0  # rampa sonrası MEAS:CURR? kontrolleri arası
 
 
 @dataclass(frozen=True)
@@ -365,6 +366,7 @@ def _guc_kaynaklari_yukle(veri: dict[str, Any]) -> GucKaynaklariYapilandirmasi:
         oturma_suresi_s=float(_zorunlu(veri, "oturma_suresi_s", yol)),
         akim_tolerans_A=float(_zorunlu(veri, "akim_tolerans_A", yol)),
         oturma_dogrulama_denemesi=int(_zorunlu(veri, "oturma_dogrulama_denemesi", yol)),
+        oturma_kontrol_periyodu_s=float(veri.get("oturma_kontrol_periyodu_s", 1.0)),
     )
 
 

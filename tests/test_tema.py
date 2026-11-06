@@ -125,9 +125,9 @@ def test_yapilandirmada_tema_yoksa_varsayilan(tmp_path):
 # Arayüzde tema
 # ---------------------------------------------------------------------------
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
-pytest.importorskip("PyQt5", reason="PyQt5 kurulu değil")
+pytest.importorskip("PySide6", reason="PySide6 kurulu değil")
 
-from PyQt5.QtWidgets import QApplication, QMessageBox  # noqa: E402
+from PySide6.QtWidgets import QApplication, QMessageBox  # noqa: E402
 
 
 @pytest.fixture

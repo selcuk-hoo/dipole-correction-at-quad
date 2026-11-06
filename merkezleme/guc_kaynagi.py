@@ -95,6 +95,7 @@ class GucKaynagiArayuzu(Protocol):
     def baslat(self, uyum_gerilimi_V: float, akim_A: float = 0.0) -> str: ...
     def akim_yaz(self, akim_A: float) -> None: ...
     def olcumleri_oku(self) -> tuple[float, float]: ...
+    def akim_oku(self) -> float: ...
     def cikis_ac(self) -> None: ...
     def cikis_kapat(self, olculen_akim_A: float, tolerans_A: float = ...) -> None: ...
     def kapat(self) -> None: ...
@@ -202,6 +203,10 @@ class GucKaynagi(_TemelKaynak):
         akim = self._float_ayristir(self._sorgula("MEAS:CURR?"), f"{self.adres} MEAS:CURR?")
         return gerilim, akim
 
+    def akim_oku(self) -> float:
+        """Yalnızca MEAS:CURR? (oturma kontrolü için; gerilim okumasından hızlı)."""
+        return self._float_ayristir(self._sorgula("MEAS:CURR?"), f"{self.adres} MEAS:CURR?")
+
     def cikis_ac(self) -> None:
         self._yaz("OUTP ON", hata_kontrolu=True)
 
@@ -261,6 +266,12 @@ class SahteGucKaynagi(_TemelKaynak):
         akim = self.ayar_akimi_A + float(self.rng.normal(0.0, self.olcum_hatasi_A))
         gerilim = 0.05 * akim  # bobin direnci ~50 mOhm mertebesinde
         return gerilim, akim
+
+    def akim_oku(self) -> float:
+        self._kaydet("MEAS:CURR?", gonderildi=False)
+        if not self.cikis_acik:
+            return 0.0
+        return self.ayar_akimi_A + float(self.rng.normal(0.0, self.olcum_hatasi_A))
 
     def cikis_ac(self) -> None:
         self._kaydet("OUTP ON", gonderildi=False)
@@ -402,16 +413,22 @@ class KaynakGrubu:
         self.bekle(self.ayar.oturma_suresi_s)
         return olculen
 
+    def akimlari_oku(self) -> np.ndarray:
+        """Dört kaynağın yalnızca akımı (MEAS:CURR?)."""
+        return np.array([k.akim_oku() for k in self.kaynaklar], dtype=float)
+
     def _oturmayi_dogrula(self, hedefler: np.ndarray) -> np.ndarray:
-        """`MEAS:CURR?` ile akımların hedefe tolerans içinde oturduğunu doğrular."""
+        """`MEAS:CURR?` ile akımların hedefe tolerans içinde oturduğunu doğrular;
+        oturmadıysa `oturma_kontrol_periyodu_s` arayla en fazla
+        `oturma_dogrulama_denemesi` kez yeniden bakar."""
         son_akimlar = np.zeros(BOBIN_SAYISI, dtype=float)
         for deneme in range(1, self.ayar.oturma_dogrulama_denemesi + 1):
-            _, son_akimlar = self.olcumleri_oku()
+            son_akimlar = self.akimlari_oku()
             sapma = np.abs(son_akimlar - hedefler)
             if np.all(sapma <= self.ayar.akim_tolerans_A):
                 return son_akimlar
             if deneme < self.ayar.oturma_dogrulama_denemesi:
-                self.bekle(self.ayar.rampa_adim_suresi_s)
+                self.bekle(self.ayar.oturma_kontrol_periyodu_s)
         sapma = np.abs(son_akimlar - hedefler)
         raise GucKaynagiHatasi(
             "Akımlar hedefe oturmadı: hedef="

@@ -35,13 +35,13 @@ def qt_uygulama():
 
     Session kapsamında tutulur: QApplication nesnesine referans kalmazsa
     çöplenip yok edilir ve sonrasında QWidget oluşturmak Qt'yi abort ettirir.
-    PyQt5 kurulu değilse ilgili testler atlanır.
+    PySide6 kurulu değilse ilgili testler atlanır.
     """
     import os
 
     os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
-    pytest.importorskip("PyQt5", reason="PyQt5 kurulu değil")
-    from PyQt5.QtWidgets import QApplication
+    pytest.importorskip("PySide6", reason="PySide6 kurulu değil")
+    from PySide6.QtWidgets import QApplication
 
     uygulama = QApplication.instance() or QApplication([])
     yield uygulama

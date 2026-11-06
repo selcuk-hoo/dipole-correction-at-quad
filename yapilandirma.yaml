@@ -85,11 +85,11 @@ harmonikler:
 
 guc_kaynaklari:
   # ITECH IT-M3233, sabit akım kipi. Sıra bobin numaralandırmasıyla aynı (1..4).
-  visa_adresleri:
-    - ASRL1::INSTR
-    - ASRL2::INSTR
-    - ASRL3::INSTR
-    - ASRL4::INSTR
+  visa_adresleri:   # ./merkezle eslestir, 2026-11-06 11:48
+    - ASRL/dev/serial/by-id/usb-ITECH_Electronics_IT-M3233_803981033797250004-if00::INSTR   # bobin 1 (sağ üst)
+    - ASRL/dev/serial/by-id/usb-ITECH_Electronics_IT-M3233_803981033797250001-if00::INSTR   # bobin 2 (sol üst)
+    - ASRL/dev/serial/by-id/usb-ITECH_Electronics_IT-M3233_803981033797250002-if00::INSTR   # bobin 3 (sol alt)
+    - ASRL/dev/serial/by-id/usb-ITECH_Electronics_IT-M3233_803981033797250003-if00::INSTR   # bobin 4 (sağ alt)
   # Sabit akım kipinde VOLT bir uyum (compliance) sınırdır; akımdan ÖNCE yazılır.
   uyum_gerilimi_V: 20.0
   rampa_hizi_A_s: 0.5

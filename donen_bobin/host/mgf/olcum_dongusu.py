@@ -44,6 +44,7 @@ from .merkezleme_koprusu import (
     HIZ_INDEKSI,
     KAZANC_INDEKSI,
     OlcumKaydi,
+    OturumKlasoru,
     HamOzet,
     OlcumSonucu,
     Parametreler,
@@ -97,7 +98,9 @@ class OlcumDongusu:
         self.p = p
         self.conn = baglanti
         self.engine = motor
-        self.gunluk = gunluk
+        # Bütün kayıtlar (ölçümler, ham veri, günlük) oturum klasöründe
+        self.oturum = OturumKlasoru(p.kayit_dizini)
+        self._gunluk_disari = gunluk
         self.saat = saat
 
         self.durum = Durum.BAGLI_DEGIL
@@ -122,11 +125,12 @@ class OlcumDongusu:
         self.saglik: list[str] = []  # son ölçümün sağlık sorunları (boş: sağlıklı)
         self._rs485_hata_sayisi: int | None = None
         self.gecmis: deque[OlcumSonucu] = deque(maxlen=GECMIS_UZUNLUGU)
-        self.kayit = OlcumKaydi(p.kayit_dizini)
+        self.kayit = OlcumKaydi(self.oturum)
         self.csv_kaydet = True
 
         self._baglanti_koptu = False
         self._hiz_oturdu_zamani: float | None = None
+        self._oto_kayit_baslangici: int | None = None  # hız oturunca otomatik ham kayıt
         self._toplama_baslangici = 0
         self._surekli_baslangici = 0
         self._durdurma_zamani = 0.0
@@ -232,15 +236,27 @@ class OlcumDongusu:
         v = veri[1]
         return v, ham_ozet(v, self.p.ornekleme_sps)
 
-    def ham_kaydet(self, saniye: float) -> Path | None:
+    def gunluk(self, mesaj: str) -> None:
+        self.oturum.gunluge_yaz(mesaj)
+        self._gunluk_disari(mesaj)
+
+    def ham_kaydet(self, saniye: float, etiket: str = "elle") -> Path | None:
         """Son `saniye`lik ham örnekleri (zaman, açı, gerilim) koşullarıyla
-        birlikte kayıt dizinine ayrı bir CSV olarak yazar."""
+        birlikte oturum klasörüne ayrı bir CSV olarak yazar."""
         veri = self._ham_veri(saniye)
         if veri is None:
             self.gunluk("Ham veri kaydedilemedi: bağlı değil ya da veri yok.")
             return None
+        yol = self._ham_yaz(veri, etiket)
+        if yol is not None:
+            self.gunluk(f"Ham veri kaydedildi ({len(veri[1])} örnek): {yol.name}")
+        return yol
+
+    def _ham_yaz(self, veri: tuple[np.ndarray, np.ndarray], etiket: str, **ek) -> Path | None:
         akis = self.ornek_akisi_sps()
         bilgi = {
+            "etiket": etiket,
+            **ek,
             "kanal": self.kanal,
             "durum": self.durum.value,
             "motor_hizi_hz": f"{self.engine.motor_speed:.4f}",
@@ -250,12 +266,10 @@ class OlcumDongusu:
             "adc": f"kazanc={self.p.kazanc} filtre={self.p.filtre}",
         }
         try:
-            yol = ham_veriyi_kaydet(self.p.kayit_dizini, *veri, self.p.ornekleme_sps, bilgi)
+            return ham_veriyi_kaydet(self.oturum.ham_yolu(etiket), *veri, self.p.ornekleme_sps, bilgi)
         except OSError as hata:
             self.gunluk(f"Ham veri kaydedilemedi: {hata}")
             return None
-        self.gunluk(f"Ham veri kaydedildi ({len(veri[1])} örnek): {yol}")
-        return yol
 
     def _ham_veri(self, saniye: float) -> tuple[np.ndarray, np.ndarray] | None:
         if self.durum is Durum.BAGLI_DEGIL or self.engine.current_data_mode != 1:
@@ -469,6 +483,7 @@ class OlcumDongusu:
             return
 
         if not self._hiz_tamam():
+            self._oto_kayit_baslangici = None  # hız oturmadan bozuldu: kayıt iptal
             if self.durum is not Durum.HIZ_BEKLENIYOR:
                 self.gunluk(f"Hız tolerans dışında ({self.engine.motor_speed:.2f} Hz); bekleniyor.")
             self._hiz_bekle()
@@ -482,6 +497,10 @@ class OlcumDongusu:
             self.gunluk(f"Hız oturdu: {self.engine.motor_speed:.2f} Hz")
             self.durum = Durum.KILIT_BEKLENIYOR
             self._tek_baslangici = max(self._tek_baslangici, self.engine.total_samples_received)
+            if self.p.hiz_oturunca_kayit_s > 0:
+                self._oto_kayit_baslangici = self.engine.total_samples_received
+
+        self._oto_kaydi_isle()
 
         if not self.engine.rotor_online:
             return
@@ -600,6 +619,17 @@ class OlcumDongusu:
     def _taze_ornek(self, baslangic: int) -> int:
         return self.engine.total_samples_received - baslangic
 
+    def _oto_kaydi_isle(self) -> None:
+        """Hız oturduktan sonra `hiz_oturunca_kayit_s` (tampon izin verdiği
+        kadar) taze veri dolunca ham kaydı yaz; ölçüm akışını bekletmez."""
+        if self._oto_kayit_baslangici is None or not self.csv_kaydet:
+            return
+        saniye = min(self.p.hiz_oturunca_kayit_s, self.max_pencere_s)
+        if self._taze_ornek(self._oto_kayit_baslangici) < saniye * self.p.ornekleme_sps:
+            return
+        self._oto_kayit_baslangici = None
+        self.ham_kaydet(saniye, "hiz_oturdu")
+
     def _durdurmaya_basla(self) -> None:
         self.conn.send_command(protocol.CMD_SET_MOTOR_SPEED, 0.0)
         self._durdurma_zamani = self.saat()
@@ -654,6 +684,16 @@ class OlcumDongusu:
             except OSError as hata:
                 self.csv_kaydet = False
                 self.gunluk(f"CSV'ye yazılamadı, kayıt kapatıldı: {hata}")
+            # Sürekli ölçüm dışındaki her ölçümün kullandığı ham veri de
+            # yazılır (sürekli ölçüm her pencerede bir: ~1 GB/saat olurdu).
+            # Dosya adındaki numara olcumler.csv'deki satır numarasıdır.
+            if tur != "surekli":
+                etiket = f"olcum{self.kayit.satir_sayisi:03d}_{tur}"
+                ek = {"olcumler_csv_satiri": self.kayit.satir_sayisi}
+                if ilk_yon is not None:
+                    self._ham_yaz(ilk_yon, etiket + "_yon1", **ek)
+                    etiket += "_yon2"
+                self._ham_yaz(veri, etiket, **ek)
         return sonuc
 
     def _tek_istegi_isle(self) -> None:

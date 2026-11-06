@@ -62,8 +62,13 @@ o kadar uzar.</td></tr>
 <tr><td valign="top"><b>Merkezleme'ye yaz</b></td><td>Açıkken merkezleme kilidi silince
 (yeni akımlar oturmuş demektir) yalnızca <i>bundan sonra</i> gelen veriyle ölçülür ve
 dosyaya yazılır. Kapalıyken her ölçüm süresinde bir sürekli ölçüm alınır.</td></tr>
-<tr><td valign="top"><b>CSV'ye kaydet</b></td><td>Her ölçüm,
-<code>{_goreli(p.kayit_dizini)}</code> içinde oturum başına bir dosyaya yazılır.</td></tr>
+<tr><td valign="top"><b>Kaydet</b></td><td>Açıkken kayıtlar kendiliğinden
+<code>{_goreli(p.kayit_dizini)}/&lt;tarih_saat&gt;/</code> klasörüne gider (program
+her açılışta yeni klasör): <code>olcumler.csv</code> (bütün ölçüm sonuçları),
+motor hızı her oturduğunda {p.hiz_oturunca_kayit_s:g} s ham veri
+(<code>ham_*_hiz_oturdu.csv</code>), sürekli ölçüm dışındaki her ölçümün kullandığı
+ham veri (<code>ham_*_olcumNNN_*.csv</code>, NNN = olcumler.csv satırı) ve
+<code>gunluk.txt</code>.</td></tr>
 <tr><td valign="top"><b>Tek ölçüm</b></td><td>Merkezleme'ye yazmadan bir ölçüm alır.</td></tr>
 </table>
 <p>Bobin, hız, ölçüm süresi ya da faz ofseti değişince grafikteki ortalama sıfırlanır.</p>
@@ -88,9 +93,13 @@ Hata çubuğu çubuktan uzunsa o terim gürültünün altındadır.</li>
 integrali), enkoder açısına göre (turlar üst üste); çizgi, uydurulan harmoniklerin
 toplamıdır. Noktalar çizgiye oturmalıdır. Sayısal karşılığı <i>uydurma artığı</i>dır
 (sağlıklı ölçümde ~1e-4..1e-3). İkinci ölçüt <i>okuma saati sıçraması</i>dır: bir ADC örneği
-kaybolursa enkoder okumaları bir örnek kayar (sağlıklı ~0.2, kayıpta ~1). İkisinden biri
-eşiği (<code>olcum.artik_esigi</code>, <code>olcum.sicrama_esigi</code>) aşan ölçüm
-merkezleme'ye yazılmaz; üst üste 3 kez olursa motor durdurulur.</p>
+kaybolursa enkoder okumaları bir örnek kayar (sağlıklı ~0.2, kayıpta ~1). Artık, ya sinyalin
+kendisine göre (<code>olcum.artik_esigi</code>) ya da mutlak olarak
+(<code>olcum.artik_tabani_uVs</code>, nominal kuadrupol sinyalinin %2'si) küçük olmalıdır;
+mutlak taban, akım sıfırken alınan arka plan ölçümlerinin (zayıf alan, büyük bağıl oran)
+reddedilmemesi içindir. Artığı iki ölçütü de, ya da sıçraması
+<code>olcum.sicrama_esigi</code>'ni aşan ölçüm merkezleme'ye yazılmaz; üst üste 3 kez olursa
+motor durdurulur.</p>
 <p><b>Çerçeve kilidi:</b> "Merkezleme'ye yaz" açıkken ve motor dönerken bobin, hız, referans
 ve gecikme değiştirilemez; merkezleme'nin kalibrasyonu bu çerçevede yapılır.</p>
 <p><b>Günlük:</b> olaylar, uyarılar ve her ölçümün özeti.</p>

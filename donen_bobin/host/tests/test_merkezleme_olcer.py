@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import dataclasses
+import time
 import json
 import math
 from pathlib import Path
@@ -20,6 +21,7 @@ SPS = 7200.0
 def p(tmp_path) -> mk.Parametreler:
     return dataclasses.replace(
         mk.parametreleri_yukle(),
+        hiz_hz=23.0,  # testler bu hız için yazıldı; yapılandırmadaki çalışma hızından bağımsız
         kilit_dosyasi=tmp_path / "veri_kilidi" / ".kilit",
         kayit_dizini=tmp_path / "olcumler",
     )
@@ -354,7 +356,7 @@ def test_surekli_olcum_csv_ve_istatistik(kurulum, p):
     for sutun in ("gecikme_ms", "cift_yon", "artik_orani", "saat_sicramasi", "aci_yontemi"):
         assert sutun in satirlar[0]
     assert len(satirlar) == 1 + 5 and {s[1] for s in satirlar[1:]} == {"surekli"}
-    assert dongu.kayit.yol.parent == p.kayit_dizini
+    assert dongu.kayit.yol.name == "olcumler.csv" and dongu.kayit.yol.parent.parent == p.kayit_dizini
 
     dongu.kanal_sec("Düz bobin 2 (AIN4-AIN5)")
     assert dongu.harmonik_istatistigi()[0] == 0  # kanal değişince ortalama sıfırlanır
@@ -510,7 +512,7 @@ def test_makro_yolu(p):
 
     # Artığı yüksek ölçüm yazılmaz (sahte açıda merdiven yok, saat sıçraması
     # ölçülemez; red akışı için eşik sıkılaştırılır)
-    p = dataclasses.replace(p, artik_esigi=5e-3)
+    p = dataclasses.replace(p, artik_esigi=5e-3, artik_tabani_Vs=0.0)  # yalnızca bağıl eşik
     p.kilit_dosyasi.unlink()
     dunya.kayip = 3
     with pytest.raises(RuntimeError, match="yazılmadı"):
@@ -642,7 +644,8 @@ def test_merkezlemeye_yazarken_cerceve_kilitli(kurulum):
 def test_artigi_yuksek_olcum_merkezlemeye_yazilmaz(kurulum, p):
     dunya, dongu, gunluk = kurulum
     dunya.kayip = 30  # örnek kaybı: akı integrali bozulur
-    dongu.p = dataclasses.replace(dongu.p, artik_esigi=5e-3)  # sahte açıda saat sıçraması yok
+    # sahte açıda saat sıçraması yok; mutlak taban kapalı: yalnızca bağıl eşik sınanır
+    dongu.p = dataclasses.replace(dongu.p, artik_esigi=5e-3, artik_tabani_Vs=0.0)
     dongu.baglan()
     dongu.baslat()
     calistir(dunya, dongu, 6.0 + 2.1 * 3)
@@ -699,7 +702,8 @@ def test_ham_veri_kaydedilir(kurulum, p):
     dongu.baslat()
     calistir(dunya, dongu, 3.0)
     yol = dongu.ham_kaydet(0.5)
-    assert yol is not None and yol.parent == p.kayit_dizini and yol.name.startswith("ham_")
+    assert yol is not None and yol.parent.parent == p.kayit_dizini and yol.name.startswith("ham_")
+    assert yol.stem.endswith("_elle")
     basliklar = [s for s in yol.read_text(encoding="utf-8").splitlines() if s.startswith("#")]
     assert any("kanal: " + dongu.kanal in s for s in basliklar)
     assert any(s.startswith("# ozet:") and "ortalama_V=" in s for s in basliklar)
@@ -781,7 +785,7 @@ def test_pencere_duman(kurulum, p, monkeypatch):
     pencere.yardim_penceresi.close()
     x, y = pencere.ham_noktalar.getData()
     assert len(x) > 1000 and len(pencere.ham_uydurma.getData()[0]) == 721
-    assert "satır" in pencere.lbl_kayit.text()
+    assert "ölçüm)" in pencere.lbl_kayit.text()
     pencere.chk_yaz.setChecked(False)
     for _ in range(100):
         dunya.ilerle(0.05)
@@ -824,3 +828,127 @@ def test_pencere_duman(kurulum, p, monkeypatch):
     pencere.close()
     assert not dunya.servo
     uygulama.processEvents()
+
+
+def test_pencere_baglan_ve_baslat_ilk_olcumu_yazar(kurulum, p, monkeypatch):
+    # merkezle başlatıcısının yolu: --basla -> bağlan + başlat; ilk sağlıklı
+    # ölçüm kilide yazılınca başlatıcı merkezleme'yi açar
+    pytest.importorskip("PySide6")
+    monkeypatch.setenv("QT_QPA_PLATFORM", "offscreen")
+    from PySide6.QtWidgets import QApplication
+
+    from mgf.merkezleme_penceresi import MerkezlemePenceresi
+
+    uygulama = QApplication.instance() or QApplication([])
+    dunya, _, _ = kurulum
+    p = dataclasses.replace(p, durma_zaman_asimi_s=0.3)
+    pencere = MerkezlemePenceresi(p, SahteBaglanti(dunya), SahteMotor(dunya))
+    pencere.dongu.saat = lambda: dunya.t
+    pencere.zamanlayici.stop()
+    assert not p.kilit_dosyasi.exists()
+    pencere.baglan_ve_baslat()
+    assert pencere.dongu.donuyor
+    for _ in range(200):
+        dunya.ilerle(0.05)
+        pencere._tick()
+        if p.kilit_dosyasi.exists():
+            break
+    assert p.kilit_dosyasi.exists()
+    pencere.baglan_ve_baslat()  # zaten dönüyorsa bir şey yapmaz
+    assert pencere.dongu.donuyor
+    pencere.dongu.saat = time.monotonic  # kapatırken motor durdurma beklemesi gerçek saatle
+    pencere.close()
+    assert pencere.dongu.durum is Durum.BAGLI_DEGIL
+    uygulama.processEvents()
+
+
+def test_pencere_baglanamazsa_baslatmaz(kurulum, p, monkeypatch):
+    pytest.importorskip("PySide6")
+    monkeypatch.setenv("QT_QPA_PLATFORM", "offscreen")
+    from PySide6.QtWidgets import QApplication
+
+    from mgf.merkezleme_penceresi import MerkezlemePenceresi
+
+    QApplication.instance() or QApplication([])
+    dunya, _, _ = kurulum
+    baglanti = SahteBaglanti(dunya)
+    baglanti.connect = lambda: False
+    pencere = MerkezlemePenceresi(p, baglanti, SahteMotor(dunya))
+    pencere.zamanlayici.stop()
+    pencere.baglan_ve_baslat()
+    assert pencere.dongu.durum is Durum.BAGLI_DEGIL and dunya.hiz == 0.0
+    pencere.close()
+
+
+# ---------------------------------------------------------------------------
+# Oturum klasörü: otomatik kayıtlar
+# ---------------------------------------------------------------------------
+def _ham_oku(yol):
+    satirlar = yol.read_text(encoding="utf-8").splitlines()
+    basliklar = [s for s in satirlar if s.startswith("#")]
+    return basliklar, len(satirlar) - len(basliklar) - 1  # sütun adı satırı hariç
+
+
+def test_kayit_yoksa_oturum_klasoru_olusmaz(kurulum, p):
+    dunya, dongu, _ = kurulum
+    dongu.baglan()
+    calistir(dunya, dongu, 1.0)
+    assert dongu.oturum.dizin is None and not p.kayit_dizini.exists()
+
+
+def test_hiz_oturunca_ham_veri_otomatik_kaydedilir(kurulum, p):
+    dunya, dongu, gunluk = kurulum
+    dongu.otomatik_yaz_ayarla(False)
+    dongu.baglan()
+    dongu.baslat()
+    calistir(dunya, dongu, 6.0)  # hızlanma + oturma bekleyişi; 10 s henüz dolmadı
+    assert any("Hız oturdu" in m for m in gunluk)
+    assert not list(p.kayit_dizini.glob("*/ham_*_hiz_oturdu.csv"))
+    calistir(dunya, dongu, 10.0)
+    dosyalar = list(p.kayit_dizini.glob("*/ham_*_hiz_oturdu.csv"))
+    assert len(dosyalar) == 1  # bir kez; hız oturmuş kaldıkça tekrar yazılmaz
+    basliklar, n = _ham_oku(dosyalar[0])
+    assert n == int(p.hiz_oturunca_kayit_s * SPS)
+    assert "# etiket: hiz_oturdu" in basliklar
+    # Sürekli ölçümlerin ham verisi yazılmaz (yalnızca sonuçları olcumler.csv'de)
+    klasor = dosyalar[0].parent
+    assert {y.name for y in klasor.glob("ham_*")} == {dosyalar[0].name}
+    assert (klasor / "olcumler.csv").exists()
+    # Günlük dosyası oturum başından beri tutulur (klasör sonradan oluşsa da)
+    metin = (klasor / "gunluk.txt").read_text(encoding="utf-8")
+    assert "Bağlandı" in metin and "Hız oturdu" in metin and "Ham veri kaydedildi" in metin
+
+
+def test_merkezleme_olcumunun_ham_verisi_kaydedilir(kurulum, p):
+    dunya, dongu, _ = kurulum
+    p_kayitsiz = dataclasses.replace(p, hiz_oturunca_kayit_s=0.0)
+    dongu.p = p_kayitsiz
+    dongu.baglan()
+    dongu.baslat()
+    for _ in range(400):
+        dunya.ilerle(0.05)
+        dongu.tick()
+        if p.kilit_dosyasi.exists():
+            break
+    assert dongu.olcum_sayisi == 1
+    dosyalar = list(p.kayit_dizini.glob("*/ham_*"))
+    assert [y.name.split("_", 2)[2] for y in dosyalar] == ["olcum001_merkezleme.csv"]
+    basliklar, n = _ham_oku(dosyalar[0])
+    assert n == dongu.gereken_ornek and "# olcumler_csv_satiri: 1" in basliklar
+
+
+def test_zayif_alanda_mutlak_artik_kucukse_olcum_kabul_edilir(p):
+    """Akım sıfırken (arka plan) yalnızca ortam alanı var: bağıl artık büyür,
+    mutlak artık küçük kalır. 6 Kasım ölçümü: ~170 µT, oran ~0.1, ~0.1 µV·s."""
+    t = np.arange(int(2.0 * SPS)) / SPS
+    teta = 2 * math.pi * 8.0 * t
+    rng = np.random.default_rng(1)
+    c1 = complex(-1.4e-4, 1.0e-4)  # ~170 µT ortam dipolü, kuadrupol yok
+    v = bobin_gerilimi(teta, 8.0, c1, 0j, p.bobin, p.r_ref_m) + rng.normal(0, 3e-5, len(t))
+    s = mk.olcum_hesapla(np.degrees(teta) % 360, v, SPS, p.bobin, p.r_ref_m, 0.0)
+    assert s.artik_orani > p.artik_esigi  # bağıl ölçüt tek başına reddederdi
+    assert s.artik_rms_Vs < p.artik_tabani_Vs
+    assert mk.saglik_sorunlari(s, p) == []
+    assert mk.saglik_sorunlari(s, dataclasses.replace(p, artik_tabani_Vs=0.0))  # taban yoksa reddedilir
+    # Mutlak artık da büyükse (ör. ölçüm sırasında değişen alan) reddedilir
+    assert mk.saglik_sorunlari(s, dataclasses.replace(p, artik_tabani_Vs=0.5 * s.artik_rms_Vs))

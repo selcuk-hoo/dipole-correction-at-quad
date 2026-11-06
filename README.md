@@ -16,6 +16,34 @@ mıknatıs ayrıca ayrı bir modülatör kartıyla 1 kHz'de %1 derinlikle modül
 (program bu ikisini kontrol etmez, yalnızca durumu kaydeder ve gerektiğinde
 kullanıcıdan değiştirmesini ister).
 
+## Çalıştırma: tek komut
+
+```bash
+./merkezle            # gerçek donanım; her adımı pencereden onaylarsınız
+./merkezle otomatik   # gerçek donanım; onay beklemeden baştan sona
+./merkezle kuru       # dönen bobin gerçek, güç kaynaklarına komut gitmez
+./merkezle deneme     # donanım yok, simülatör
+./merkezle eslestir   # güç kaynaklarını bobinlerle eşleştir (bir kez)
+```
+
+İlk kullanımda (ya da güç kaynakları değişince) `./merkezle eslestir`: her güç
+kaynağının ön panelinden beslediği bobinin numarası kadar akım ayarlayın (bobin 1 →
+1 A, ... bobin 4 → 4 A; çıkışı açmak gerekmez). Pencere ayarları okur, eşleşme
+tutarlıysa adresleri `yapilandirma.yaml`'a yazar. Pencere cihazlara komut göndermez.
+
+`merkezle` önce dönen bobin penceresini açar, Pico'ya bağlanır ve motoru
+başlatır (8 Hz). Dönen bobin ilk sağlıklı ölçümü yazınca merkezleme açılır;
+bobin ölçemezse (Pico bağlı değil, ölçüm reddediliyor) merkezleme hiç açılmaz,
+akımlara dokunulmaz. Merkezleme kapanınca dönen bobin motoru durdurup kapanır.
+
+Kaydetmek için bir şey yapmanız gerekmez: her çalıştırma `kayitlar/<tarih_saat>/`
+klasörüne gider. Klasörde bütün ölçüm sonuçları (`olcumler.csv`), motor hızı her
+oturduğunda 10 s ham veri, merkezleme'ye giden her ölçümün ham verisi, pencere
+günlüğü ve merkezleme'nin kendi çıktısına bir bağlantı (`merkezleme`) bulunur.
+Gereksiz klasörleri silmeniz yeterli. Ayrıntılar: `donen_bobin/README_SURUM.md`.
+Aşağıdaki `python -m merkezleme ...` bayrakları bu betiğin altında kalan
+ayrıntıdır.
+
 ## İçindekiler
 
 - [1. Konvansiyonlar](#1-konvansiyonlar) ← **tüm işaret/birim/numaralandırma tanımları burada**

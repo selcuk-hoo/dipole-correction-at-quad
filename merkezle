@@ -1,0 +1,88 @@
+#!/usr/bin/env bash
+# Tek komutla merkezleme: dönen bobin alanı ölçer, merkezleme kuadrupol
+# bobinlerinin akımlarını düzeltir. İki programı doğru sırayla açar:
+#
+#   ./merkezle            GERÇEK DONANIM; her adımı merkezleme penceresinden onaylarsınız
+#   ./merkezle otomatik   GERÇEK DONANIM; onay beklemeden baştan sona yürür (pencere yok)
+#   ./merkezle kuru       dönen bobin gerçek, güç kaynaklarına komut GİTMEZ (yalnızca günlük)
+#   ./merkezle deneme     donanım yok; alanlar simülatörden
+#   ./merkezle eslestir   güç kaynaklarını bobinlerle eşleştir (USB takıldıktan sonra bir kez)
+#
+# Sıra: önce dönen bobin penceresi açılır, Pico'ya bağlanır, motoru başlatır.
+# İlk sağlıklı ölçümü yazınca (= zincir çalışıyor) merkezleme açılır. Merkezleme
+# kapanınca dönen bobin de motoru durdurup kapanır.
+#
+# Kayıtlar kendiliğinden kayitlar/<tarih_saat>/ altına gider (ham veri, ölçümler,
+# günlük); merkezleme'nin çıktı klasörü de oraya "merkezleme" adıyla bağlanır.
+set -euo pipefail
+
+KOK=$(cd "$(dirname "$(readlink -f "$0")")" && pwd)
+cd "$KOK"
+KILIT=veri_kilidi/.kilit   # yapilandirma.yaml ve donen_bobin/merkezleme_olcer.yaml ile aynı
+HAZIRLIK_S=120             # bağlantı + motorun hızlanması + ilk ölçüm için en fazla bekleme
+
+PY=python3
+[[ -x "$HOME/venvs/merkezleme/bin/python" ]] && PY="$HOME/venvs/merkezleme/bin/python"
+
+kip=${1:-}
+case "$kip" in
+    "")       bayraklar=(--dosyadan --canli) ;;
+    otomatik) bayraklar=(--otomatik --dosyadan --canli) ;;
+    kuru)     bayraklar=(--dosyadan) ;;
+    deneme)   exec "$PY" -m merkezleme --deneme ;;
+    eslestir) exec "$PY" -m merkezleme --eslestir ;;
+    -h|--help|yardim) sed -n '2,13p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    *) echo "Bilinmeyen kip: $kip  (seçenekler: otomatik, kuru, deneme, eslestir)" >&2; exit 2 ;;
+esac
+
+# Gerçek donanım: güç kaynağı adresleri bu bilgisayarda var mı (dönen bobini boşuna başlatma)
+if [[ " ${bayraklar[*]} " == *" --canli "* ]]; then
+    "$PY" -c 'import sys; from merkezleme.eslestirme import adresleri_denetle; sys.exit(adresleri_denetle("yapilandirma.yaml"))' || exit 1
+fi
+
+if pgrep -f '^[^ ]*python[^ ]* merkezleme_olcer\.py' >/dev/null; then
+    echo "HATA: dönen bobin programı zaten açık. Önce onu kapatın." >&2
+    exit 1
+fi
+
+mkdir -p "$(dirname "$KILIT")" kayitlar calistirmalar
+BASLANGIC=$(mktemp)   # bu çalıştırmada oluşan klasörleri bulmak için zaman işareti
+rm -f "$KILIT"   # eski oturumdan kalan veri yeni ölçüm sanılmasın
+
+(cd donen_bobin/host && exec "$PY" merkezleme_olcer.py --basla) &
+BOBIN=$!
+trap 'kill -TERM $BOBIN 2>/dev/null || true; wait $BOBIN 2>/dev/null || true; rm -f "$BASLANGIC"' EXIT
+
+echo "Dönen bobin açılıyor: Pico'ya bağlanılıyor, motor hızlanıyor..."
+for ((i = 0; i < HAZIRLIK_S * 5; i++)); do
+    [[ -f "$KILIT" ]] && break
+    if ! kill -0 $BOBIN 2>/dev/null; then
+        echo "Dönen bobin penceresi kapandı; merkezleme açılmadı." >&2
+        trap - EXIT
+        exit 1
+    fi
+    sleep 0.2
+done
+if [[ ! -f "$KILIT" ]]; then
+    echo >&2
+    echo "HATA: dönen bobin ${HAZIRLIK_S} s içinde sağlıklı bir ölçüm yazamadı." >&2
+    echo "      Pencerenin Günlük'üne bakın: Pico'ya bağlanabildi mi, motor döndü mü," >&2
+    echo "      ölçüm 'artık' eşiği yüzünden mi reddediliyor (mıknatıs takılı mı)?" >&2
+    echo "      Merkezleme açılmadı, akımlara dokunulmadı. Pencereyi kapatınca çıkılır." >&2
+    trap - EXIT
+    wait $BOBIN || true
+    exit 1
+fi
+
+echo "Dönen bobin ölçüyor. Merkezleme açılıyor (${bayraklar[*]})."
+"$PY" -m merkezleme "${bayraklar[@]}" || echo "Merkezleme hatayla bitti (çıkış $?)." >&2
+
+# Merkezleme'nin çıktı klasörünü dönen bobin oturum klasörüne bağla
+en_yeni() { find "$1" -mindepth 1 -maxdepth 1 -type d -newer "$BASLANGIC" -printf '%T@ %p\n' | sort -n | tail -1 | cut -d' ' -f2-; }
+OTURUM=$(en_yeni kayitlar)
+CALISTIRMA=$(en_yeni calistirmalar)
+if [[ -n "$OTURUM" && -n "$CALISTIRMA" && ! -e "$OTURUM/merkezleme" ]]; then
+    ln -s "../../$CALISTIRMA" "$OTURUM/merkezleme"
+fi
+[[ -n "$OTURUM" ]] && echo "Kayıtlar: $OTURUM"
+echo "Dönen bobin kapatılıyor (motor durduruluyor)..."

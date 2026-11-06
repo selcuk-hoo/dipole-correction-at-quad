@@ -122,10 +122,12 @@ class Parametreler:
     faz_ofseti_derece: float
     gecikme_s: float
     artik_esigi: float
+    artik_tabani_Vs: float
     sicrama_esigi: float
     r_ref_m: float
     kilit_dosyasi: Path
     kayit_dizini: Path
+    hiz_oturunca_kayit_s: float  # 0: kapalı
     merkezleme_yapilandirmasi: Path
     tema: str
     kaynak: Path
@@ -172,10 +174,12 @@ def parametreleri_yukle(yol: Path | str | None = None) -> Parametreler:
             faz_ofseti_derece=float(o["faz_ofseti_derece"]),
             gecikme_s=float(o.get("gecikme_ms", 0.0)) * 1e-3,
             artik_esigi=float(o.get("artik_esigi", 2e-2)),
+            artik_tabani_Vs=float(o.get("artik_tabani_uVs", 0.27)) * 1e-6,
             sicrama_esigi=float(o.get("sicrama_esigi", 0.6)),
             r_ref_m=float(o["r_ref_mm"]) * 1e-3,
             kilit_dosyasi=_repo_yolu(o["kilit_dosyasi"]),
             kayit_dizini=_repo_yolu(o["kayit_dizini"]),
+            hiz_oturunca_kayit_s=float(o.get("hiz_oturunca_kayit_s", 10.0)),
             merkezleme_yapilandirmasi=_repo_yolu(o["merkezleme_yapilandirmasi"]),
             tema=str(v.get("arayuz", {}).get("tema", "acik")),
             kaynak=yol,
@@ -197,6 +201,8 @@ def parametreleri_yukle(yol: Path | str | None = None) -> Parametreler:
         raise ParametreHatasi("motor.hiz_hz 0'dan büyük ve max_hiz_hz'den küçük olmalı")
     if not 0 < p.artik_esigi < 1:
         raise ParametreHatasi("olcum.artik_esigi 0 ile 1 arasında olmalı")
+    if not p.artik_tabani_Vs >= 0:
+        raise ParametreHatasi("olcum.artik_tabani_uVs negatif olamaz")
     if abs(p.gecikme_s) > 0.05:
         raise ParametreHatasi("olcum.gecikme_ms mutlak değerce 50 ms'den küçük olmalı")
     if p.tema not in ("acik", "koyu"):
@@ -517,6 +523,7 @@ def cift_yon_birlestir(ileri: OlcumSonucu, geri: OlcumSonucu) -> OlcumSonucu:
         tur_sayisi=ileri.tur_sayisi + geri.tur_sayisi,
         tepe_V=max(ileri.tepe_V, geri.tepe_V),
         artik_orani=max(ileri.artik_orani, geri.artik_orani),
+        artik_rms_Vs=max(ileri.artik_rms_Vs, geri.artik_rms_Vs),
         saat_sicramasi=float(np.fmax(ileri.saat_sicramasi, geri.saat_sicramasi)),
         gecikme_s=psi / (2 * math.pi * abs(ileri.hiz_hz)),
         gecikme_belirsizligi_s=sigma_psi / (2 * math.pi * abs(ileri.hiz_hz)),
@@ -555,10 +562,15 @@ def cift_yon_hesapla(
 def saglik_sorunlari(sonuc: OlcumSonucu, p: "Parametreler") -> list[str]:
     """Ölçümü merkezleme'ye yazmayı engelleyen sorunlar (boşsa sağlıklı)."""
     sorunlar = []
-    if not sonuc.artik_orani <= p.artik_esigi:
+    # Artık ya sinyalin kendisine göre (bağıl) ya da nominal kuadrupol
+    # sinyaline göre (mutlak taban) küçük olmalı. Yalnızca bağıl eşik olsaydı
+    # akım sıfırken (arka plan: yalnızca ~170 µT ortam alanı) ölçümler hep
+    # reddedilirdi; oysa oradaki mutlak artık nominal sinyalin %1'inden küçük.
+    if not (sonuc.artik_orani <= p.artik_esigi or sonuc.artik_rms_Vs <= p.artik_tabani_Vs):
         sorunlar.append(
-            f"uydurma artığı {sonuc.artik_orani:.1e} > eşik {p.artik_esigi:.1e} "
-            "(açı, kanal, doyma ya da örnek kaybı?)"
+            f"uydurma artığı {sonuc.artik_orani:.1e} > eşik {p.artik_esigi:.1e} ve "
+            f"{sonuc.artik_rms_Vs * 1e6:.2f} µV·s > taban {p.artik_tabani_Vs * 1e6:.2f} µV·s "
+            "(açı, kanal, doyma, örnek kaybı ya da ölçüm sırasında değişen alan?)"
         )
     if sonuc.saat_sicramasi > p.sicrama_esigi:  # nan: ölçülemedi, engellemez
         sorunlar.append(
@@ -615,20 +627,69 @@ def kilide_yaz(sonuc: OlcumSonucu, kilit_yolu: Path) -> None:
     gecici.replace(kilit_yolu)
 
 
-class OlcumKaydi:
-    """Oturum başına bir CSV; dosya ilk satırda oluşturulur. Her satır bir
-    ölçüm: koşullar ve C_1..C_N'nin normal/skew bileşenleri (Tesla)."""
+class OturumKlasoru:
+    """Bir program oturumunun bütün kayıtları tek klasörde: `kok/<tarih_saat>/`
+    içinde olcumler.csv, ham_*.csv ve gunluk.txt.
 
-    def __init__(self, dizin: Path) -> None:
-        self.dizin = Path(dizin)
+    Klasör ilk kayıtta oluşur; hiç veri kaydedilmeyen bir açılış boş klasör
+    bırakmaz. O ana kadarki günlük satırları bekletilir ve klasör oluşunca
+    gunluk.txt'nin başına yazılır."""
+
+    BEKLEYEN_SINIRI = 2000
+
+    def __init__(self, kok: Path) -> None:
+        self.kok = Path(kok)
+        self.dizin: Path | None = None
+        self._bekleyen: list[str] = []
+
+    def klasor(self) -> Path:
+        if self.dizin is None:
+            ad = f"{datetime.now():%Y-%m-%d_%H%M%S}"
+            dizin, i = self.kok / ad, 2
+            while dizin.exists():
+                dizin, i = self.kok / f"{ad}_{i}", i + 1
+            dizin.mkdir(parents=True)
+            self.dizin = dizin
+            if self._bekleyen:
+                with open(dizin / "gunluk.txt", "a", encoding="utf-8") as f:
+                    f.writelines(self._bekleyen)
+                self._bekleyen.clear()
+        return self.dizin
+
+    def gunluge_yaz(self, mesaj: str) -> None:
+        satir = f"{datetime.now():%Y-%m-%d %H:%M:%S}  {mesaj}\n"
+        if self.dizin is None:
+            self._bekleyen.append(satir)
+            del self._bekleyen[: -self.BEKLEYEN_SINIRI]
+            return
+        try:
+            with open(self.dizin / "gunluk.txt", "a", encoding="utf-8") as f:
+                f.write(satir)
+        except OSError:
+            pass  # günlük yazılamaması ölçümü durdurmamalı
+
+    def ham_yolu(self, etiket: str) -> Path:
+        """ham_<saat>_<etiket>.csv; aynı saniyede ikincisi _2, _3 ... alır."""
+        taban = f"ham_{datetime.now():%H%M%S}_{etiket}"
+        yol, i = self.klasor() / f"{taban}.csv", 2
+        while yol.exists():
+            yol, i = self.klasor() / f"{taban}_{i}.csv", i + 1
+        return yol
+
+
+class OlcumKaydi:
+    """Oturum klasöründe olcumler.csv; dosya ilk satırda oluşturulur. Her
+    satır bir ölçüm: koşullar ve C_1..C_N'nin normal/skew bileşenleri (Tesla)."""
+
+    def __init__(self, oturum: OturumKlasoru) -> None:
+        self.oturum = oturum
         self.yol: Path | None = None
         self.satir_sayisi = 0
 
     def ekle(self, sonuc: OlcumSonucu, tur: str, kanal: str, faz_ofseti_derece: float) -> None:
         yeni = self.yol is None
         if yeni:
-            self.dizin.mkdir(parents=True, exist_ok=True)
-            self.yol = self.dizin / f"olcum_{datetime.now():%Y-%m-%d_%H%M%S}.csv"
+            self.yol = self.oturum.klasor() / "olcumler.csv"
         with open(self.yol, "a", newline="", encoding="utf-8") as f:
             yazici = csv.writer(f)
             if yeni:
@@ -649,15 +710,14 @@ class OlcumKaydi:
 
 
 def ham_veriyi_kaydet(
-    dizin: Path, aci_derece: np.ndarray, gerilim_V: np.ndarray, ornekleme_sps: float,
+    yol: Path, aci_derece: np.ndarray, gerilim_V: np.ndarray, ornekleme_sps: float,
     bilgi: dict[str, object],
 ) -> Path:
-    """Ham örnekleri (zaman, enkoder açısı, gerilim) ayrı bir CSV'ye yazar.
+    """Ham örnekleri (zaman, enkoder açısı, gerilim) `yol`daki CSV'ye yazar.
     Başta `#` ile başlayan satırlarda koşullar (`bilgi`) ve özet bulunur;
     `numpy.loadtxt(yol, delimiter=",", skiprows=...)` ya da `comments="#"` ile okunur."""
-    dizin = Path(dizin)
-    dizin.mkdir(parents=True, exist_ok=True)
-    yol = dizin / f"ham_{datetime.now():%Y-%m-%d_%H%M%S}.csv"
+    yol = Path(yol)
+    yol.parent.mkdir(parents=True, exist_ok=True)
     v = np.asarray(gerilim_V, dtype=np.float64)
     o = ham_ozet(v, ornekleme_sps)
     t = (np.arange(len(v)) - (len(v) - 1)) / ornekleme_sps

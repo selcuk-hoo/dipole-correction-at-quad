@@ -195,10 +195,14 @@ class MerkezlemePenceresi(QMainWindow):
             "Kapalıyken merkezleme'ye yazılmaz; her ölçüm süresinde bir sürekli ölçüm alınır.\n"
             "Açıkken ve motor dönerken bobin, hız, referans ve gecikme değiştirilemez."
         )
-        self.chk_csv = QCheckBox("CSV'ye kaydet")
+        self.chk_csv = QCheckBox("Kaydet")
         self.chk_csv.setChecked(True)
         self.chk_csv.toggled.connect(lambda acik: setattr(self.dongu, "csv_kaydet", acik))
-        self.chk_csv.setToolTip(f"Her oturum ayrı dosya: {self.p.kayit_dizini}")
+        self.chk_csv.setToolTip(
+            f"Açıkken her şey kendiliğinden kaydedilir: {self.p.kayit_dizini}/<tarih_saat>/\n"
+            "olcumler.csv (bütün ölçümler), ham_*_hiz_oturdu.csv (hız her oturduğunda),\n"
+            "ham_*_olcumNNN_*.csv (sürekli ölçüm dışındaki her ölçümün ham verisi), gunluk.txt"
+        )
 
         # Düğmeler
         satir = QHBoxLayout()
@@ -375,7 +379,7 @@ class MerkezlemePenceresi(QMainWindow):
         self.btn_ham_kaydet = QPushButton("Kaydet")
         self.btn_ham_kaydet.setToolTip(
             f"Gösterilen süredeki ham örnekleri (zaman, açı, gerilim) koşullarıyla birlikte\n"
-            f"{self.p.kayit_dizini}/ham_<tarih>.csv dosyasına yazar."
+            f"oturum klasörüne ({self.p.kayit_dizini}/<tarih_saat>/ham_<saat>_elle.csv) yazar."
         )
         self.btn_ham_kaydet.clicked.connect(self._ham_kaydet)
         ust.addWidget(self.btn_ham_kaydet)
@@ -647,6 +651,14 @@ class MerkezlemePenceresi(QMainWindow):
         self.dongu.hiz_ayarla(self.hiz.value())
         self.dongu.baslat()
 
+    def baglan_ve_baslat(self) -> None:
+        """Bağlan + Başlat (merkezle başlatıcısı açılışta çağırır)."""
+        if self.dongu.durum is Durum.BAGLI_DEGIL:
+            self._baglan_kes()
+        if self.dongu.durum is Durum.HAZIR:
+            self._baslat()
+        self._yenile()
+
     def _otomatik_yaz(self, acik: bool) -> None:
         if not self.dongu.otomatik_yaz_ayarla(acik):
             self.chk_yaz.blockSignals(True)
@@ -725,7 +737,7 @@ class MerkezlemePenceresi(QMainWindow):
         )
         self.lbl_gecikme.setText(f"{d.gecikme_s * 1e3:.4f} ms ({d.gecikme_kaynagi})")
         if d.kayit.yol is not None:
-            self.lbl_kayit.setText(f"{d.kayit.yol.name} ({d.kayit.satir_sayisi} satır)")
+            self.lbl_kayit.setText(f"{d.kayit.yol.parent.name}/ ({d.kayit.satir_sayisi} ölçüm)")
         else:
             self.lbl_kayit.setText("henüz yok" if d.csv_kaydet else "kapalı")
         self._gerilimi_ciz()

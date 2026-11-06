@@ -161,3 +161,27 @@ def test_baslatilmadan_rampa_reddedilir(kaynak_grubu_uret):
     grup = kaynak_grubu_uret()
     with pytest.raises(GucKaynagiHatasi, match="başlatılmadı"):
         grup.rampala(np.full(4, 1.0))
+
+
+def test_baglanirken_akim_varsa_tek_adimda_sifirlanmaz(kaynak_grubu_uret, kfg):
+    """Ön panelden çıkış açık bırakılmışsa (ör. eşleştirme için 1..4 A) bağlanma
+    akımı CURR 0 ile tek adımda kesmemeli; ölçülen akımdan rampa ile inmeli."""
+    g = kaynak_grubu_uret()
+    for i, kaynak in enumerate(g.kaynaklar, start=1):
+        kaynak.cikis_acik, kaynak.ayar_akimi_A = True, float(i)
+    g.baslat()
+    for i, kaynak in enumerate(g.kaynaklar, start=1):
+        curr = [k.komut for k in g.gunluk.kayitlar if k.adres == kaynak.adres and k.komut.startswith("CURR")]
+        degerler = [float(k.split()[1]) for k in curr]
+        assert degerler[0] == pytest.approx(i, abs=0.01)  # başlatma: ölçülen akımda tut
+        assert degerler[-1] == 0.0
+        adim = kfg.guc_kaynaklari.rampa_hizi_A_s * kfg.guc_kaynaklari.rampa_adim_suresi_s
+        assert max(abs(np.diff(degerler))) <= adim + 1e-9  # hiçbir adım rampadan büyük değil
+    assert np.all(g.ayar_akimlari_A == 0.0)
+
+
+def test_baglanirken_akim_yoksa_dogrudan_sifir(kaynak_grubu_uret):
+    g = kaynak_grubu_uret()
+    g.baslat()
+    curr = [k.komut for k in g.gunluk.kayitlar if k.komut.startswith("CURR")]
+    assert curr == ["CURR 0"] * 4

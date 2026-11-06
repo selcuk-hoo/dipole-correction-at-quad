@@ -13,6 +13,7 @@
     python -m merkezleme --devam               yarım kalmış son çalıştırmadan devam
     python -m merkezleme --kalibrasyon D.json  kayıtlı kalibrasyonu yükle, faz 1'i atla
     python -m merkezleme --otomatik            arayüzsüz: simülatörle baştan sona koşar
+    python -m merkezleme --eslestir            güç kaynağı - bobin eşleştirme penceresi
 
 Varsayılan kip KURU ÇALIŞMADIR: SCPI komutları kaydedilir ama cihaza
 gönderilmez. Gerçek donanım için `--canli` zorunludur.
@@ -80,6 +81,12 @@ def arguman_ayristirici() -> argparse.ArgumentParser:
         "yazdığı paylaşımlı dosyadan otomatik alınır (bkz. yapılandırmadaki "
         "dosya_girisi bölümü). --otomatik ile birlikte tam otomatik, tek "
         "başına yarı otomatik (onay yine kullanıcıdadır) çalışır.",
+    )
+    ayristirici.add_argument(
+        "--eslestir",
+        action="store_true",
+        help="Güç kaynağı - bobin eşleştirme penceresi: her kaynağa bobin numarası "
+        "kadar akım ayarlanır, adresler yapılandırmaya yazılır",
     )
     return ayristirici
 
@@ -241,6 +248,10 @@ def calistir(argumanlar: argparse.Namespace) -> int:
 
 def main(argv: list[str] | None = None) -> int:
     argumanlar = arguman_ayristirici().parse_args(argv)
+    if argumanlar.eslestir:
+        from .eslestirme import calistir as eslestirmeyi_calistir
+
+        return eslestirmeyi_calistir(argumanlar.yapilandirma)
     return calistir(argumanlar)
 
 

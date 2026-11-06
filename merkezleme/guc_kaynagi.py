@@ -92,7 +92,7 @@ class GucKaynagiArayuzu(Protocol):
 
     adres: str
 
-    def baslat(self, uyum_gerilimi_V: float) -> str: ...
+    def baslat(self, uyum_gerilimi_V: float, akim_A: float = 0.0) -> str: ...
     def akim_yaz(self, akim_A: float) -> None: ...
     def olcumleri_oku(self) -> tuple[float, float]: ...
     def cikis_ac(self) -> None: ...
@@ -152,7 +152,6 @@ class GucKaynagi(_TemelKaynak):
             ) from hata
         self._rm = pyvisa.ResourceManager("@py")
         self._cihaz = self._rm.open_resource(adres)
-        self._yaz("*CLS")
 
     # ------------------------------------------------------------------
     # Alt seviye
@@ -181,13 +180,17 @@ class GucKaynagi(_TemelKaynak):
     # ------------------------------------------------------------------
     # Üst seviye
     # ------------------------------------------------------------------
-    def baslat(self, uyum_gerilimi_V: float) -> str:
-        """Uzaktan kumandaya al, uyum gerilimini yaz, akımı sıfırla."""
+    def baslat(self, uyum_gerilimi_V: float, akim_A: float = 0.0) -> str:
+        """Uzaktan kumandaya al, uyum gerilimini yaz, akım ayarını `akim_A`'ya
+        getir (çıkış zaten akım veriyorsa o akım: tek adımda sıfırlanmasın)."""
         kimlik = self._sorgula("*IDN?").strip()
-        self._yaz("SYST:REM", hata_kontrolu=True)
+        # IT-M3233 *CLS'yi yerel kumandada reddeder (-200 Execution error) ve
+        # o hata kuyrukta kalırdı; önce uzaktan kumandaya geç, sonra temizle.
+        self._yaz("SYST:REM")
+        self._yaz("*CLS", hata_kontrolu=True)
         # Sabit akım kipinde VOLT uyum sınırıdır ve akımdan ÖNCE yazılır.
         self._yaz(f"VOLT {uyum_gerilimi_V}", hata_kontrolu=True)
-        self._yaz("CURR 0", hata_kontrolu=True)
+        self._yaz(f"CURR {akim_A:.4f}" if akim_A else "CURR 0", hata_kontrolu=True)
         return kimlik
 
     def akim_yaz(self, akim_A: float) -> None:
@@ -239,10 +242,11 @@ class SahteGucKaynagi(_TemelKaynak):
         self.olcum_hatasi_A = olcum_hatasi_A
         self.rng = rng if rng is not None else np.random.default_rng(0)
 
-    def baslat(self, uyum_gerilimi_V: float) -> str:
-        for komut in ("*IDN?", "SYST:REM", f"VOLT {uyum_gerilimi_V}", "CURR 0"):
+    def baslat(self, uyum_gerilimi_V: float, akim_A: float = 0.0) -> str:
+        curr = f"CURR {akim_A:.4f}" if akim_A else "CURR 0"
+        for komut in ("*IDN?", "SYST:REM", "*CLS", f"VOLT {uyum_gerilimi_V}", curr):
             self._kaydet(komut, gonderildi=False)
-        self.ayar_akimi_A = 0.0
+        self.ayar_akimi_A = float(akim_A)
         return f"SAHTE,IT-M3233,{self.adres},kuru"
 
     def akim_yaz(self, akim_A: float) -> None:
@@ -321,14 +325,25 @@ class KaynakGrubu:
 
     # ------------------------------------------------------------------
     def baslat(self) -> list[str]:
-        """Dört kaynağı uzaktan kumandaya alır, uyum gerilimini yazar, çıkışı açar."""
+        """Dört kaynağı uzaktan kumandaya alır, uyum gerilimini yazar, çıkışı açar.
+
+        Bir kaynak bağlanırken zaten akım veriyorsa (ör. ön panelden çıkış
+        açık bırakılmış), akım ayarı tek adımda sıfıra YAZILMAZ: ölçülen akımda
+        tutulur ve buradan rampa ile sıfıra inilir."""
         self.kimlikler = []
-        for kaynak in self.kaynaklar:
-            self.kimlikler.append(kaynak.baslat(self.ayar.uyum_gerilimi_V))
+        mevcut = np.zeros(BOBIN_SAYISI, dtype=float)
+        for i, kaynak in enumerate(self.kaynaklar):
+            _, akim = kaynak.olcumleri_oku()
+            if akim > self.ayar.akim_tolerans_A:
+                mevcut[i] = min(akim, self.guvenlik.bobin_basi_max_akim_A)
+        for i, kaynak in enumerate(self.kaynaklar):
+            self.kimlikler.append(kaynak.baslat(self.ayar.uyum_gerilimi_V, float(mevcut[i])))
         for kaynak in self.kaynaklar:
             kaynak.cikis_ac()
-        self.ayar_akimlari_A = np.zeros(BOBIN_SAYISI, dtype=float)
+        self.ayar_akimlari_A = mevcut.copy()
         self.baslatildi = True
+        if np.any(mevcut > 0):
+            self.sifira_rampala()
         return self.kimlikler
 
     def olcumleri_oku(self) -> tuple[np.ndarray, np.ndarray]:

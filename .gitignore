@@ -9,8 +9,9 @@ calistirmalar/
 # Gelistirme sirasinda uretilen arayuz ekran goruntuleri
 ekran_goruntuleri/
 
-# Donen bobin olcum penceresinin CSV kayitlari
+# Donen bobin olcum penceresinin kayitlari (eski yer: donen_bobin/olcumler/)
 donen_bobin/olcumler/
+kayitlar/
 
 # Firmware derleme klasorleri (VS Code: build/, pico_yukle.sh: build_pico_yukle/)
 donen_bobin/build/

@@ -34,7 +34,7 @@ adc:
   doyma_uyari_orani: 0.8       # sinyal tepesi tam ölçeğin bu oranını aşarsa uyar
 
 motor:
-  hiz_hz: 23.0
+  hiz_hz: 8.0                  # enkoder 8 Hz'de temiz, ~15 Hz üstünde bozuluyor (rapor 2026-11-04)
   max_hiz_hz: 23.0             # pencereden bunun üstü girilemez
   hiz_toleransi_hz: 0.3        # ölçülen hız hedefe bu kadar yakınsa "oturdu"
   oturma_suresi_s: 3.0         # hız oturduktan sonra ek bekleme
@@ -53,13 +53,23 @@ olcum:
   # ölçüm merkezleme'ye yazılmaz: yanlış kanal, doyma, açı bozukluğu. (Tek örnek
   # kaybını ~1e-2 ile sınırda bırakır; onu sicrama_esigi doğrudan yakalar.)
   artik_esigi: 2.0e-2
+  # ...ya da mutlak artık bu tabanın altında olmalı (µV·s, akı rms). Akım sıfırken
+  # (merkezleme'nin arka plan ölçümü) alan zayıftır ve bağıl oran büyür (~0.1);
+  # mutlak artık ise ~0.1 µV·s'dir. 0.27 µV·s = nominal kuadrupol akısının
+  # (G = 0.095 T/m, r_ref = 25 mm: 2.4 mT, 13.4 µV·s rms) %2'si. 0: taban yok.
+  artik_tabani_uVs: 0.27
   # Enkoder okumaları stator saatine bağlı düzenli aralıklarla gelir; bir ADC
   # örneği kaybolursa sonraki okumalar bir örnek kayar. Bu kaymanın (örnek
   # cinsinden) eşiği: sağlıklı veride ~0.2, tek kayıpta ~1.
   sicrama_esigi: 0.6
   r_ref_mm: 25.0               # merkezleme yapilandirma.yaml -> harmonikler.r_ref_mm ile AYNI olmalı
   kilit_dosyasi: veri_kilidi/.kilit
-  kayit_dizini: donen_bobin/olcumler   # her oturum ayrı CSV
+  # Her program oturumu kayitlar/<tarih_saat>/ altında ayrı klasör: olcumler.csv
+  # (bütün ölçüm sonuçları), ham_*.csv (ham gerilim + açı) ve gunluk.txt.
+  kayit_dizini: kayitlar
+  # Motor hızı her oturduğunda bu kadar saniyelik ham veri otomatik kaydedilir
+  # (ham_<saat>_hiz_oturdu.csv, 7200 sps'te ~2.7 MB / 10 s). 0: kapalı.
+  hiz_oturunca_kayit_s: 10.0
   merkezleme_yapilandirmasi: yapilandirma.yaml   # açılışta r_ref/birim tutarlılık kontrolü
 
 arayuz:

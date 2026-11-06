@@ -105,3 +105,12 @@ def test_pencere_eslesince_kaydeder(qt_uygulama, tmp_path):
     beklenen = [okumalar[i].adres for i in (1, 0, 3, 2)]
     assert yapilandirma_yukle(yol).guc_kaynaklari.visa_adresleri == beklenen
     pencere.close()
+
+
+def test_gercek_kip_yapilandirmaya_yansir(kfg):
+    """--canli ile çalışırken arayüz/özet 'kuru' göstermemeli (6 Kasım: göstermişti)."""
+    from merkezleme.ana import kipi_uygula
+
+    assert kfg.genel.kip == "kuru"  # depodaki varsayılan
+    assert kipi_uygula(kfg, canli=True).genel.kip == "canli"
+    assert kipi_uygula(kfg, canli=False).genel.kip == "kuru"

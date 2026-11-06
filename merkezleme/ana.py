@@ -101,6 +101,15 @@ def _kaynak_grubu_kur(
     )
 
 
+def kipi_uygula(kfg: Yapilandirma, canli: bool) -> Yapilandirma:
+    """Çalıştırmanın GERÇEK kipini (--canli bayrağı) yapılandırmaya yazar.
+
+    Donanımı yalnızca bayrak sürer; ama arayüzdeki kip etiketi, özet ve durum
+    dosyası `genel.kip`'i okur. Bu yapılmazsa --canli ile gerçek donanım
+    sürülürken bile (yapılandırmadaki varsayılan) "kuru" görünürdü."""
+    return dataclasses.replace(kfg, genel=dataclasses.replace(kfg.genel, kip="canli" if canli else "kuru"))
+
+
 def calistir(argumanlar: argparse.Namespace) -> int:
     kfg = yapilandirma_yukle(argumanlar.yapilandirma)
 
@@ -112,6 +121,7 @@ def calistir(argumanlar: argparse.Namespace) -> int:
             "kuru çalışmada devam ediliyor.",
             file=sys.stderr,
         )
+    kfg = kipi_uygula(kfg, canli)
     dosyadan = bool(argumanlar.dosyadan)
     if canli and argumanlar.deneme:
         print("--canli ve --deneme birlikte kullanılamaz.", file=sys.stderr)

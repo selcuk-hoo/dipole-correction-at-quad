@@ -42,6 +42,7 @@ dipolü verir.
 from __future__ import annotations
 
 import json
+import cmath
 import math
 import csv
 import dataclasses
@@ -174,7 +175,7 @@ def parametreleri_yukle(yol: Path | str | None = None) -> Parametreler:
             faz_ofseti_derece=float(o["faz_ofseti_derece"]),
             gecikme_s=float(o.get("gecikme_ms", 0.0)) * 1e-3,
             artik_esigi=float(o.get("artik_esigi", 2e-2)),
-            artik_tabani_Vs=float(o.get("artik_tabani_uVs", 0.27)) * 1e-6,
+            artik_tabani_Vs=float(o.get("artik_tabani_uVs", 0.36)) * 1e-6,
             sicrama_esigi=float(o.get("sicrama_esigi", 0.6)),
             r_ref_m=float(o["r_ref_mm"]) * 1e-3,
             kilit_dosyasi=_repo_yolu(o["kilit_dosyasi"]),
@@ -461,13 +462,20 @@ def olcum_hesapla(
     artik_orani = math.sqrt(artik_kare / harmonik_kare) if harmonik_kare > 0 else math.inf
 
     harmonikler = []
+    s_en_buyuk = max(abs(bobin.duyarlilik(n, r_ref_m)) for n in range(1, HARMONIK_SAYISI + 1))
     for n in range(1, HARMONIK_SAYISI + 1):
         a_n, b_n = katsayi[m_pol + 2 * (n - 1)], katsayi[m_pol + 2 * (n - 1) + 1]
+        s_n = bobin.duyarlilik(n, r_ref_m)
+        if abs(s_n) < 1e-9 * s_en_buyuk:
+            # Bobin bu mertebeye kör (ör. 90°'lik teğet bobin n = 4'e:
+            # duyarlılık ∝ sin(n·45°) = 0); ölçülemez, sıfır diye raporlanmaz.
+            harmonikler.append(complex(math.nan, math.nan))
+            continue
         # Yamuk kuralı, frekansı f olan bir bileşeni (x/2)·cot(x/2) kadar
         # küçültür (x = 2π·f·dt; 23 Hz'de n = 2 için 1.3e-4, n = 6 için 1.2e-3).
         x = 2 * math.pi * n * abs(hiz_hz) * dt
         aki_n = complex(a_n, -b_n) * (math.tan(x / 2) / (x / 2))
-        harmonikler.append(aki_n / (bobin.sarim_sayisi * bobin.uzunluk_m * bobin.duyarlilik(n, r_ref_m)))
+        harmonikler.append(aki_n / (bobin.sarim_sayisi * bobin.uzunluk_m * s_n))
     surukleme = np.column_stack([zaman ** p for p in range(m_pol)]) @ katsayi[:m_pol]
     return OlcumSonucu(
         harmonikler=tuple(harmonikler),
@@ -507,7 +515,7 @@ def cift_yon_birlestir(ileri: OlcumSonucu, geri: OlcumSonucu) -> OlcumSonucu:
         return math.hypot(s.fourier[2 * n - 1], s.fourier[2 * n])
 
     n_faz = max(
-        range(1, len(ileri.harmonikler) + 1),
+        (n for n in range(1, len(ileri.harmonikler) + 1) if not cmath.isnan(ileri.harmonikler[n - 1])),
         key=lambda n: n * min(aki_genligi(ileri, n), aki_genligi(geri, n)),
     )
     psi = float(np.angle(geri.harmonikler[n_faz - 1] / ileri.harmonikler[n_faz - 1])) / (2 * n_faz)

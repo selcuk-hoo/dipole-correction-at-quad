@@ -535,6 +535,8 @@ class MerkezlemePenceresi(QMainWindow):
         içi boş çubuk, etikette işaretli değer."""
         self._seri_gorunur(seri, True)
         taban = 10.0 ** taban_us
+        olculemez = np.isnan(deger)  # bobinin kör olduğu mertebe: çubuk yok
+        deger, sigma = np.where(olculemez, 0.0, deger), np.where(olculemez, 0.0, sigma)
         mutlak = np.abs(deger)
         ust = np.log10(np.maximum(mutlak, taban))
         alt = np.log10(np.maximum(mutlak - sigma, taban))
@@ -550,7 +552,9 @@ class MerkezlemePenceresi(QMainWindow):
         isaret, ussel, anlamli = ("+", ".1e", ".2g") if bilesen else ("", ".2e", ".3g")
         for i, yazi in enumerate(seri["yazilar"]):
             v = deger[i]
-            if gercek_alan:
+            if olculemez[i]:
+                yazi.setText("ölçülemez")
+            elif gercek_alan:
                 yazi.setText(f"{v:{isaret}{ussel}}")
             else:
                 yazi.setText(f"{v:{isaret}.0f}" if abs(v) >= 100 else f"{v:{isaret}{anlamli}}")
@@ -585,7 +589,7 @@ class MerkezlemePenceresi(QMainWindow):
                 cizilecek = {"genlik": (genlik / bolen, np.abs(sigma) / bolen, t["vurgu"])}
                 aciklama = "|ortalama C<sub>n</sub>|"
             tum = np.concatenate([np.abs(v) for v, _, _ in cizilecek.values()])
-            en_buyuk = float(max(np.abs(v).max() + s.max() for v, s, _ in cizilecek.values()))
+            en_buyuk = float(max(np.nanmax(np.abs(v) + s) for v, s, _ in cizilecek.values()))
             pozitif = tum[tum > 0]
             taban_us = np.floor(np.log10(pozitif.min())) if len(pozitif) else np.log10(en_buyuk) - 3
             taban_us = max(taban_us, np.floor(np.log10(en_buyuk)) - 9)  # en fazla 9 onluk

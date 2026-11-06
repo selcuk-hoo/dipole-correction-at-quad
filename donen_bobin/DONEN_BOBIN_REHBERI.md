@@ -109,8 +109,8 @@ Bu yüzden yazının büyük bölümü, **büyük kuadrupol sinyalinin küçük 
 
 ### 2.2 Bobinlerimiz
 
-- **İki düz bobin**, birbirine **dik**. Dönen düzlemde birbirinden 90° farklı dururlar.
-- Her biri: **5 sarım**, **100 mm × 20 mm**, ortası eksenden **20 mm** uzakta.
+- **İki düz (Regular) bobin**, dönme eksenine göre simetrik; ADC'de **AIN2-AIN3** (A) ve **AIN6-AIN7** (B). AIN0-AIN1 ve AIN4-AIN5 Morgan bobinleridir (6 Kasım kanal testi).
+- Her biri: **5 sarım**, **135 mm** boy; yarıçapı **20 mm** olan silindirin yüzeyine **90°**'lik yay boyunca sarılı (iletkenler 20 mm'de, ±45°'de). 90°'lik bu bobin oktupole (n = 4) kördür.
 - Bobin 1: AIN0–AIN1. Bobin 2: AIN4–AIN5.
 
 Bir bobinin her çok kutba duyarlılığı farklıdır; bobinin geometrisi belirler. Bizim bobinde şöyle:

@@ -11,15 +11,33 @@ baglanti:
   port: 5000
 
 bobin:
-  # İki düz bobin var; birbirine dik, sarım sayıları ve geometrileri aynı.
+  # İki bobin var, dönme eksenine göre simetrik yerleştirilmiş; sarım sayıları ve
+  # geometrileri aynı. Ölçümde yalnızca düz bobin A kullanılıyor.
+  # Her bobin, yarıçapı 20 mm olan silindirin yüzeyine 90°'lik yay boyunca
+  # sarılmış (kullanıcı, 2026-11-06). Akı yalnızca iki iletkenin konumuna bağlı:
+  # iletkenler 20 mm yarıçapta, bobinin orta çizgisinden ±45°'de. Teğet modelde:
+  #   genislik       = 2·20·sin45° = 28.28 mm  (iki iletken arası kiriş)
+  #   eksene_uzaklik =   20·cos45° = 14.14 mm  (kirişin ortası)
+  # 2026-11-06 öncesi: 100 mm boy, 20 mm genişlik, eksene 20 mm (yanlıştı; dipol
+  # ~1.9, kuadrupol ~1.35 kat fazla raporlanıyordu).
   kanallar:
-    "Düz bobin 1 (AIN0-AIN1)": [0, 1]
-    "Düz bobin 2 (AIN4-AIN5)": [4, 5]
-  varsayilan_kanal: "Düz bobin 1 (AIN0-AIN1)"
+    # Dört ADC kanalı (adlar eski arayüzün, radarMGF, adlandırması). Merkezleme
+    # düz (Regular) bobinle yapılır. 9 Ekim - 6 Kasım arası yanlışlıkla AIN0-AIN1
+    # (Morgan A) "düz bobin" diye okundu. 6 Kasım kanal testi (./merkezle
+    # kanal_testi, dört bobin 9.5 A, kayitlar/2026-11-06_124402):
+    #   AIN2-AIN3 G = 0.0961 T/m, AIN6-AIN7 0.0910 (beklenen ~0.095),
+    #   AIN0-AIN1 0.0079, AIN4-AIN5 0.0088; ortam alanı düz bobinlerde ~32 µT.
+    # Aşağıdaki geometri düz bobinlerindir; Morgan kanallarının değerleri bu
+    # geometriyle ölçeklenir, yalnızca karşılaştırma içindir.
+    "Düz bobin A (AIN2-AIN3)": [2, 3]
+    "Düz bobin B (AIN6-AIN7)": [6, 7]
+    "Morgan A (AIN0-AIN1)": [0, 1]
+    "Morgan B (AIN4-AIN5)": [4, 5]
+  varsayilan_kanal: "Düz bobin A (AIN2-AIN3)"
   sarim_sayisi: 5
-  uzunluk_mm: 100.0            # dönme ekseni boyunca
-  genislik_mm: 20.0
-  eksene_uzaklik_mm: 20.0      # bobin ORTASININ dönme eksenine uzaklığı
+  uzunluk_mm: 135.0            # dönme ekseni boyunca
+  genislik_mm: 28.28
+  eksene_uzaklik_mm: 14.14     # iki iletkeni birleştiren kirişin ortasının eksene uzaklığı
   # teget : bobin düzlemi yarıçapa dik; iki iletken aynı yarıçapta
   # radyal: bobin düzlemi dönme eksenini içeren yarı düzlemde; iletkenler
   #         eksene_uzaklik -/+ genislik/2 yarıçaplarında
@@ -55,9 +73,10 @@ olcum:
   artik_esigi: 2.0e-2
   # ...ya da mutlak artık bu tabanın altında olmalı (µV·s, akı rms). Akım sıfırken
   # (merkezleme'nin arka plan ölçümü) alan zayıftır ve bağıl oran büyür (~0.1);
-  # mutlak artık ise ~0.1 µV·s'dir. 0.27 µV·s = nominal kuadrupol akısının
-  # (G = 0.095 T/m, r_ref = 25 mm: 2.4 mT, 13.4 µV·s rms) %2'si. 0: taban yok.
-  artik_tabani_uVs: 0.27
+  # mutlak artık ise ~0.1 µV·s'dir. 0.36 µV·s = nominal kuadrupol akısının
+  # (G = 0.095 T/m, r_ref = 25 mm: 2.4 mT; bu bobinle 18.1 µV·s rms) %2'si.
+  # Bobin geometrisi değişirse yeniden hesaplanmalı. 0: taban yok.
+  artik_tabani_uVs: 0.36
   # Enkoder okumaları stator saatine bağlı düzenli aralıklarla gelir; bir ADC
   # örneği kaybolursa sonraki okumalar bir örnek kayar. Bu kaymanın (örnek
   # cinsinden) eşiği: sağlıklı veride ~0.2, tek kayıpta ~1.

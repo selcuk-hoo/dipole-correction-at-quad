@@ -7,6 +7,7 @@
 #   ./merkezle kuru       dönen bobin gerçek, güç kaynaklarına komut GİTMEZ (yalnızca günlük)
 #   ./merkezle deneme     donanım yok; alanlar simülatörden
 #   ./merkezle eslestir   güç kaynaklarını bobinlerle eşleştir (USB takıldıktan sonra bir kez)
+#   ./merkezle kanal_testi  dört ADC kanalını akım 0 / eşit nominal akımda ölç (hangisi düz bobin?)
 #
 # Sıra: önce dönen bobin penceresi açılır, Pico'ya bağlanır, motoru başlatır.
 # İlk sağlıklı ölçümü yazınca (= zincir çalışıyor) merkezleme açılır. Merkezleme
@@ -31,8 +32,15 @@ case "$kip" in
     kuru)     bayraklar=(--dosyadan) ;;
     deneme)   exec "$PY" -m merkezleme --deneme ;;
     eslestir) exec "$PY" -m merkezleme --eslestir ;;
-    -h|--help|yardim) sed -n '2,13p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
-    *) echo "Bilinmeyen kip: $kip  (seçenekler: otomatik, kuru, deneme, eslestir)" >&2; exit 2 ;;
+    kanal_testi)
+        if pgrep -f '^[^ ]*python[^ ]* (merkezleme_olcer\.py|-m merkezleme)' >/dev/null; then
+            echo "HATA: dönen bobin ya da merkezleme programı açık. Önce kapatın." >&2; exit 1
+        fi
+        "$PY" -c 'import sys; from merkezleme.eslestirme import adresleri_denetle; sys.exit(adresleri_denetle("yapilandirma.yaml"))' || exit 1
+        shift
+        cd donen_bobin/host && exec "$PY" kanal_testi.py "$@" ;;
+    -h|--help|yardim) sed -n '2,14p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    *) echo "Bilinmeyen kip: $kip  (seçenekler: otomatik, kuru, deneme, eslestir, kanal_testi)" >&2; exit 2 ;;
 esac
 
 # Gerçek donanım: güç kaynağı adresleri bu bilgisayarda var mı (dönen bobini boşuna başlatma)

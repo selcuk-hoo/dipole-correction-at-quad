@@ -135,14 +135,14 @@ PRESETS = {
 
     "Merkezleme Kuadrupol Olcumu": (
         "# Preset: Merkezleme Kuadrupol Olcumu\n"
-        "# Duz bobin 1'den (AIN0-AIN1) n=1/n=2 harmonikleri okur ve\n"
+        "# Duz bobin A'dan (Regular A, AIN2-AIN3) n=1/n=2 harmonikleri okur ve\n"
         "# merkezleme programinin bekledigi veri_kilidi/.kilit dosyasina yazar.\n"
         "# Bobin geometrisi: merkezleme_olcer.yaml. Surekli otomatik olcum icin\n"
         "# bunun yerine host/merkezleme_olcer.py penceresini kullanin.\n\n"
-        "SET_CHANNEL AIN0-AIN1\n"
+        "SET_CHANNEL AIN2-AIN3\n"
         "SET_SERVO on\n"
-        "SET_MOTOR_SPEED 23.0\n"
-        "WAIT_SPEED 23.0 0.5\n"
+        "SET_MOTOR_SPEED 8.0\n"
+        "WAIT_SPEED 8.0 0.5\n"
         "WAIT 2.5\n"
         "MERKEZLEME_OLCUM\n"
     )

@@ -1,6 +1,7 @@
 """Merkezleme ölçüm köprüsü: fizik, durum makinesi (sahte cihazla) ve pencere."""
 from __future__ import annotations
 
+import cmath
 import dataclasses
 import time
 import json
@@ -97,6 +98,9 @@ def test_ust_harmonikler_ve_birimler(p):
 
     assert len(s.harmonikler) == mk.HARMONIK_SAYISI == 6
     for n, c in ust.items():
+        if n == 4:  # 90°'lik teğet bobin oktupole kör: ölçülemez, sıfır diye raporlanmaz
+            assert cmath.isnan(s.harmonikler[n - 1])
+            continue
         assert s.harmonikler[n - 1] == pytest.approx(c, rel=1e-5), n
     # Uydurma eğrisi, sürüklenmesi çıkarılmış akıyı birebir izlemeli
     assert np.max(np.abs(s.uydurma(s.aci_derece) - s.aki_Vs)) < 1e-7 * np.max(np.abs(s.aki_Vs))
@@ -124,8 +128,10 @@ def test_referans_ofseti_dipolu_saf_normal_yapar(p):
 
 
 def test_parametreler_ve_tutarlilik(p, tmp_path):
-    assert p.bobin.sarim_sayisi == 5 and p.bobin.eksene_uzaklik_m == pytest.approx(0.02)
-    assert p.kanallar[p.varsayilan_kanal] == (0, 1)
+    assert p.bobin.sarim_sayisi == 5 and p.bobin.eksene_uzaklik_m == pytest.approx(0.01414)
+    # iletkenler 20 mm yarıçapta, ±45°'de (90°'lik yay)
+    assert [abs(z) for z in p.bobin.iletken_konumlari()] == pytest.approx([0.02, 0.02], rel=1e-3)
+    assert p.kanallar[p.varsayilan_kanal] == (2, 3)
     assert p.kazanc == 32 and p.ornekleme_sps == 7200 and p.filtre == "Sinc4"
     assert p.gecikme_s == 0.0 and p.artik_esigi == pytest.approx(2e-2) and p.sicrama_esigi == 0.6
     assert mk.tutarlilik_uyarilari(p) == []
@@ -283,7 +289,7 @@ def test_baglaninca_adc_ayarlari_gonderilir(kurulum):
     assert komutlar[protocol.CMD_SET_FILTER] == 3  # Sinc4
     assert komutlar[protocol.CMD_SET_PGA_BYPASS] == 0
     assert komutlar[protocol.CMD_SET_DATA_MODE] == 1  # Voltage
-    assert dunya.kanal == (0, 1)
+    assert dunya.kanal == (2, 3)
     assert dongu.durum is Durum.HAZIR
 
 
@@ -358,7 +364,7 @@ def test_surekli_olcum_csv_ve_istatistik(kurulum, p):
     assert len(satirlar) == 1 + 5 and {s[1] for s in satirlar[1:]} == {"surekli"}
     assert dongu.kayit.yol.name == "olcumler.csv" and dongu.kayit.yol.parent.parent == p.kayit_dizini
 
-    dongu.kanal_sec("Düz bobin 2 (AIN4-AIN5)")
+    dongu.kanal_sec("Düz bobin B (AIN6-AIN7)")
     assert dongu.harmonik_istatistigi()[0] == 0  # kanal değişince ortalama sıfırlanır
 
 
@@ -432,13 +438,13 @@ def test_faz_ofseti_her_bobin_icin_ayri(kurulum):
     calistir(dunya, dongu, 2.5)
     birinci = dongu.faz_ofseti_derece
     assert dongu.referans_alindi and birinci != 0.0
-    dongu.kanal_sec("Düz bobin 2 (AIN4-AIN5)")
+    dongu.kanal_sec("Düz bobin B (AIN6-AIN7)")
     assert dongu.faz_ofseti_derece == 0.0 and not dongu.referans_alindi
     assert "referans alınmadı" in gunluk[-1]
     dongu.faz_ofseti_derece = 33.0
-    dongu.kanal_sec("Düz bobin 1 (AIN0-AIN1)")
+    dongu.kanal_sec("Düz bobin A (AIN2-AIN3)")
     assert dongu.faz_ofseti_derece == birinci and dongu.referans_alindi
-    dongu.kanal_sec("Düz bobin 2 (AIN4-AIN5)")
+    dongu.kanal_sec("Düz bobin B (AIN6-AIN7)")
     assert dongu.faz_ofseti_derece == 33.0
 
 
@@ -615,7 +621,7 @@ def test_gecikme_olcumu_kanal_degisince_iptal(kurulum):
     calistir(dunya, dongu, 5.0)
     dongu.gecikme_olc()
     calistir(dunya, dongu, 2.2)
-    dongu.kanal_sec("Düz bobin 2 (AIN4-AIN5)")
+    dongu.kanal_sec("Düz bobin B (AIN6-AIN7)")
     assert not dongu.gecikme_olculuyor and dongu._yarim is None
 
 
@@ -625,8 +631,8 @@ def test_merkezlemeye_yazarken_cerceve_kilitli(kurulum):
     dongu.baslat()
     calistir(dunya, dongu, 6.0)
     assert dongu.cerceve_kilitli
-    assert not dongu.kanal_sec("Düz bobin 2 (AIN4-AIN5)")
-    assert dongu.kanal == "Düz bobin 1 (AIN0-AIN1)" and dunya.kanal == (0, 1)
+    assert not dongu.kanal_sec("Düz bobin B (AIN6-AIN7)")
+    assert dongu.kanal == "Düz bobin A (AIN2-AIN3)" and dunya.kanal == (2, 3)
     assert dongu.hiz_ayarla(10.0) == 23.0 and dunya.hedef == 23.0
     dongu.tek_olcum(referans=True)
     dongu.gecikme_olc()
@@ -636,7 +642,7 @@ def test_merkezlemeye_yazarken_cerceve_kilitli(kurulum):
     calistir(dunya, dongu, 3.0)
     assert dongu.olcum_sayisi >= 1
     dongu.otomatik_yaz_ayarla(False)
-    assert dongu.kanal_sec("Düz bobin 2 (AIN4-AIN5)") and dunya.kanal == (4, 5)
+    assert dongu.kanal_sec("Düz bobin B (AIN6-AIN7)") and dunya.kanal == (6, 7)
     dongu.otomatik_yaz_ayarla(True)
     assert "UYARI: ölçüm çerçevesi" in gunluk[-1]
 
@@ -952,3 +958,52 @@ def test_zayif_alanda_mutlak_artik_kucukse_olcum_kabul_edilir(p):
     assert mk.saglik_sorunlari(s, dataclasses.replace(p, artik_tabani_Vs=0.0))  # taban yoksa reddedilir
     # Mutlak artık da büyükse (ör. ölçüm sırasında değişen alan) reddedilir
     assert mk.saglik_sorunlari(s, dataclasses.replace(p, artik_tabani_Vs=0.5 * s.artik_rms_Vs))
+
+
+# ---------------------------------------------------------------------------
+# Kanal testi (kanal_testi.py): hangi kanal kuadrupolü görüyor?
+# ---------------------------------------------------------------------------
+def test_kanal_testi_duz_bobini_ayirt_eder(kurulum, p):
+    from kanal_testi import KanalTesti
+    from merkezleme.guc_kaynagi import KaynakGrubu, KomutGunlugu
+    from merkezleme.yapilandirma import yapilandirma_yukle
+
+    dunya, dongu, _ = kurulum
+    kfg = yapilandirma_yukle(Path(__file__).resolve().parents[3] / "yapilandirma.yaml")
+    grup = KaynakGrubu.olustur(kfg.guc_kaynaklari, kfg.guvenlik, canli=False,
+                               gunluk=KomutGunlugu(), bekle=lambda s: None)
+    duz = (2, 3)  # bu sahte dünyada kuadrupolü gören kanal
+
+    def bekle(dt):  # alan akıma ve kanala bağlı: düz kanal kuadrupolü görür, öbürleri görmez
+        I = float(np.mean(grup.ayar_akimlari_A))
+        olcek = I / 9.5
+        if dunya.kanal == duz:
+            dunya.c1, dunya.c2 = complex(45e-6, 0) + 0.2e-3 * olcek, complex(2.4e-3, 0) * olcek
+        else:
+            dunya.c1, dunya.c2 = complex(90e-6, 0) + 1.9e-3 * olcek, complex(0.2e-3, 0) * olcek
+        dunya.ilerle(dt)
+
+    dongu.baglan()
+    satirlar_yazilan: list[str] = []
+    test = KanalTesti(p, dongu, grup, akim_A=9.5, tekrar=2, pencere_s=2.0,
+                      bekle=bekle, saat=lambda: dunya.t, yaz=satirlar_yazilan.append)
+    grup.baslat()
+    sonuclar = test.calistir()
+    assert len(sonuclar.olcumler) == 3 * len(p.kanallar)
+    assert all(len(v) == 2 for v in sonuclar.olcumler.values())
+    rapor = {s["kanal"]: s for s in test.rapor()}
+    duz_ad = next(ad for ad, k in p.kanallar.items() if k == duz)
+    assert rapor[duz_ad]["G_beklenene_orani"] == pytest.approx(0.096 / 0.095, rel=0.02)
+    assert rapor[duz_ad]["arka_plan_C1_uT"] == pytest.approx(45.0, rel=0.02)
+    for ad, s in rapor.items():
+        if ad != duz_ad:
+            assert s["G_beklenene_orani"] < 0.1 and s["dipol_kuad_orani"] > 5
+    yol = test.raporu_yaz(test.rapor())
+    assert yol.exists() and yol.parent.parent == p.kayit_dizini
+    assert any("ÖZET" in m for m in satirlar_yazilan)
+    # Her ölçümün ham verisi kaydedildi (tek ölçüm)
+    assert len(list(yol.parent.glob("ham_*_tek.csv"))) == 3 * len(p.kanallar) * 2
+    # Akımlar sonunda sıfırda; güvenli kapatma çıkışları kapatır
+    assert np.all(grup.ayar_akimlari_A == 0)
+    grup.guvenli_kapat()
+    assert all(not k.cikis_acik for k in grup.kaynaklar)

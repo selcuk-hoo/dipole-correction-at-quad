@@ -26,6 +26,7 @@ Eklenenler
 from __future__ import annotations
 
 import math
+import threading
 import time
 from dataclasses import dataclass, field
 from typing import Callable, Protocol
@@ -153,20 +154,25 @@ class GucKaynagi(_TemelKaynak):
             ) from hata
         self._rm = pyvisa.ResourceManager("@py")
         self._cihaz = self._rm.open_resource(adres)
+        # Kararlılık izlemesi akımları ayrı bir iş parçacığında okur; aynı
+        # cihaza iki istek iç içe geçmesin (yazma + yanıt okuma tek bütün)
+        self._kilit = threading.RLock()
 
     # ------------------------------------------------------------------
     # Alt seviye
     # ------------------------------------------------------------------
     def _yaz(self, komut: str, hata_kontrolu: bool = False) -> None:
-        self._cihaz.write(komut)
-        self._kaydet(komut)
-        if hata_kontrolu:
-            self.hatalari_kontrol_et(komut)
+        with self._kilit:
+            self._cihaz.write(komut)
+            self._kaydet(komut)
+            if hata_kontrolu:
+                self.hatalari_kontrol_et(komut)
 
     def _sorgula(self, komut: str) -> str:
-        yanit = self._cihaz.query(komut)
-        self._kaydet(komut, yanit=yanit)
-        return yanit
+        with self._kilit:
+            yanit = self._cihaz.query(komut)
+            self._kaydet(komut, yanit=yanit)
+            return yanit
 
     def hatalari_kontrol_et(self, baglam: str = "") -> None:
         """`SYST:ERR?` ile cihaz hatası var mı diye bakar; varsa yükseltir."""

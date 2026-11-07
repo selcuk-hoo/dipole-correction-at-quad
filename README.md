@@ -41,10 +41,16 @@ açılıp kapatılabilir); röle/modülatör gibi kullanıcı eylemleri yine siz
 Merkezleme TAMAMLANDI olunca **"Kararlılık"** sekmesinden izleme başlatılır: quad akımları
 açık kalır, dönen bobin sürekli ölçüme geçer ve her N saniyede (varsayılan 10) arka plan
 çıkarılmış merkez (x, y), dipol, kuadrupol ve dört güç kaynağının gerçek akımı
-`kayitlar/<oturum>/izleme_<saat>.csv`'ye yazılıp çizilir; sürüklenme (µm/saat) hesaplanır.
+`kayitlar/<oturum>/izleme_<saat>.csv`'ye yazılıp çizilir; her satır o aralıktaki bütün sağlıklı
+ölçümlerin ortalamasıdır (`n_olcum`, saçılım `sx_um`/`sy_um`); sürüklenme (µm/saat) hesaplanır.
+Akımları ayrı bir iş parçacığı okur, arayüz donmaz.
 Akımlar pencereyi kapatana ya da "Yeni çalıştırma"ya kadar açık kalır. Dönen bobin
 sekmesindeki "Alan grafiğinden arka planı çıkar" kutusu, quad en son sıfırken ölçülen alanı
-(merkezleme'nin son arka plan ölçümü) grafikten çıkarır; yalnızca gösterimi etkiler. Akımlar
+(merkezleme'nin son arka plan ölçümü) grafikten çıkarır; yalnızca gösterimi etkiler.
+"ADC'yi yeniden ayarla" bağlantıyı kesmeden ADC ayarlarını yeniden gönderir. Sürekli ölçümde
+uydurma artığı ya da dipol saçılımı birden büyürse (6 Kasım'da osiloskop kapatılınca olduğu gibi)
+sekmede kırmızı "ÖLÇÜM DURUMU DEĞİŞTİ" uyarısı çıkar: önce bu düğmeyi, düzelmezse bağlantıyı
+kesip yeniden bağlanmayı, o da olmazsa programı yeniden açmayı deneyin. Akımlar
 5 A/s ile rampalanır, ardından 1 s aralıkla `MEAS:CURR?` ile oturması kontrol
 edilir. Aşağıdaki "`otomatik`" kipinde (merkezleme penceresiz) eski sıra geçerlidir:
 `merkezle` önce dönen bobin penceresini açar, Pico'ya bağlanır ve motoru

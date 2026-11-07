@@ -125,6 +125,8 @@ class OlcumDongusu:
         self.saglik: list[str] = []  # son ölçümün sağlık sorunları (boş: sağlıklı)
         self._rs485_hata_sayisi: int | None = None
         self.gecmis: deque[OlcumSonucu] = deque(maxlen=GECMIS_UZUNLUGU)
+        self._izlenen: deque = deque(maxlen=60)
+        self.durum_uyarisi = ""
         self.kayit = OlcumKaydi(self.oturum)
         self.csv_kaydet = True
 
@@ -221,6 +223,52 @@ class OlcumDongusu:
 
     def gecmisi_sifirla(self) -> None:
         self.gecmis.clear()
+        self._izlenen.clear()  # kanal/hız/süre değişince durum izleyicisi de baştan başlar
+        self.durum_uyarisi = ""
+
+    # ------------------------------------------------------------------
+    # Ölçüm durumu izleyicisi (yalnızca sürekli ölçüm: alan sabit varsayılır)
+    # ------------------------------------------------------------------
+    IZLEME_ESKI, IZLEME_YENI = 30, 10
+
+    def _durumu_izle(self, sonuc: OlcumSonucu) -> None:
+        """Uydurma artığı ya da dipol saçılımı birden büyürse bir kez uyarır.
+
+        6 Kasım 17:40'ta osiloskop kapanınca artık 0.006 -> 0.023, dipol
+        saçılımı 0.7 -> 15 µT oldu ve arayüz yeniden açılana kadar sürdü.
+        Eşikler: son 10 ölçümün ortanca artığı öncekilerin 3 katı (ve
+        mutlak 0.01'den büyük) ya da dipol saçılımı 5 katı (ve 2 µT'den büyük)."""
+        self._izlenen.append((sonuc.artik_orani, sonuc.harmonikler[0]))
+        if self.durum_uyarisi or len(self._izlenen) < self.IZLEME_ESKI + self.IZLEME_YENI:
+            return
+        l = list(self._izlenen)
+        eski, yeni = l[-(self.IZLEME_ESKI + self.IZLEME_YENI):-self.IZLEME_YENI], l[-self.IZLEME_YENI:]
+        art_e, art_y = np.median([a for a, _ in eski]), np.median([a for a, _ in yeni])
+        sac_e = float(np.std([c for _, c in eski])); sac_y = float(np.std([c for _, c in yeni]))
+        nedenler = []
+        if art_y > 3 * art_e and art_y > 0.01:
+            nedenler.append(f"uydurma artığı {art_e:.3f} -> {art_y:.3f}")
+        if sac_y > 5 * sac_e and sac_y > 2e-6:
+            nedenler.append(f"dipol saçılımı {sac_e * 1e6:.1f} -> {sac_y * 1e6:.1f} µT")
+        if nedenler:
+            self.durum_uyarisi = "ÖLÇÜM DURUMU DEĞİŞTİ: " + ", ".join(nedenler)
+            self.gunluk("UYARI: " + self.durum_uyarisi + ". Önce 'ADC'yi yeniden ayarla', düzelmezse "
+                        "bağlantıyı kesip yeniden bağlanın, o da olmazsa programı yeniden açın.")
+
+    def adc_yeniden_ayarla(self) -> bool:
+        """Bağlantıyı kesmeden ADC ayarlarını ve kanalı yeniden gönderir; o
+        sıradaki yarım ölçümler atılır. Motor dönmeye devam eder."""
+        if self.durum is Durum.BAGLI_DEGIL or not self.conn.connected:
+            self.gunluk("ADC yeniden ayarlanamadı: bağlı değil.")
+            return False
+        self._cihazi_hazirla()
+        gecis = self.engine.total_samples_received + int(KANAL_GECIS_S * self.p.ornekleme_sps)
+        self._toplama_baslangici = max(self._toplama_baslangici, gecis)
+        self._tek_baslangici = max(self._tek_baslangici, gecis)
+        self._surekli_baslangici = max(self._surekli_baslangici, gecis)
+        self.gecmisi_sifirla()
+        self.gunluk("ADC ayarları yeniden gönderildi (bağlantı kesilmeden).")
+        return True
 
     # ------------------------------------------------------------------
     # Ham sinyal (motor dönmese de; cihaza komut göndermez)
@@ -678,6 +726,8 @@ class OlcumDongusu:
             self.gunluk("UYARI: " + "; ".join(self.saglik))
         if tur not in ("referans", "gecikme"):
             self.gecmis.append(sonuc)
+        if tur == "surekli":
+            self._durumu_izle(sonuc)
         if self.csv_kaydet:
             try:
                 self.kayit.ekle(sonuc, tur, self.kanal, self.faz_ofseti_derece)

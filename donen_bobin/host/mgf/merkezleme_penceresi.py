@@ -198,6 +198,12 @@ class MerkezlemePenceresi(QMainWindow):
             "Kapalıyken merkezleme'ye yazılmaz; her ölçüm süresinde bir sürekli ölçüm alınır.\n"
             "Açıkken ve motor dönerken bobin, hız, referans ve gecikme değiştirilemez."
         )
+        self.btn_adc = QPushButton("ADC'yi yeniden ayarla")
+        self.btn_adc.setToolTip(
+            "Bağlantıyı kesmeden ADC ayarlarını (kazanç, hız, filtre, kanal) yeniden gönderir;\n"
+            "o sıradaki yarım ölçümler atılır, motor dönmeye devam eder. 'Ölçüm durumu değişti'\n"
+            "uyarısında önce bunu deneyin; düzelmezse bağlantıyı kesip yeniden bağlanın.")
+        self.btn_adc.clicked.connect(lambda: (self.dongu.adc_yeniden_ayarla(), self._yenile()))
         self.chk_arka_cikar = QCheckBox("Alan grafiğinden arka planı çıkar")
         self.chk_arka_cikar.setToolTip(
             "Birleşik arayüzde: merkezleme'nin quad akımları en son sıfırken ölçtüğü alan\n"
@@ -242,6 +248,7 @@ class MerkezlemePenceresi(QMainWindow):
         satir.addWidget(self.chk_yaz)
         satir.addWidget(self.chk_csv)
         satir.addWidget(self.chk_arka_cikar)
+        satir.addWidget(self.btn_adc)
         kok.addLayout(satir)
 
         # Durum
@@ -250,6 +257,11 @@ class MerkezlemePenceresi(QMainWindow):
         self.lbl_durum = QLabel()
         self.lbl_durum.setObjectName("buyuk")
         g.addWidget(self.lbl_durum, 0, 0, 1, 4)
+        self.lbl_durum_uyari = QLabel()
+        self.lbl_durum_uyari.setWordWrap(True)
+        self.lbl_durum_uyari.setStyleSheet("color: #c0392b; font-weight: bold;")
+        self.lbl_durum_uyari.setVisible(False)
+        kok.addWidget(self.lbl_durum_uyari)
         self.lbl_hiz = self._deger_etiketi(g, 1, 0, "Ölçülen hız")
         self.lbl_sayac = self._deger_etiketi(g, 1, 2, "Yazılan ölçüm")
         self.lbl_faz = self._deger_etiketi(g, 2, 0, "Faz ofseti")
@@ -738,6 +750,9 @@ class MerkezlemePenceresi(QMainWindow):
         self.lbl_baglanti.setStyleSheet(f"color: {renk};")
 
         self.btn_baslat.setEnabled(d.durum in (Durum.HAZIR, Durum.HATA) and bagli)
+        self.btn_adc.setEnabled(bagli)
+        self.lbl_durum_uyari.setText(d.durum_uyarisi)
+        self.lbl_durum_uyari.setVisible(bool(d.durum_uyarisi))
         self.btn_ham_kaydet.setEnabled(bagli)
         self.btn_durdur.setEnabled(d.donuyor)
         kilitli = d.cerceve_kilitli

@@ -22,6 +22,7 @@ import math
 import os
 import signal
 import sys
+import threading
 import time
 from datetime import datetime
 from pathlib import Path
@@ -268,9 +269,11 @@ class MerkezlemeSekmesi(QWidget):
 
 class KararlilikSekmesi(QWidget):
     """Merkezleme bittikten sonra quad akımları AÇIK tutulur; alanın saatler içindeki
-    kararlılığı izlenir. Dönen bobin sürekli ölçüm kipine alınır; her `aralik` saniyede
-    bir ölçüm (arka plan çıkarılmış merkez, dipol, kuadrupol, hız) ve dört güç
-    kaynağının gerçek akımı `izleme.csv`'ye yazılır ve grafiğe çizilir."""
+    kararlılığı izlenir. Dönen bobin sürekli ölçüm kipine alınır. Her `aralik`
+    saniyede, o aralıktaki BÜTÜN sağlıklı ölçümlerin ortalaması (arka plan çıkarılmış
+    merkez, dipol, kuadrupol), ölçüm sayısı ve saçılımı ile dört güç kaynağının
+    gerçek akımı `izleme_<saat>.csv`'ye yazılır ve çizilir. Akımları ayrı bir iş
+    parçacığı saniyede bir okur; arayüz okumayı beklemez (her MEAS:CURR? ~0.7 s)."""
 
     def __init__(self, bobin: QMainWindow, merkezleme: MerkezlemeSekmesi) -> None:
         super().__init__()
@@ -282,6 +285,11 @@ class KararlilikSekmesi(QWidget):
         self._son_sonuc = None
         self._son_kayit_t = 0.0
         self._t0 = 0.0
+        self._biriken: list = []
+        self._akim_kilidi = threading.Lock()
+        self._son_akim: list[float] = [math.nan] * 4
+        self._akim_dur = threading.Event()
+        self._akim_isi: threading.Thread | None = None
         self.t: list[float] = []
         self.x: list[float] = []
         self.y: list[float] = []
@@ -294,7 +302,7 @@ class KararlilikSekmesi(QWidget):
         self.dugme = QPushButton("İzlemeyi başlat")
         self.dugme.clicked.connect(self.degistir)
         ust.addWidget(self.dugme)
-        ust.addWidget(QLabel("Kayıt aralığı"))
+        ust.addWidget(QLabel("Kayıt aralığı (bu sürede gelen ölçümlerin ortalaması)"))
         self.aralik = QSpinBox()
         self.aralik.setRange(1, 3600)
         self.aralik.setValue(10)
@@ -310,7 +318,7 @@ class KararlilikSekmesi(QWidget):
         self.ozet = QLabel("—")
         self.ozet.setWordWrap(True)
         duzen.addWidget(self.ozet)
-        self.grafik_merkez = pg.PlotWidget(title="Merkez (arka plan çıkarılmış)")
+        self.grafik_merkez = pg.PlotWidget(title="Merkez (arka plan çıkarılmış, aralık ortalaması)")
         self.grafik_merkez.setLabel("bottom", "süre", units="dk")
         self.grafik_merkez.setLabel("left", "µm")
         self.grafik_merkez.addLegend()
@@ -327,7 +335,7 @@ class KararlilikSekmesi(QWidget):
 
         self.zamanlayici = QTimer(self)
         self.zamanlayici.timeout.connect(self._ornekle)
-        self.zamanlayici.start(1000)
+        self.zamanlayici.start(500)
         merkezleme.kapanis_kancalari.append(self.durdur)
 
     # ------------------------------------------------------------------
@@ -344,16 +352,21 @@ class KararlilikSekmesi(QWidget):
         self._onceki_yaz = d.otomatik_yaz
         d.otomatik_yaz_ayarla(False)       # sürekli ölçüm: her pencere_s'de bir
         self._t0 = time.monotonic()
-        self._son_kayit_t = 0.0
+        self._son_kayit_t = self._t0
         self._son_sonuc = d.son_sonuc      # mevcut sonuç yeni sayılmasın
+        self._biriken = []
         self.t, self.x, self.y = [], [], []
         self.dI = [[], [], [], []]
         self._I0 = None
+        self._son_akim = [math.nan] * 4
         self._csv = d.oturum.klasor() / f"izleme_{datetime.now():%H%M%S}.csv"
         with open(self._csv, "w", newline="", encoding="utf-8") as f:
-            csv.writer(f).writerow(["zaman", "gecen_dk", "x_c_um", "y_c_um", "C1_net_uT", "C2_mT", "hiz_hz",
-                                    "artik_orani", "I1_A", "I2_A", "I3_A", "I4_A"])
+            csv.writer(f).writerow(["zaman", "gecen_dk", "n_olcum", "x_c_um", "y_c_um", "sx_um", "sy_um",
+                                    "C1_net_uT", "C2_mT", "hiz_hz", "artik_orani", "I1_A", "I2_A", "I3_A", "I4_A"])
         self.calisiyor = True
+        self._akim_dur.clear()
+        self._akim_isi = threading.Thread(target=self._akimlari_oku, args=(akis.kaynaklar,), daemon=True)
+        self._akim_isi.start()
         self.dugme.setText("İzlemeyi durdur")
         self.ozet.setText(f"İzleniyor... kayıt: {self._csv.name}")
 
@@ -361,8 +374,22 @@ class KararlilikSekmesi(QWidget):
         if not self.calisiyor:
             return
         self.calisiyor = False
+        self._akim_dur.set()
+        if self._akim_isi is not None:
+            self._akim_isi.join(timeout=5)  # süren okuma bitsin; ardından akımlar sıfırlanabilir
+            self._akim_isi = None
         self.bobin.dongu.otomatik_yaz_ayarla(self._onceki_yaz)
         self.dugme.setText("İzlemeyi başlat")
+
+    def _akimlari_oku(self, kaynaklar) -> None:
+        while not self._akim_dur.is_set():
+            try:
+                akim = [float(a) for a in kaynaklar.akimlari_oku()]
+            except Exception:  # noqa: BLE001 - okunamazsa NaN yazılır, izleme sürer
+                akim = [math.nan] * 4
+            with self._akim_kilidi:
+                self._son_akim = akim
+            self._akim_dur.wait(1.0)
 
     # ------------------------------------------------------------------
     def _ornekle(self) -> None:
@@ -370,32 +397,46 @@ class KararlilikSekmesi(QWidget):
             return
         d = self.bobin.dongu
         s = d.son_sonuc
+        if s is not None and s is not self._son_sonuc:
+            self._son_sonuc = s
+            if not d.saglik:
+                self._biriken.append(s)
         simdi = time.monotonic()
-        if s is None or s is self._son_sonuc or d.saglik:
-            return
-        self._son_sonuc = s
-        if simdi - self._son_kayit_t < self.aralik.value() - 0.01:
+        if simdi - self._son_kayit_t < self.aralik.value() - 0.01 or not self._biriken:
             return
         self._son_kayit_t = simdi
-        c = list(s.harmonikler)
-        for n, ark in (self.merkezleme.arka_plan() or {}).items():
-            if 1 <= n <= len(c):
-                c[n - 1] = c[n - 1] - ark
-        z = -self.bobin.p.r_ref_m * c[0] / c[1] if abs(c[1]) > 0 else complex(math.nan, math.nan)
-        try:
-            akim = self.merkezleme.pencere.akis.kaynaklar.akimlari_oku()
-        except Exception:  # noqa: BLE001 - izleme akım okuyamazsa da devam eder
-            akim = [math.nan] * 4
+        olcumler, self._biriken = self._biriken, []
+        arka = self.merkezleme.arka_plan() or {}
+        def net(h):
+            c = list(h)
+            for n, a in arka.items():
+                if 1 <= n <= len(c):
+                    c[n - 1] = c[n - 1] - a
+            return c
+        cler = [net(o.harmonikler) for o in olcumler]
+        r = self.bobin.p.r_ref_m
+        zler = [(-r * c[0] / c[1]) if abs(c[1]) > 0 else complex(math.nan, math.nan) for c in cler]
+        c1 = sum(c[0] for c in cler) / len(cler)
+        c2 = sum(c[1] for c in cler) / len(cler)
+        z = -r * c1 / c2 if abs(c2) > 0 else complex(math.nan, math.nan)
+        n = len(zler)
+        sx = (sum((v.real - z.real) ** 2 for v in zler) / (n - 1)) ** 0.5 if n > 1 else math.nan
+        sy = (sum((v.imag - z.imag) ** 2 for v in zler) / (n - 1)) ** 0.5 if n > 1 else math.nan
+        with self._akim_kilidi:
+            akim = list(self._son_akim)
         dk = (simdi - self._t0) / 60.0
-        if self._I0 is None:
-            self._I0 = [float(a) for a in akim]
+        if self._I0 is None and all(math.isfinite(a) for a in akim):
+            self._I0 = list(akim)
         self.t.append(dk); self.x.append(z.real * 1e6); self.y.append(z.imag * 1e6)
         for i in range(4):
-            self.dI[i].append((float(akim[i]) - self._I0[i]) * 1e3)
+            self.dI[i].append((akim[i] - self._I0[i]) * 1e3 if self._I0 else math.nan)
+        hiz = sum(o.hiz_hz for o in olcumler) / n
+        artik = sorted(o.artik_orani for o in olcumler)[n // 2]
         with open(self._csv, "a", newline="", encoding="utf-8") as f:
-            csv.writer(f).writerow([datetime.now().isoformat(timespec="seconds"), f"{dk:.3f}", f"{z.real * 1e6:.2f}",
-                                    f"{z.imag * 1e6:.2f}", f"{abs(c[0]) * 1e6:.2f}", f"{abs(c[1]) * 1e3:.4f}",
-                                    f"{s.hiz_hz:.3f}", f"{s.artik_orani:.2e}"] + [f"{a:.5f}" for a in akim])
+            csv.writer(f).writerow([datetime.now().isoformat(timespec="seconds"), f"{dk:.3f}", n,
+                                    f"{z.real * 1e6:.2f}", f"{z.imag * 1e6:.2f}", f"{sx * 1e6:.2f}", f"{sy * 1e6:.2f}",
+                                    f"{abs(c1) * 1e6:.2f}", f"{abs(c2) * 1e3:.4f}", f"{hiz:.3f}", f"{artik:.2e}"]
+                                   + [f"{a:.5f}" for a in akim])
         self._ciz()
 
     def _ciz(self) -> None:
@@ -406,7 +447,7 @@ class KararlilikSekmesi(QWidget):
         for e, v in zip(self.egri_akim, self.dI):
             e.setData(self.t, v)
         n = len(self.t)
-        metin = f"{n} örnek, {self.t[-1]:.1f} dk. Son: x = {self.x[-1]:+.1f} µm, y = {self.y[-1]:+.1f} µm."
+        metin = f"{n} kayıt, {self.t[-1]:.1f} dk. Son: x = {self.x[-1]:+.1f} µm, y = {self.y[-1]:+.1f} µm."
         if n >= 5:
             ax, ay = np.polyfit(self.t, self.x, 1)[0] * 60, np.polyfit(self.t, self.y, 1)[0] * 60
             metin += (f" Ortalama ± σ: x {np.mean(self.x):+.1f} ± {np.std(self.x, ddof=1):.1f}, "

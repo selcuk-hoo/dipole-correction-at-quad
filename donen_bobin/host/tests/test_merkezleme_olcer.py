@@ -1085,3 +1085,28 @@ def test_alan_grafiginden_arka_plan_cikarilir(kurulum, p, monkeypatch):
     assert c1 < 1e-6  # 40 µT'lik alan çıkarıldı
     pencere.dongu.saat = time.monotonic  # kapanışta gerçek saat
     pencere.close()
+
+
+def test_olcum_durumu_degisince_uyarir_ve_adc_yeniden_ayarlanir(kurulum):
+    # 6 Kasım 17:40: osiloskop kapanınca dipol saçılımı ve artık birden büyüdü
+    dunya, dongu, gunluk = kurulum
+    dongu.otomatik_yaz_ayarla(False)
+    dongu.baglan()
+    dongu.baslat()
+    dunya.gurultu_V = 2e-6
+    calistir(dunya, dongu, 6.0 + 2.0 * 32)  # ~30 sağlıklı sürekli ölçüm
+    assert dongu.durum_uyarisi == ""
+    dunya.gurultu_V = 4e-4  # bozulma
+    calistir(dunya, dongu, 2.0 * 12)
+    assert dongu.durum_uyarisi.startswith("ÖLÇÜM DURUMU DEĞİŞTİ")
+    assert any("ADC'yi yeniden ayarla" in m for m in gunluk)
+    komut_sayisi = len(dunya.komutlar)
+    assert dongu.adc_yeniden_ayarla()
+    yeni = [k for k, _ in dunya.komutlar[komut_sayisi:]]
+    assert protocol.CMD_SET_GAIN in yeni and protocol.CMD_SET_SCAN_CHANNELS in yeni
+    assert dongu.durum_uyarisi == "" and not dongu.gecmis and dongu.donuyor
+
+
+def test_adc_yeniden_ayarla_bagli_degilken(kurulum):
+    _, dongu, gunluk = kurulum
+    assert not dongu.adc_yeniden_ayarla() and "bağlı değil" in gunluk[-1]

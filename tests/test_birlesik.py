@@ -159,15 +159,27 @@ def test_kararlilik_izleme_kaydeder_ve_arka_plani_cikarir(qt_uygulama, kfg_tmp, 
 
     izleme.baslat()
     assert izleme.calisiyor and bobin.dongu.otomatik_yaz is False
-    # Arka plan + 2.4 mT kuadrupol + 50 µT'lik ek dipol (ofset)
-    bobin.dongu.son_sonuc = SimpleNamespace(
-        harmonikler=(ark + 50e-6 + 0j, complex(2.4e-3, 0) + ark2, 0j, 0j, 0j, 0j), hiz_hz=8.0, artik_orani=0.01)
+    assert izleme._akim_isi is not None and izleme._akim_isi.is_alive()  # akımlar arka planda
+    import time as _t
+    for _ in range(50):
+        if all(np.isfinite(izleme._son_akim)):
+            break
+        _t.sleep(0.05)
+    # Aralık içinde üç ölçüm: arka plan + 2.4 mT kuadrupol + 50 / 52 / 48 µT ek dipol
     izleme.aralik.setValue(1)
+    for ek in (50e-6, 52e-6, 48e-6):
+        bobin.dongu.son_sonuc = SimpleNamespace(
+            harmonikler=(ark + ek + 0j, complex(2.4e-3, 0) + ark2, 0j, 0j, 0j, 0j), hiz_hz=8.0, artik_orani=0.01)
+        izleme._ornekle()
+    assert len(izleme.t) == 0  # aralık dolmadı
+    izleme._son_kayit_t -= 2
     izleme._ornekle()
     assert len(izleme.t) == 1
-    assert izleme.x[0] == pytest.approx(-0.025 * 50e-6 / 2.4e-3 * 1e6, rel=1e-6)  # arka plan çıkarıldı
+    assert izleme.x[0] == pytest.approx(-0.025 * 50e-6 / 2.4e-3 * 1e6, rel=1e-6)  # ortalama, arka plan çıkarılmış
     satirlar = list(__import__("csv").reader(izleme._csv.open(encoding="utf-8")))
-    assert len(satirlar) == 2 and satirlar[0][2] == "x_c_um"
+    assert len(satirlar) == 2 and satirlar[0][2] == "n_olcum" and satirlar[1][2] == "3"
+    assert float(satirlar[1][5]) == pytest.approx(0.025 * 2e-6 / 2.4e-3 * 1e6, rel=1e-3)  # sx
+    assert all(np.isfinite(float(v)) for v in satirlar[1][-4:])  # akımlar iş parçacığından
     izleme.durdur()
     assert bobin.dongu.otomatik_yaz is True
     sekme.kapat()

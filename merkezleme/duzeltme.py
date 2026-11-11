@@ -38,7 +38,7 @@ class GuvenlikDegerlendirmesi:
     def metin(self) -> str:
         if self.guvenli:
             return "Güvenlik sınırları tamam."
-        return "GÜVENLİK SINIRI AŞILDI:\n" + "\n".join(f"  - {i}" for i in self.ihlaller)
+        return "ÖNERİLEN AKIMLAR GÜVENLİK SINIRINI AŞIYOR:\n" + "\n".join(f"  - {i}" for i in self.ihlaller)
 
 
 @dataclass(frozen=True)
@@ -52,6 +52,8 @@ class DuzeltmeOnerisi:
     mod_genlikleri: dict[str, float]
     monopol_cikarilan: float
     guvenlik: GuvenlikDegerlendirmesi
+    # Adım başı sınırına sığması için tam adımın ne kadarı alındı (1 = tamamı)
+    adim_olcegi: float = 1.0
 
     @property
     def delta_akimlar_A(self) -> np.ndarray:
@@ -85,6 +87,11 @@ class DuzeltmeOnerisi:
         satirlar.append(
             f"Beklenen merkez değişimi: {self.beklenen_merkez_degisimi_m * 1e6:.2f} um"
         )
+        if self.adim_olcegi < 1.0:
+            satirlar.append(
+                f"Adım başı sınırı için tam adımın %{self.adim_olcegi * 100:.0f}'i alındı "
+                "(kalanı sonraki iterasyonda)"
+            )
         if abs(self.monopol_cikarilan) > 0:
             satirlar.append(f"Atılan monopol bileşeni: {self.monopol_cikarilan * 100:+.5f} %")
         satirlar.append(self.guvenlik.metin())
@@ -150,6 +157,16 @@ def duzeltme_hesapla(
         monopol_cikarilan = mod_bazi.monopol_bileseni(yeni_bagil)
         yeni_bagil = mod_bazi.monopol_cikar(yeni_bagil)
 
+    # Adım başı sınırı: aşılırsa durmak yerine adım aynı yönde sınıra sığacak kadar
+    # küçültülür (11 Kasım: 1.4 mm'lik ofset %2.7'lik adım istedi ve akış durdu).
+    # Bobin başı akım ve nominale göre asimetri sınırları kesin durdurma olarak kalır.
+    adim_olcegi = 1.0
+    nominal = mod_bazi.miknatis.nominal_akim_A
+    adim = np.abs(mod_bazi.akimlar(yeni_bagil) - mevcut_akimlar_A) / nominal
+    if np.max(adim) > guvenlik.adim_basi_max_bagil_degisim:
+        adim_olcegi = guvenlik.adim_basi_max_bagil_degisim / float(np.max(adim)) * (1 - 1e-9)
+        yeni_bagil = mevcut_bagil + adim_olcegi * (yeni_bagil - mevcut_bagil)
+
     yeni_akimlar = mod_bazi.akimlar(yeni_bagil)
     uygulanan_delta = yeni_bagil - mevcut_bagil
     beklenen = olculen_y.dizi() + R @ uygulanan_delta
@@ -164,6 +181,7 @@ def duzeltme_hesapla(
         guvenlik=_guvenligi_degerlendir(
             mevcut_akimlar_A, yeni_akimlar, mod_bazi.miknatis.nominal_akim_A, guvenlik
         ),
+        adim_olcegi=adim_olcegi,
     )
 
 

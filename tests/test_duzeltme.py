@@ -163,20 +163,42 @@ def test_sq_over_g_pratikte_degismez(kfg, konvansiyon, mod_bazi, simulator_uret,
     assert abs(sonra - once) < 0.01 * abs(once) + 1e-6, (once, sonra)
 
 
-def test_guvenlik_sinirlari_asilinca_uygulanmaz(kfg, mod_bazi):
-    """Çözüm adım başı ya da toplam asimetri sınırını aşıyorsa güvenli değil."""
-    R = mod_bazi.response_matrisi(
+def _yalnizca_merkez_R(mod_bazi):
+    return mod_bazi.response_matrisi(
         {
             "H": np.array([-0.0408, 0.0, 0.0]),
             "V": np.array([0.0, -0.0408, 0.0]),
             "Q": np.array([0.0, 0.0, 1.0]),
         }
     )
-    # 2 mm'lik ofset: gereken asimetri ~%5, adım başı sınır %2
-    y = KontrolVektoru(x_c=2000e-6, y_c=0.0, g=0.0)
+
+
+def test_adim_basi_siniri_asilinca_adim_kucultulur(kfg, mod_bazi):
+    """11 Kasım: tam adım %2.7 isterken akış duruyordu. Artık adım aynı yönde
+    sınıra sığacak kadar küçültülür; kalanını sonraki iterasyon yapar."""
+    R = _yalnizca_merkez_R(mod_bazi)
+    y = KontrolVektoru(x_c=1400e-6, y_c=-300e-6, g=0.0)
+    tam = duzeltme_hesapla(R, y, mod_bazi.nominal_akimlar, mod_bazi, kfg.duzeltme,
+                           dataclasses.replace(kfg.guvenlik, adim_basi_max_bagil_degisim=1.0))
     oneri = duzeltme_hesapla(R, y, mod_bazi.nominal_akimlar, mod_bazi, kfg.duzeltme, kfg.guvenlik)
+    assert tam.adim_olcegi == 1.0
+    assert oneri.guvenlik.guvenli and 0 < oneri.adim_olcegi < 1
+    nominal = mod_bazi.miknatis.nominal_akim_A
+    en_buyuk = np.max(np.abs(oneri.delta_akimlar_A)) / nominal
+    assert en_buyuk == pytest.approx(kfg.guvenlik.adim_basi_max_bagil_degisim, rel=1e-6)
+    assert np.allclose(oneri.delta_akimlar_A, oneri.adim_olcegi * tam.delta_akimlar_A)  # aynı yön
+    assert "tam adımın" in oneri.ozet_metni(nominal)
+
+
+def test_asimetri_siniri_kesin_durdurur(kfg, mod_bazi):
+    """Küçültülmüş adım bile toplam asimetri sınırını aşarsa öneri güvenli değil."""
+    R = _yalnizca_merkez_R(mod_bazi)
+    y = KontrolVektoru(x_c=2000e-6, y_c=0.0, g=0.0)
+    guvenlik = dataclasses.replace(kfg.guvenlik, nominale_gore_max_asimetri=0.01)
+    oneri = duzeltme_hesapla(R, y, mod_bazi.nominal_akimlar, mod_bazi, kfg.duzeltme, guvenlik)
     assert not oneri.guvenlik.guvenli
-    assert any("adım başı" in i for i in oneri.guvenlik.ihlaller)
+    assert any("asimetri" in i for i in oneri.guvenlik.ihlaller)
+    assert not any("adım başı" in i for i in oneri.guvenlik.ihlaller)
 
 
 def test_maks_akim_siniri_kontrol_edilir(kfg, mod_bazi):

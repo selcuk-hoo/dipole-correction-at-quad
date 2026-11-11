@@ -599,7 +599,10 @@ class IsAkisi:
             raise IsAkisiHatasi("Onaylanacak bir düzeltme önerisi yok")
         oneri = self.bekleyen_oneri
         if not oneri.guvenlik.guvenli:
-            self.durdurma_nedeni = "Güvenlik sınırı aşıldı; düzeltme UYGULANMADI.\n" + "\n".join(
+            self.durdurma_nedeni = (
+                "Güvenlik sınırı: önerilen akımlar sınırı aşıyor; düzeltme UYGULANMADI "
+                f"(akımlar {', '.join(f'{a:.4f}' for a in self.mevcut_akimlar_A)} A'da kaldı).\n"
+            ) + "\n".join(
                 oneri.guvenlik.ihlaller
             )
             self.notlar.append(self.durdurma_nedeni)
@@ -608,6 +611,11 @@ class IsAkisi:
             self.bekleyen_oneri = None
             self.durumu_kaydet()
             return
+        if oneri.adim_olcegi < 1.0:
+            self.notlar.append(
+                f"İterasyon {self.iterasyon + 1}: adım başı sınırı için tam adımın "
+                f"%{oneri.adim_olcegi * 100:.0f}'i uygulandı."
+            )
         self.iterasyon += 1
         self.bekleyen_oneri = None
         self._duzeltme_olcumu_kuyrukla(oneri.yeni_akimlar_A)

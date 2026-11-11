@@ -172,8 +172,9 @@ def test_durdur_akimlari_sifirlar(kfg, simulator_uret, akis_uret):
 def test_guvenlik_ihlalinde_duzeltme_uygulanmaz(
     kfg, konvansiyon, mod_bazi, simulator_uret, kaynak_grubu_uret, tmp_path
 ):
-    """Çözüm adım başı sınırını aşıyorsa uygulanmaz; akış durur ve neden kaydedilir."""
-    dar_guvenlik = dataclasses.replace(kfg.guvenlik, adim_basi_max_bagil_degisim=0.001)
+    """Çözüm toplam asimetri sınırını aşıyorsa uygulanmaz; akış durur ve neden kaydedilir.
+    (Adım başı sınırı durdurmaz, adımı küçültür: bkz. test_duzeltme.)"""
+    dar_guvenlik = dataclasses.replace(kfg.guvenlik, nominale_gore_max_asimetri=0.001)
     sim = simulator_uret(ofset_m=complex(400e-6, 0), tohum=59)
     kaynak = SimulatorGirisi(sim)
     akis = IsAkisi(
@@ -192,7 +193,22 @@ def test_guvenlik_ihlalinde_duzeltme_uygulanmaz(
 
     assert akis.faz is Faz.DURDURULDU
     assert "Güvenlik sınırı" in (akis.durdurma_nedeni or "")
+    assert "A'da kaldı" in (akis.durdurma_nedeni or "")
     assert akis.iterasyon == 0, "hiçbir düzeltme uygulanmamış olmalı"
+
+
+def test_buyuk_ofset_kucuk_adimlarla_yakinsar(
+    kfg, konvansiyon, mod_bazi, simulator_uret, kaynak_grubu_uret, tmp_path
+):
+    """1.4 mm'lik ofset tek adımda %2'yi aşar; adımlar küçültülerek yine yakınsar."""
+    sim = simulator_uret(ofset_m=complex(-1400e-6, -120e-6), tohum=61)
+    kaynak = SimulatorGirisi(sim)
+    k = dataclasses.replace(kfg, duzeltme=dataclasses.replace(kfg.duzeltme, max_iterasyon=10))
+    akis = IsAkisi(k, kaynak_grubu_uret(), kaynak, Calistirma(k, kok=tmp_path), konvansiyon, mod_bazi)
+    akis.basla()
+    otomatik_yurut(akis, kaynak, max_adim=400)
+    assert akis.faz is Faz.TAMAMLANDI, akis.durdurma_nedeni
+    assert any("tam adımın" in n for n in akis.notlar)
 
 
 # ---------------------------------------------------------------------------

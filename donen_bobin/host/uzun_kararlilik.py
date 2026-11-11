@@ -5,7 +5,11 @@
     python uzun_kararlilik.py --sureler 30 60 60 120 20          # dakika: ortam1 akimli1 ortam2 akimli2 ortam3
 
 Fazlar (12 Kasım 2026 planı):
-  1. ortam1     akımlar sıfır: elektronik ısınır, ortam dipolü (B1, A1) kaydedilir
+  1. ortam1     akımlar sıfır: akımsız taban (ortam dipolü B1, A1) ve motor dönmeye
+                başladıktan sonra oturuyor mu. 11 Kasım'da akımsız dipol ~0.95 µT/saat
+                (%2.7/saat) kaydı; ADC kazanç/ofset kayması bunu açıklayamaz. Adaylar:
+                motorun ısınması (mıknatısı ve sargıları bobine yakın) ya da gerçek ortam.
+                ortam1'deki sürüklenme ortam2/ortam3'tekinden büyükse motor, aynıysa ortam.
   2. merkezleme 9.5 A, tolerans 10 µm, otomatik (kalibrasyon + düzeltme)
   3. akimli1    merkezlenmiş akımlar açık: net merkez ve akımlar kaydedilir
   4. ortam2     akımlar sıfır: mıknatıs soğur, ortam kaydedilir

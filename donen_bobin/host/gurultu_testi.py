@@ -163,6 +163,10 @@ def main(argv=None) -> int:
     a.add_argument("--parametreler", default=str(KOK / "donen_bobin" / "merkezleme_olcer_7A.yaml"))
     a.add_argument("--yapilandirma", default=str(KOK / "yapilandirma_7A.yaml"))
     g = a.parse_args(argv)
+    if argv is None:  # komut satırından: ölçüm sürerken bilgisayar uyumasın
+        from uyku import uykuyu_engelle
+
+        uykuyu_engelle("Gürültü testi sürüyor")
     if max(g.hizlar) > 13:
         print("13 Hz üstü: enkoder bozuluyor (CRC'li firmware yüklenmedi).", file=sys.stderr)
         return 2

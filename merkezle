@@ -18,6 +18,15 @@
 # günlük); merkezleme'nin çıktı klasörü de oraya "merkezleme" adıyla bağlanır.
 set -euo pipefail
 
+# Ölçüm sürerken bilgisayar uyumasın: 11 Kasım'da KDE 20 dk hareketsizlikte uyuttu,
+# Pico bağlantısı koptu (motor durdurulamadı), güç kaynakları USB sıfırlanınca komut
+# reddetti. Program kapanınca engel kalkar.
+if [[ -z "${MERKEZLE_UYKU_ENGELLI:-}" ]] && command -v systemd-inhibit >/dev/null; then
+    export MERKEZLE_UYKU_ENGELLI=1
+    exec systemd-inhibit --what=sleep:idle --who=merkezle --mode=block \
+        --why="Dönen bobin / merkezleme ölçümü sürüyor" "$(readlink -f "$0")" "$@"
+fi
+
 KOK=$(cd "$(dirname "$(readlink -f "$0")")" && pwd)
 cd "$KOK"
 KILIT=veri_kilidi/.kilit   # yapilandirma.yaml ve donen_bobin/merkezleme_olcer.yaml ile aynı

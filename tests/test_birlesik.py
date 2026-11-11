@@ -232,3 +232,57 @@ def test_basilan_dugme_yesile_doner_ve_sonucu_durum_cubuguna_yazilir(qt_uygulama
     QTest.qWait(pencere.geri_bildirim.SURE_MS + 100)
     assert bobin.dugme.graphicsEffect() is None
     pencere.close()
+
+
+def test_ortam_alani_akimsiz_izlenir(qt_uygulama, kfg_tmp, tmp_path, monkeypatch):
+    """Quad akımları sıfırken dönen bobinin gördüğü dipol zamanla kaydedilir;
+    merkezlenmiş akımlar açıkken reddedilir."""
+    uyarilar = []
+    monkeypatch.setattr(QMessageBox, "information", staticmethod(lambda *a, **k: uyarilar.append(a[2])))
+    pytest.importorskip("pyqtgraph")
+    from types import SimpleNamespace
+
+    from merkezleme.birlesik import KararlilikSekmesi
+
+    sekme = MerkezlemeSekmesi(kfg_tmp, False, lambda: (True, "dönüyor"), olcum_kaynagi_uret=_simulator)
+    sekme.otomatik_zamanlayici.stop()
+
+    class SahteDongu:
+        otomatik_yaz = True
+        saglik: list = []
+        son_sonuc = None
+        oturum = SimpleNamespace(klasor=lambda: tmp_path)
+
+        def otomatik_yaz_ayarla(self, acik):
+            self.otomatik_yaz = acik
+            return True
+
+    bobin = SimpleNamespace(dongu=SahteDongu(), p=SimpleNamespace(r_ref_m=0.025))
+    izleme = KararlilikSekmesi(bobin, sekme)  # type: ignore[arg-type]
+    izleme.zamanlayici.stop()
+
+    izleme.baslat()  # akımlı izleme: merkezleme yok -> reddedilir, akımsızı önerir
+    assert not izleme.calisiyor and "Ortam alanını izle" in uyarilar[-1]
+    izleme.ortam_degistir()  # merkezleme hiç başlatılmadı: akımlar sıfır sayılır
+    assert izleme.calisiyor and izleme.akimsiz and izleme._akim_isi is None
+    assert bobin.dongu.otomatik_yaz is False and not izleme.dugme.isEnabled()
+    izleme.aralik.setValue(1)
+    for b in (34.0, 35.0, 36.0):
+        bobin.dongu.son_sonuc = SimpleNamespace(
+            harmonikler=(complex(b * 1e-6, 5.5e-6), complex(0.3e-6, 0), 0j, 0j, 0j, 0j), hiz_hz=8.0,
+            artik_orani=0.2)
+        izleme._ornekle()
+    izleme._son_kayit_t -= 2
+    izleme._ornekle()
+    satirlar = list(__import__("csv").reader(izleme._csv.open(encoding="utf-8")))
+    assert izleme._csv.name.startswith("ortam_") and satirlar[0][3:5] == ["B1_uT", "A1_uT"]
+    assert float(satirlar[1][3]) == pytest.approx(35.0) and float(satirlar[1][4]) == pytest.approx(5.5)
+    assert float(satirlar[1][5]) == pytest.approx(1.0)  # B1 saçılımı
+    assert "B1" in izleme.ozet.text() and "µT" in izleme.ozet.text()
+    izleme.ortam_degistir()
+    assert not izleme.calisiyor and bobin.dongu.otomatik_yaz is True and izleme.dugme.isEnabled()
+
+    sekme.baslat()  # akımlar nominalde açık -> akımsız izleme reddedilir
+    izleme.ortam_degistir()
+    assert not izleme.calisiyor and "Merkezleme sürüyor" in uyarilar[-1]
+    sekme.kapat()

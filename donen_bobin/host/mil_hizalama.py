@@ -133,6 +133,10 @@ def main(argv: list[str] | None = None) -> int:
     a.add_argument("--aralik", type=float, default=1.0, help="göstergelerin güncellenme aralığı (s)")
     a.add_argument("--parametreler", default=None)
     g = a.parse_args(argv)
+    if argv is None:  # komut satırından: ölçüm sürerken bilgisayar uyumasın
+        from uyku import uykuyu_engelle
+
+        uykuyu_engelle("Mil hizalama ölçümü sürüyor")
     if not 0 < g.hiz <= MAKS_HIZ_HZ:
         print(f"hız 0 ile {MAKS_HIZ_HZ} Hz arasında olmalı", file=sys.stderr)
         return 2

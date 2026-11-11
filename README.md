@@ -31,6 +31,10 @@ kaynağının ön panelinden beslediği bobinin numarası kadar akım ayarlayın
 1 A, ... bobin 4 → 4 A; çıkışı açmak gerekmez). Pencere ayarları okur, eşleşme
 tutarlıysa adresleri `yapilandirma.yaml`'a yazar. Pencere cihazlara komut göndermez.
 
+`./merkezle` (ve `mil_hizalama.py`, `gurultu_testi.py`) çalıştığı sürece bilgisayarın uyuması
+`systemd-inhibit` ile engellenir: 11 Kasım'da KDE 20 dk hareketsizlikte uyuttu, Pico bağlantısı koptu
+(motor durdurulamadı) ve güç kaynakları USB sıfırlanınca komut reddetti.
+
 `./merkezle` tek bir pencere açar. "Dönen bobin" sekmesi Pico'ya bağlanır;
 motoru o sekmedeki "Başlat" ile siz çalıştırırsınız (açılışta motor dönmez). "Merkezleme" sekmesinde **nominal akım** ve **merkez toleransı**
 seçilip "Merkezlemeyi başlat"a basılır (dönen bobin dönüp hızı oturunca etkin
@@ -38,7 +42,9 @@ olur); bitince "Yeni çalıştırma" akımları sıfırlayıp ayarlara döner. "
 işaretliyse ölçümler ve düzeltme önerileri onay beklemeden geçilir (çalışırken
 açılıp kapatılabilir); röle/modülatör gibi kullanıcı eylemleri yine size bırakılır.
 
-Merkezleme TAMAMLANDI olunca **"Kararlılık"** sekmesinden izleme başlatılır: quad akımları
+Merkezleme TAMAMLANDI olunca **"Kararlılık"** sekmesinden izleme başlatılır (akımlar sıfırken aynı
+sekmedeki **"Ortam alanını izle (akımsız)"** ortam dipolünü B1/A1 olarak `ortam_<saat>.csv`'ye yazar; akımlı
+izlemedeki net merkezin ne kadarının ortam alanı oynamasından geldiğini ayırmak için): quad akımları
 açık kalır, dönen bobin sürekli ölçüme geçer ve her N saniyede (varsayılan 10) arka plan
 çıkarılmış merkez (x, y), dipol, kuadrupol ve dört güç kaynağının gerçek akımı
 `kayitlar/<oturum>/izleme_<saat>.csv`'ye yazılıp çizilir; her satır o aralıktaki bütün sağlıklı

@@ -106,6 +106,7 @@ class GurultuTesti(KanalTesti):
                     "blok": blok + 1, "hiz_hz": hz, "olcum": i + 1, "olculen_hiz_hz": s.hiz_hz,
                     "x_c_um": z.real * 1e6, "y_c_um": z.imag * 1e6, "C1_uT": abs(c[0]) * 1e6,
                     "C2_mT": abs(c[1]) * 1e3, "artik_orani": s.artik_orani, "saat_sicramasi": s.saat_sicramasi,
+                    "ayiklanan_aci": s.ayiklanan_aci,
                     **{f"I{j + 1}_A": float(v) for j, v in enumerate(ok.ortalama())},
                     "akim_okuma_sayisi": len(ok.okumalar),
                 })

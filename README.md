@@ -47,7 +47,8 @@ Akımları ayrı bir iş parçacığı okur, arayüz donmaz.
 Akımlar pencereyi kapatana ya da "Yeni çalıştırma"ya kadar açık kalır. Dönen bobin
 sekmesindeki "Alan grafiğinden arka planı çıkar" kutusu, quad en son sıfırken ölçülen alanı
 (merkezleme'nin son arka plan ölçümü) grafikten çıkarır; yalnızca gösterimi etkiler.
-"ADC'yi yeniden ayarla" bağlantıyı kesmeden ADC ayarlarını yeniden gönderir. Sürekli ölçümde
+Basılan her düğme yarım saniye yeşile döner; pencerenin altındaki durum çubuğu basışı saatiyle
+ve (2 s içinde günlüğe düştüyse) sonucunu gösterir. "ADC'yi yeniden ayarla" bağlantıyı kesmeden ADC ayarlarını yeniden gönderir. Sürekli ölçümde
 uydurma artığı ya da dipol saçılımı birden büyürse (6 Kasım'da osiloskop kapatılınca olduğu gibi)
 sekmede kırmızı "ÖLÇÜM DURUMU DEĞİŞTİ" uyarısı çıkar: önce bu düğmeyi, düzelmezse bağlantıyı
 kesip yeniden bağlanmayı, o da olmazsa programı yeniden açmayı deneyin. Akımlar
@@ -633,3 +634,16 @@ içindedir. Bırakılma nedenleri, testlerle de doğrulanmış hâlde:
    zorluyordu. Yeni kurulumda `R` 3×4 ve rank 3 olduğu için hedef **tam olarak**
    erişilebilir: satırları toleranslarına göre ölçeklemek çözümü değiştirmez
    (testle doğrulanmıştır), yani birim karışımı sorunu ortadan kalkar.
+
+---
+
+## Bekleyen işler
+
+- **Arka plan adımında çıkışı kapatmak (11 Kasım 2026 notu):** iki güç kaynağı akım sıfırlandıktan sonra da
+  en az ~0.25 mA veriyor (`olcumler.csv`'de `olculen_I*` 0.0002–0.0003 A). Bu, arka planda ~0.06 µT'lik
+  sahte dipol, yani ~0.6 µm demek. Öneri: sıfıra rampa → `OUTP OFF` → arka plan ölçümü → `OUTP ON` →
+  rampa; yapılandırmadan açılıp kapatılabilir olsun, aynı oturumda 10'ar arka plan ölçümüyle iki yol
+  karşılaştırılsın. `cikis_kapat` akım sıfır değilken zaten reddediyor.
+- **Enkoder CRC yaması** (`donen_bobin/bekleyen_guncellemeler/enkoder_crc`): firmware yüklenince bozuk
+  enkoder paketleri kaynağında atılır. O zamana kadar bozuk okumaları `bozuk_acilari_ayikla` onarıyor
+  (`olcumler.csv`'de `ayiklanan_aci` sütunu).

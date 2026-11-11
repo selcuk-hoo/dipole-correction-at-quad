@@ -74,6 +74,8 @@ _PARCA = 50_000  # normal denklemler bu kadar örneklik parçalarla kurulur (bel
 _SURUKLENME_DERECESI = 3  # akıdaki zaman polinomu: ADC ofsetinin integrali ve sürüklenmesi
 _OKUMA_SAATI_SAPMA_SINIRI = 0.45  # örnek; düzgün varış titreşimi ~0.29 (0..1 tekdüze)
 _SICRAMA_PENCERESI = 41  # okuma; okuma saati artığının kayan medyanı bu kadar okumada
+_BOZUK_ACI_CARPANI = 3.0  # okuma; komşu okumalar arası tipik adımın bu katından sapan okuma bozuk
+_BOZUK_ACI_TABANI_DERECE = 1.0  # motor dururken (adım ~0) bile bu kadarlık sapma bozuk sayılır
 
 
 class ParametreHatasi(ValueError):
@@ -255,6 +257,8 @@ class OlcumSonucu:
     # ADC örnek sayısındaki kalıcı kayma. Kaybolan her örnek ~1 ekler;
     # sağlıklı veride ~0.2. Merdiven yoksa ölçülemez (nan).
     saat_sicramasi: float = math.nan
+    # Bozuk (komşularından onarılan) enkoder okuması sayısı; bkz. bozuk_acilari_ayikla
+    ayiklanan_aci: int = 0
     artik_rms_Vs: float = 0.0  # akı uydurmasının artığının rms'i (faz belirsizliği için)
     # Çift yönde: ölçülen gecikmenin belirsizliği (1σ, artıktan tahmin)
     gecikme_belirsizligi_s: float = math.nan
@@ -330,6 +334,58 @@ def kubik_enterpolasyon(x: np.ndarray, xp: np.ndarray, yp: np.ndarray) -> np.nda
         (2 * s3 - 3 * s2 + 1) * yp[j] + (s3 - 2 * s2 + s) * h * egim[j]
         + (-2 * s3 + 3 * s2) * yp[j + 1] + (s3 - s2) * h * egim[j + 1]
     )
+
+
+def _sar(derece: np.ndarray) -> np.ndarray:
+    """Açı farkını (-180, 180] aralığına getirir."""
+    return (derece + 180.0) % 360.0 - 180.0
+
+
+def bozuk_acilari_ayikla(aci_derece: np.ndarray) -> tuple[np.ndarray, int]:
+    """Bozuk enkoder okumalarını komşularından onarır.
+
+    Bazı okumalar anlamsız bir açı taşır (ör. 112.8 -> 321.6 -> 121.7°): RS485
+    paketi bozulmuştur (enkoder paketinde henüz CRC yok). 4 Kasım'da yüksek
+    hızlarda, 6 Kasım'da şaft sabitlenene kadar sık, 11 Kasım'da 8 Hz'de dakikada
+    ~38 görüldü. Böyle bir okuma birkaç ADC örneği boyunca tutulur; açı
+    uydurmasında mV'luk hata ve "uydurma artığı" reddi yaratır. Açılmadan
+    (unwrap) ÖNCE dairesel olarak onarılır: bozuk değer karşı açıya düşerse
+    unwrap bütün sonraki açıyı bir tur kaydırabilirdi.
+
+    Her okuma, iki yanındaki üçer okumadan ortanca hızla (varış anlarına göre)
+    ayrı ayrı öngörülür; altı öngörünün dairesel medoidine yakın olanların
+    ortalaması tahmindir (iki bozuk komşuya dayanıklı). Tahminden tipik okuma adımının _BOZUK_ACI_CARPANI katından
+    fazla sapan okuma bozuktur; değeri tahminle değiştirilir, varış anı korunur.
+    Dönen: (onarılmış açı, onarılan okuma sayısı)."""
+    aci = np.asarray(aci_derece, dtype=np.float64)
+    taze = np.flatnonzero(np.r_[True, np.diff(aci) != 0])  # her okumanın ilk örneği
+    w = 3
+    if len(taze) < 2 * w + 3:
+        return aci, 0
+    u, t = aci[taze], taze.astype(np.float64)
+    hiz = float(np.median(_sar(np.diff(u)) / np.diff(t)))  # derece / örnek
+    adim = abs(hiz) * float(np.median(np.diff(t)))
+    esik = max(_BOZUK_ACI_CARPANI * adim, _BOZUK_ACI_TABANI_DERECE)
+    k = np.arange(w, len(u) - w)
+    ofset = np.r_[-w:0, 1:w + 1]
+    j = k[:, None] + ofset[None, :]
+    ongoru = u[j] + hiz * (t[k, None] - t[j])                       # (okuma, 6)
+    uzaklik = np.abs(_sar(ongoru[:, :, None] - ongoru[:, None, :])).sum(axis=2)
+    medoid = ongoru[np.arange(len(k)), np.argmin(uzaklik, axis=1)]
+    # Medoide yakın (sağlam) öngörülerin ortalaması: varış anlarının örnek
+    # ızgarasına yuvarlanmasından gelen öngörü gürültüsünü azaltır
+    sapma = _sar(ongoru - medoid[:, None])
+    yakin = np.abs(sapma) <= esik
+    tahmin = (medoid + (sapma * yakin).sum(axis=1) / yakin.sum(axis=1)) % 360.0
+    bozuk = np.abs(_sar(u[k] - tahmin)) > esik
+    sayi = int(np.count_nonzero(bozuk))
+    if sayi == 0:
+        return aci, 0
+    sonlar = np.r_[taze[1:], len(aci)]
+    duz = aci.copy()
+    for i in np.flatnonzero(bozuk):
+        duz[taze[k[i]]:sonlar[k[i]]] = tahmin[i]
+    return duz, sayi
 
 
 def aci_merdivenini_duzelt(acilmis: np.ndarray) -> tuple[np.ndarray, int, int, str, float]:
@@ -413,6 +469,7 @@ def olcum_hesapla(
     dt = 1.0 / ornekleme_sps
     # Akı: yamuk kuralıyla integral (dikdörtgen kuralı yarım örneklik kayma yapar)
     aki = -dt * (np.cumsum(v) - 0.5 * v - 0.5 * v[0])
+    aci, ayiklanan = bozuk_acilari_ayikla(aci)
     acilmis = np.unwrap(np.radians(aci))
     yontem, sicrama = "yok", math.nan
     if aci_duzelt:
@@ -489,6 +546,7 @@ def olcum_hesapla(
         aci_yontemi=yontem,
         gecikme_s=gecikme_s,
         saat_sicramasi=sicrama,
+        ayiklanan_aci=ayiklanan,
         aci_derece=np.degrees(teta) % 360.0,
         aki_Vs=aki - surukleme,
         fourier=np.concatenate(([0.0], katsayi[m_pol:])),
@@ -533,6 +591,7 @@ def cift_yon_birlestir(ileri: OlcumSonucu, geri: OlcumSonucu) -> OlcumSonucu:
         artik_orani=max(ileri.artik_orani, geri.artik_orani),
         artik_rms_Vs=max(ileri.artik_rms_Vs, geri.artik_rms_Vs),
         saat_sicramasi=float(np.fmax(ileri.saat_sicramasi, geri.saat_sicramasi)),
+        ayiklanan_aci=ileri.ayiklanan_aci + geri.ayiklanan_aci,
         gecikme_s=psi / (2 * math.pi * abs(ileri.hiz_hz)),
         gecikme_belirsizligi_s=sigma_psi / (2 * math.pi * abs(ileri.hiz_hz)),
         cift_yon=True,
@@ -705,6 +764,7 @@ class OlcumKaydi:
                     ["zaman", "tur", "kanal", "hiz_hz", "tur_sayisi", "tepe_mV", "faz_ofseti_derece",
                      "gecikme_ms", "cift_yon", "artik_orani", "saat_sicramasi", "aci_yontemi", "G_T_m", "x_c_um", "y_c_um"]
                     + [f"{ad}{n}_T" for n in range(1, len(sonuc.harmonikler) + 1) for ad in ("b", "a")]
+                    + ["ayiklanan_aci"]
                 )
             z = sonuc.merkez_m * 1e6
             yazici.writerow(
@@ -713,6 +773,7 @@ class OlcumKaydi:
                  f"{sonuc.gecikme_s * 1e3:.4f}", int(sonuc.cift_yon), f"{sonuc.artik_orani:.2e}",
                  f"{sonuc.saat_sicramasi:.3f}", sonuc.aci_yontemi, f"{sonuc.gradyen_T_m:.6g}", f"{z.real:.3f}", f"{z.imag:.3f}"]
                 + [f"{x:.6e}" for c in sonuc.harmonikler for x in (c.real, c.imag)]
+                + [sonuc.ayiklanan_aci]
             )
         self.satir_sayisi += 1
 

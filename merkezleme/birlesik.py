@@ -28,17 +28,20 @@ from datetime import datetime
 from pathlib import Path
 from typing import Callable
 
-from PySide6.QtCore import Qt, QTimer
+from PySide6.QtCore import QEvent, QObject, Qt, QTimer
+from PySide6.QtGui import QColor
 from PySide6.QtWidgets import (
     QApplication,
     QCheckBox,
     QDoubleSpinBox,
     QFormLayout,
+    QGraphicsColorizeEffect,
     QGroupBox,
     QHBoxLayout,
     QLabel,
     QMainWindow,
     QMessageBox,
+    QPlainTextEdit,
     QPushButton,
     QSpinBox,
     QStackedWidget,
@@ -456,6 +459,69 @@ class KararlilikSekmesi(QWidget):
         self.ozet.setText(metin)
 
 
+class DugmeGeriBildirimi(QObject):
+    """Basılan düğmeyi kısa süre yeşile boyar ve durum çubuğuna yazar.
+
+    Temada fare üstündeyken düğme zaten ters renkte; basınca görünür bir değişiklik
+    olmuyordu ve "ADC'yi yeniden ayarla" gibi düğmelerin sonucu yalnızca Günlük
+    sekmesine düşüyordu (11 Kasım). Uygulama geneline olay süzgeci olarak kurulur,
+    sonradan oluşan düğmeleri de kapsar. Basıştan sonraki GUNLUK_S saniye içinde
+    dönen bobin günlüğüne düşen satır, düğmenin sonucu olarak durum çubuğuna eklenir."""
+
+    RENK = "#2ecc71"
+    SURE_MS = 600
+    GUNLUK_S = 2.0
+    MESAJ_MS = 15000
+
+    def __init__(self, pencere: QMainWindow) -> None:
+        super().__init__(pencere)
+        self.pencere = pencere
+        self._son: tuple[str, float, str] | None = None  # (düğme metni, monotonic, saat)
+        self._sonuc_yazildi = False
+
+    def eventFilter(self, nesne, olay) -> bool:  # noqa: N802 - Qt adı
+        # Süzgeç düğmeden ÖNCE çalışır: basış burada kaydedilir ki clicked içinde
+        # (eşzamanlı) yazılan günlük satırı bu basışın sonucu sayılabilsin.
+        if (olay.type() == QEvent.Type.MouseButtonRelease and isinstance(nesne, QPushButton)
+                and nesne.isEnabled() and nesne.isDown()
+                and nesne.rect().contains(olay.position().toPoint())
+                and nesne.window() is self.pencere):
+            self._son = (nesne.text().replace("&", ""), time.monotonic(), f"{datetime.now():%H:%M:%S}")
+            self._sonuc_yazildi = False
+            QTimer.singleShot(0, lambda d=nesne: self.bildir(d))
+        return False
+
+    def bildir(self, dugme: QPushButton) -> None:
+        try:
+            if dugme.graphicsEffect() is None:
+                etki = QGraphicsColorizeEffect(dugme)
+                etki.setColor(QColor(self.RENK))
+                etki.setStrength(0.9)
+                dugme.setGraphicsEffect(etki)
+                QTimer.singleShot(self.SURE_MS, lambda: self._etkiyi_kaldir(dugme, etki))
+        except RuntimeError:  # düğme bu arada silindi
+            return
+        if self._son is not None and not self._sonuc_yazildi:
+            metin, _, saat = self._son
+            self.pencere.statusBar().showMessage(f"{saat}  ✓ '{metin}' basıldı", self.MESAJ_MS)
+
+    @staticmethod
+    def _etkiyi_kaldir(dugme: QPushButton, etki) -> None:
+        try:
+            if dugme.graphicsEffect() is etki:
+                dugme.setGraphicsEffect(None)
+        except RuntimeError:
+            pass
+
+    def gunluk_satiri(self, satir: str) -> None:
+        if self._son is None or time.monotonic() - self._son[1] > self.GUNLUK_S:
+            return
+        metin, _, saat = self._son
+        self._sonuc_yazildi = True
+        satir = satir.split("  ", 1)[-1]  # başındaki "HH:MM:SS  "
+        self.pencere.statusBar().showMessage(f"{saat}  ✓ '{metin}': {satir}", self.MESAJ_MS)
+
+
 class BirlesikPencere(QMainWindow):
     def __init__(self, bobin_penceresi: QMainWindow, merkezleme: MerkezlemeSekmesi) -> None:
         super().__init__()
@@ -473,8 +539,16 @@ class BirlesikPencere(QMainWindow):
             if hasattr(self.bobin, "arka_plan_kaynagi"):
                 self.bobin.arka_plan_kaynagi = self.merkezleme.arka_plan
         self.setCentralWidget(self.sekmeler)
+        self.geri_bildirim = DugmeGeriBildirimi(self)
+        QApplication.instance().installEventFilter(self.geri_bildirim)
+        if isinstance(getattr(self.bobin, "gunluk", None), QPlainTextEdit):
+            belge = self.bobin.gunluk
+            belge.textChanged.connect(
+                lambda: self.geri_bildirim.gunluk_satiri(belge.document().lastBlock().text()))
+        self.statusBar().showMessage("Basılan düğme yeşile döner; sonucu burada görünür.")
 
     def closeEvent(self, olay) -> None:  # noqa: N802 - Qt adı
+        QApplication.instance().removeEventFilter(self.geri_bildirim)
         try:
             self.merkezleme.kapat()   # akımlar sıfıra, çıkışlar kapalı, özet
         finally:

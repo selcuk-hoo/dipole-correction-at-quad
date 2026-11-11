@@ -358,7 +358,7 @@ def test_surekli_olcum_csv_ve_istatistik(kurulum, p):
     assert not p.kilit_dosyasi.exists()
 
     satirlar = list(csv.reader(dongu.kayit.yol.open(encoding="utf-8")))
-    assert satirlar[0][:3] == ["zaman", "tur", "kanal"] and satirlar[0][-1] == "a6_T"
+    assert satirlar[0][:3] == ["zaman", "tur", "kanal"] and satirlar[0][-2:] == ["a6_T", "ayiklanan_aci"]
     for sutun in ("gecikme_ms", "cift_yon", "artik_orani", "saat_sicramasi", "aci_yontemi"):
         assert sutun in satirlar[0]
     assert len(satirlar) == 1 + 5 and {s[1] for s in satirlar[1:]} == {"surekli"}

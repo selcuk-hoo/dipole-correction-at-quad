@@ -205,3 +205,30 @@ def test_adim_etiketi_bitince_net(qt_uygulama, kfg_tmp):
         sekme._otomatik_ilerle(); QApplication.processEvents()
     assert e.text().startswith("TAMAMLANDI") and "düzeltme iterasyonu" in e.text()
     sekme.kapat()
+
+
+def test_basilan_dugme_yesile_doner_ve_sonucu_durum_cubuguna_yazilir(qt_uygulama, kfg_tmp, monkeypatch):
+    from PySide6.QtCore import QPoint, Qt
+    from PySide6.QtTest import QTest
+    from PySide6.QtWidgets import QPlainTextEdit, QPushButton
+
+    class SahteBobin(QMainWindow):
+        def __init__(self):
+            super().__init__()
+            self.gunluk = QPlainTextEdit()
+            self.dugme = QPushButton("ADC'yi yeniden ayarla", self)
+            self.dugme.resize(200, 30)
+            self.dugme.clicked.connect(lambda: self.gunluk.appendPlainText("13:37:20  ADC ayarları yeniden gönderildi."))
+
+    sekme = MerkezlemeSekmesi(kfg_tmp, False, lambda: (False, "bağlı değil"), olcum_kaynagi_uret=_simulator)
+    bobin = SahteBobin()
+    pencere = BirlesikPencere(bobin, sekme)
+    pencere.show()
+    QTest.mouseClick(bobin.dugme, Qt.MouseButton.LeftButton, pos=QPoint(10, 10))
+    QTest.qWait(50)
+    assert bobin.dugme.graphicsEffect() is not None
+    mesaj = pencere.statusBar().currentMessage()
+    assert "ADC'yi yeniden ayarla" in mesaj and "yeniden gönderildi" in mesaj
+    QTest.qWait(pencere.geri_bildirim.SURE_MS + 100)
+    assert bobin.dugme.graphicsEffect() is None
+    pencere.close()

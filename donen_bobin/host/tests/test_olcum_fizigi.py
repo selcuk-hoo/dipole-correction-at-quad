@@ -58,7 +58,7 @@ class BagimsizModel:
         return np.sum(w * (f.real * dz.real[..., None] - f.imag * dz.imag[..., None]), axis=-1)
 
     def veri(self, bobin, f_hz=23.0, sure_s=2.0, dalga_derece=0.0, tohum=0,
-             titresim_s=0.0, atla=0.0, kayip=0, gurultu_V=0.0, dipol_T=None):
+             titresim_s=0.0, atla=0.0, kayip=0, gurultu_V=0.0, dipol_T=None, bozuk=0, cift_bozuk=0):
         """(enkoder açısı °, bobin gerilimi V) — firmware'in gönderdiği gibi."""
         rng = np.random.default_rng(tohum)
         w = 2 * math.pi * f_hz
@@ -84,7 +84,13 @@ class BagimsizModel:
         okuma = okuma[rng.random(len(okuma)) >= atla]
         okuma = np.sort(okuma + rng.normal(0.0, titresim_s, len(okuma)) if titresim_s else okuma)
         k = np.searchsorted(okuma + ENKODER_ILETIMI_S, t, side="right") - 1
-        aci = (np.degrees(teta(okuma[k])) % 360).astype(np.float32)
+        okuma_aci = np.degrees(teta(okuma)) % 360
+        if bozuk or cift_bozuk:  # RS485'te bozulmuş okumalar: anlamsız açı (11 Kasım)
+            secilen = rng.choice(np.arange(20, len(okuma) - 20, 5), bozuk + cift_bozuk, replace=False)
+            for j, i in enumerate(secilen):
+                for m in range(2 if j >= bozuk else 1):
+                    okuma_aci[i + m] = (okuma_aci[i + m] + rng.uniform(30, 330)) % 360
+        aci = okuma_aci[k].astype(np.float32)
         v = v.astype(np.float32)
         if kayip:
             sil = rng.choice(np.arange(1000, len(t) - 1000), kayip, replace=False)
@@ -177,6 +183,7 @@ def test_enkoder_atlama_ve_titresimi(model):
     s = olc(model, bobin(), atla=0.01, titresim_s=5e-6, gecikme_s=NET_GECIKME_S)
     assert abs(s.merkez_m - model.merkez) < 2e-6
     assert s.saat_sicramasi < 0.4  # atlanan okumalar ve titreşim kayıp sanılmaz
+    assert s.ayiklanan_aci == 0  # atlanan okuma bozuk sanılmaz
 
 
 @pytest.mark.parametrize("tohum", range(4))
@@ -205,3 +212,39 @@ def test_gurultu_ve_sure(model):
     """1 µV gürültü (ADC 32x tabanının birkaç katı) merkezde µm altı hata."""
     s = olc(model, bobin(), gurultu_V=1e-6, gecikme_s=NET_GECIKME_S)
     assert abs(s.merkez_m - model.merkez) < 1e-6
+
+
+@pytest.mark.parametrize("f_hz", [8.0, 13.0, 23.0])
+def test_bozuk_enkoder_okumalari_onarilir(model, f_hz):
+    """11 Kasım: RS485'te bozulan tek ya da iki ardışık okuma anlamsız açı taşır
+    ve onarılmazsa artığı eşiğin üstüne çıkarıp ölçümü reddettirir."""
+    p = mk.parametreleri_yukle()
+    b = bobin()
+    kw = dict(f_hz=f_hz, bozuk=6, cift_bozuk=2, gecikme_s=NET_GECIKME_S)
+    s = olc(model, b, **kw)
+    assert s.ayiklanan_aci == 6 + 2 * 2
+    assert abs(s.merkez_m - model.merkez) < 0.5e-6
+    assert s.artik_orani < p.artik_esigi / 10 and mk.saglik_sorunlari(s, p) == []
+    with pytest.MonkeyPatch.context() as mp:  # onarım olmasa reddedilirdi
+        mp.setattr(mk, "bozuk_acilari_ayikla", lambda a: (np.asarray(a, dtype=np.float64), 0))
+        assert olc(model, b, **kw).artik_orani > p.artik_esigi
+
+
+def test_karsi_aciya_dusen_bozuk_okuma_turu_kaydirmaz():
+    """Bozuk değer gerçek açının ~180° karşısına düşerse unwrap bütün sonraki
+    açıyı bir tur kaydırabilir; onarım unwrap'tan önce yapıldığı için olmaz."""
+    okumalar = (np.arange(400) * 2.9) % 360
+    okumalar[100] = (okumalar[99] + 181.5) % 360
+    aci = np.repeat(okumalar, 3)
+    duz, sayi = mk.bozuk_acilari_ayikla(aci)
+    assert sayi == 1
+    acilmis = np.degrees(np.unwrap(np.radians(duz)))
+    assert acilmis[-1] - acilmis[0] == pytest.approx(399 * 2.9, abs=1e-6)
+
+
+def test_motor_dururken_ve_saglam_veride_onarim_yok():
+    durgun = np.full(1000, 123.4)
+    durgun[::7] += 0.1  # enkoder titreşimi (1 adım)
+    assert mk.bozuk_acilari_ayikla(durgun)[1] == 0
+    duzgun = np.repeat((np.arange(500) * 2.9 + np.random.default_rng(1).normal(0, 0.2, 500)) % 360, 3)
+    assert mk.bozuk_acilari_ayikla(duzgun)[1] == 0

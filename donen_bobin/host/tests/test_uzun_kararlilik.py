@@ -84,9 +84,9 @@ def test_butun_fazlar_kaydedilir_ve_ayni_akimlara_donulur(duzenek):
         x = np.array([s["x_net_um"] for s in f[ad]])
         y = np.array([s["y_net_um"] for s in f[ad]])
         assert np.all(np.isfinite(x)) and abs(x.mean()) < 15 and abs(y.mean()) < 15
-    i1 = np.array([[f["akimli1"][-1][f"I{k}_A"] for k in range(1, 5)]])
-    i2 = np.array([[f["akimli2"][-1][f"I{k}_A"] for k in range(1, 5)]])
-    assert np.allclose(i1, i2) and np.all(i1 > 9.0)  # yeniden optimize edilmedi
+    a = olcum.faz_ayarlari  # geri okunan akımlar iş parçacığından gelir, gecikebilir; ayarlar kesin
+    assert np.array_equal(a["akimli1"], a["akimli2"]) and np.all(a["akimli1"] > 9.0)  # yeniden optimize yok
+    assert all(np.allclose(a[ad], 0) for ad in ("ortam1", "ortam2", "ortam3"))
     assert np.allclose(d.grup.ayar_akimlari_A, 0)  # sonda akımlar sıfır
     satirlar = olcum.csv_yolu.read_text(encoding="utf-8").splitlines()
     assert satirlar[0].split(",") == uk.SUTUNLAR and len(satirlar) == 1 + sum(len(v) for v in f.values())

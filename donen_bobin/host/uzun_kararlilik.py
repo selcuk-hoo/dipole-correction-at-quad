@@ -126,6 +126,7 @@ class UzunOlcum:
         with open(self.csv_yolu, "w", newline="", encoding="utf-8") as f:
             csv.writer(f).writerow(SUTUNLAR)
         self.faz_satirlari: dict[str, list[dict]] = {}
+        self.faz_ayarlari: dict[str, np.ndarray] = {}  # her fazda güç kaynaklarına yazılmış akımlar
         self._son_ham_t = 0.0
 
     # --- bekleme ve sağlık -------------------------------------------------
@@ -195,6 +196,7 @@ class UzunOlcum:
         self.d.otomatik_yaz_ayarla(False)  # sürekli ölçüm
         bitis = time.monotonic() + sure_s
         satirlar = self.faz_satirlari.setdefault(faz, [])
+        self.faz_ayarlari[faz] = np.array(self.grup.ayar_akimlari_A, dtype=float)
         if not self.akimli:
             self._ortam_gecmisi = []
         self._biriken = []

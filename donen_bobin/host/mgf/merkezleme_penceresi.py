@@ -289,6 +289,12 @@ class MerkezlemePenceresi(QMainWindow):
         self.lbl_zaman = self._deger_etiketi(g, 2, 2, "Zaman")
         self.lbl_xc = self._deger_etiketi(g, 3, 0, "x_c")
         self.lbl_yc = self._deger_etiketi(g, 3, 2, "y_c")
+        # Birleşik arayüzde: merkezleme'nin son arka planı (quad akımları en son
+        # sıfırken ölçülen ortam alanı) çıkarılmış dipol ve merkez
+        self.lbl_net_b0 = self._deger_etiketi(g, 4, 0, "Net b0 (arka plan çıkarılmış)")
+        self.lbl_net_a0 = self._deger_etiketi(g, 4, 2, "Net a0 (arka plan çıkarılmış)")
+        self.lbl_net_xc = self._deger_etiketi(g, 5, 0, "Net x_c")
+        self.lbl_net_yc = self._deger_etiketi(g, 5, 2, "Net y_c")
         kok.addWidget(kutu)
 
         # Sekmeler: çok kutuplar, bobin akısı, ham gerilim, günlük
@@ -818,6 +824,25 @@ class MerkezlemePenceresi(QMainWindow):
         self.lbl_xc.setText(f"{z.real:+.2f} µm")
         self.lbl_yc.setText(f"{z.imag:+.2f} µm")
         self.lbl_zaman.setText(f"{d.son_sonuc_zamani:%H:%M:%S}")
+        net = self.net_harmonikler(s)
+        if net is None:
+            for lbl in (self.lbl_net_b0, self.lbl_net_a0, self.lbl_net_xc, self.lbl_net_yc):
+                lbl.setText("— (arka plan yok)")
+        else:
+            c1, c2 = net
+            self.lbl_net_b0.setText(f"{c1.real * 1e6:+.3f} µT")
+            self.lbl_net_a0.setText(f"{c1.imag * 1e6:+.3f} µT")
+            zn = -s.r_ref_m * c1 / c2 * 1e6 if c2 != 0 else complex("nan")
+            self.lbl_net_xc.setText(f"{zn.real:+.2f} µm")
+            self.lbl_net_yc.setText(f"{zn.imag:+.2f} µm")
+
+    def net_harmonikler(self, s) -> tuple[complex, complex] | None:
+        """Son ölçümün C1, C2'sinden merkezleme'nin son arka planı çıkarılmış hâli
+        (Tesla); arka plan yoksa None."""
+        arka = self.arka_plan_kaynagi()
+        if not arka or 1 not in arka:
+            return None
+        return s.c1 - arka[1], s.c2 - arka.get(2, 0j)
 
     def closeEvent(self, event) -> None:
         if self.dongu.durum is not Durum.BAGLI_DEGIL:

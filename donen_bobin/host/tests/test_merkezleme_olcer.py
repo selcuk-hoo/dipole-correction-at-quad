@@ -1077,7 +1077,13 @@ def test_alan_grafiginden_arka_plan_cikarilir(kurulum, p, monkeypatch):
     assert pencere.dongu.gecmis
     pencere.chk_arka_cikar.setChecked(True)
     assert "ARKA PLAN ÇIKARILMIŞ" not in pencere.lbl_cok_kutup.text()  # kaynak yok: değişmez
+    pencere._yenile()
+    assert "arka plan yok" in pencere.lbl_net_b0.text()
+    assert abs(float(pencere.lbl_b0.text().split()[0]) - 40e-6) < 2e-6  # ham: ortam alanı içinde
     pencere.arka_plan_kaynagi = lambda: {1: complex(40e-6, 0)}
+    pencere._yenile()
+    assert abs(float(pencere.lbl_net_b0.text().split()[0])) < 2.0  # µT: 40 µT çıkarıldı
+    assert pencere.lbl_net_xc.text().endswith("µm")
     pencere._grafikleri_ciz()
     metin = pencere.lbl_cok_kutup.text()
     assert "ARKA PLAN ÇIKARILMIŞ" in metin and "|C<sub>1</sub>| = " in metin

@@ -266,21 +266,39 @@ class UzunOlcum:
         self.akimli = True
         return akimlar
 
-    def calistir(self) -> None:
+    def calistir(self, akimlar: np.ndarray | None = None) -> None:
+        """Fazları sırayla yürütür. `akimlar` verilirse merkezleme atlanır ve bu
+        akımlar kullanılır (kesilen bir ölçümü bobin durmadan sürdürmek için).
+        Süresi 0 olan fazlar atlanır."""
         self._akim_isi = threading.Thread(target=self._akimlari_oku, daemon=True)
         self._akim_isi.start()
         s = dict(zip(FAZLAR, self.sureler_s))
-        self.kayit_fazi("ortam1", s["ortam1"])
-        akimlar = self.merkezle()
-        self.kayit_fazi("akimli1", s["akimli1"])
-        self._rampala(np.zeros(4))
-        self.kayit_fazi("ortam2", s["ortam2"])
-        self._rampala(akimlar)
-        self.bekle(10.0)  # rampa sonrası ilk ölçümler otursun
-        self._biriken = []
-        self.kayit_fazi("akimli2", s["akimli2"])
-        self._rampala(np.zeros(4))
-        self.kayit_fazi("ortam3", s["ortam3"])
+
+        def akimlari_ac(hedef: np.ndarray) -> None:
+            self._rampala(hedef)
+            self.bekle(10.0)  # rampa sonrası ilk ölçümler otursun
+            self._biriken = []
+
+        if s["ortam1"] > 0:
+            self.kayit_fazi("ortam1", s["ortam1"])
+        if akimlar is None:
+            akimlar = self.merkezle()
+        else:
+            akimlar = np.asarray(akimlar, dtype=float)
+            self.bildir(f"▶ merkezleme atlandı; akımlar <b>{' / '.join(f'{a:.4f}' for a in akimlar)}</b> A")
+            akimlari_ac(akimlar)
+        if s["akimli1"] > 0:
+            self.kayit_fazi("akimli1", s["akimli1"])
+        if s["ortam2"] > 0:
+            self._rampala(np.zeros(4))
+            self.kayit_fazi("ortam2", s["ortam2"])
+        if s["akimli2"] > 0:
+            if not self.akimli:
+                akimlari_ac(akimlar)
+            self.kayit_fazi("akimli2", s["akimli2"])
+        if s["ortam3"] > 0:
+            self._rampala(np.zeros(4))
+            self.kayit_fazi("ortam3", s["ortam3"])
 
     def durdur(self) -> None:
         self._akim_dur.set()
@@ -307,6 +325,8 @@ def main(argv: list[str] | None = None) -> int:
     a.add_argument("--nominal", type=float, default=9.5)
     a.add_argument("--tolerans", type=float, default=10.0, help="merkez toleransı (µm)")
     a.add_argument("--hiz", type=float, default=8.0)
+    a.add_argument("--akimlar", type=float, nargs=4, default=None, metavar=("I1", "I2", "I3", "I4"),
+                   help="merkezlemeyi atla, bu akımları kullan (kesilen ölçümü sürdürmek için)")
     a.add_argument("--yapilandirma", default=str(KOK / "yapilandirma.yaml"))
     a.add_argument("--parametreler", default=None)
     g = a.parse_args(argv)
@@ -314,10 +334,21 @@ def main(argv: list[str] | None = None) -> int:
         from uyku import uykuyu_engelle
 
         uykuyu_engelle("Uzun kararlılık ölçümü sürüyor")
+    # SIGTERM (systemctl stop, kill, zaman sınırı) de Ctrl+C gibi güvenli kapanışa gitsin:
+    # 12 Kasım 14:00'te süreç dışarıdan öldürüldü, kapanış kodu çalışmadı (motor dönmeye devam etti).
+    import signal
+
+    def _sigterm(_imza, _cerceve):
+        raise KeyboardInterrupt("SIGTERM")
+
+    signal.signal(signal.SIGTERM, _sigterm)
     if not 0 < g.hiz <= 8.0:
         print("hız en fazla 8 Hz (11 Kasım: 10 Hz'de ADC takıldı)", file=sys.stderr)
         return 2
     sureler_s = [120.0] * 5 if g.kisa else [m * 60 for m in g.sureler]
+    if g.akimlar is not None and not all(0 < a <= 10.0 for a in g.akimlar):
+        print("akımlar 0 ile 10 A arasında olmalı", file=sys.stderr)
+        return 2
 
     from merkezleme.birlesik import ayarlari_uygula
     from merkezleme.guc_kaynagi import KaynakGrubu, KomutGunlugu
@@ -354,7 +385,7 @@ def main(argv: list[str] | None = None) -> int:
         toplam = sum(sureler_s) / 60
         telegram(f"🟢 <b>Uzun kararlılık ölçümü başladı</b>\n\n~{toplam + 10:.0f} dk; "
                  f"kayıt: <code>{olcum.csv_yolu.relative_to(KOK)}</code>")
-        olcum.calistir()
+        olcum.calistir(None if g.akimlar is None else np.array(g.akimlar))
         telegram("🟢 <b>Uzun ölçüm bitti</b>\n\n" + "\n".join(
             f"<b>{f}</b>: {faz_ozeti(olcum.faz_satirlari.get(f, []))}" for f in FAZLAR))
     except (Exception, KeyboardInterrupt) as hata:

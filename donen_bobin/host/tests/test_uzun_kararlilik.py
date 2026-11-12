@@ -111,3 +111,19 @@ def test_kaydi_hesapla_net_merkez():
     assert k["x_net_um"] == pytest.approx(-0.025 * 2e-6 / 2.4e-3 * 1e6)
     assert k["sB1_uT"] == pytest.approx(1.0)
     assert math.isnan(uk.kaydi_hesapla(o, None, 0.025)["x_net_um"])
+
+
+def test_akimlar_verilince_merkezleme_atlanir_ve_sifir_fazlar_atlanir(duzenek):
+    d = duzenek
+    mesajlar: list[str] = []
+    akimlar = np.array([9.53, 9.41, 9.47, 9.60])
+    olcum = uk.UzunOlcum(d.p, d.kfg, d.dongu, d.grup, [40.0, 0.0, 0.0, 60.0, 30.0], 10.0, mesajlar.append)
+    d.grup.bekle = olcum.bekle
+    olcum.calistir(akimlar)
+    olcum.durdur()
+    assert set(olcum.faz_satirlari) == {"ortam1", "akimli2", "ortam3"}
+    assert np.allclose(olcum.faz_ayarlari["akimli2"], akimlar)
+    assert all(math.isfinite(s["x_net_um"]) for s in olcum.faz_satirlari["akimli2"])  # arka plan: ortam1
+    assert any("merkezleme atlandı" in m for m in mesajlar)
+    assert not any("merkezleme</b> başladı" in m for m in mesajlar)
+    assert np.allclose(d.grup.ayar_akimlari_A, 0)

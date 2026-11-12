@@ -185,3 +185,101 @@ def test_baglanirken_akim_yoksa_dogrudan_sifir(kaynak_grubu_uret):
     g.baslat()
     curr = [k.komut for k in g.gunluk.kayitlar if k.komut.startswith("CURR")]
     assert curr == ["CURR 0"] * 4
+
+
+# ---------------------------------------------------------------------------
+# Yanıt kayması (12 Kasım: zaman aşımına uğrayan sorgunun yanıtı tamponda kaldı,
+# sonraki her sorgu bir önceki yanıtı aldı: *IDN? -> '0', SYST:ERR? -> '6.74978')
+# ---------------------------------------------------------------------------
+class _SahteSeri:
+    """pyvisa seri kaynağı gibi: query yazar ve tampondaki İLK yanıtı okur."""
+
+    def __init__(self, akim="9.5", zaman_asimi_sayisi=0):
+        self.tampon: list[str] = []
+        self.akim = akim
+        self.zaman_asimi_sayisi = zaman_asimi_sayisi
+        self.bosaltma = 0
+        self.timeout = 2000
+
+    def _yanit(self, komut):
+        if komut.startswith("SYST:ERR"):
+            return '0,"No error"\n'
+        if komut.startswith("*IDN"):
+            return "ITECH Electronics,IT-M3233,1,0.47\n"
+        return self.akim + "\n"
+
+    def query(self, komut):
+        self.tampon.append(self._yanit(komut))
+        if self.zaman_asimi_sayisi:
+            self.zaman_asimi_sayisi -= 1
+            raise TimeoutError("VI_ERROR_TMO")  # yanıt geç gelir, tamponda kalır
+        return self.tampon.pop(0)
+
+    def write(self, komut):
+        pass
+
+    def flush(self, _maske):
+        self.bosaltma += 1
+        self.tampon.clear()
+
+
+def _kaynak(cihaz):
+    import threading as _th
+
+    from merkezleme.guc_kaynagi import GucKaynagi, KomutGunlugu
+
+    k = GucKaynagi.__new__(GucKaynagi)
+    k.adres, k.gunluk, k._cihaz, k._kilit = "SAHTE", KomutGunlugu(), cihaz, _th.RLock()
+    return k
+
+
+@pytest.mark.parametrize("komut,yanit,uygun", [
+    ("SYST:ERR?", '0,"No error"', True), ("SYST:ERR?", "6.74978", False),
+    ("SYST:ERR?", '-200,"Execution error"', True), ("*IDN?", "ITECH Electronics,IT-M3233,1,0.47", True),
+    ("*IDN?", "0", False), ("MEAS:CURR?", "9.21231", True), ("MEAS:CURR?", '0,"No error"', False),
+    ("MEAS:VOLT?", "9.143e-05", True),
+])
+def test_yanit_bicimi_denetlenir(komut, yanit, uygun):
+    from merkezleme.guc_kaynagi import yanit_bicimi_uygun
+
+    assert yanit_bicimi_uygun(komut, yanit) is uygun
+
+
+def test_tamponda_kalan_eski_yanit_atilir(monkeypatch):
+    import merkezleme.guc_kaynagi as gk
+
+    monkeypatch.setattr(gk, "GEC_YANIT_BEKLEMESI_S", 0.0)
+    cihaz = _SahteSeri()
+    cihaz.tampon.append("9.5\n")  # önceki zaman aşımından kalan yanıt
+    k = _kaynak(cihaz)
+    k.hatalari_kontrol_et("CURR 7")  # eskiden '9.5' hata kodu sanılıp yükseltiliyordu
+    assert k.akim_oku() == pytest.approx(9.5)
+
+
+def test_zaman_asimindan_sonra_kayma_olmaz(monkeypatch):
+    import merkezleme.guc_kaynagi as gk
+
+    monkeypatch.setattr(gk, "GEC_YANIT_BEKLEMESI_S", 0.0)
+    cihaz = _SahteSeri(zaman_asimi_sayisi=1)
+    k = _kaynak(cihaz)
+    assert k.akim_oku() == pytest.approx(9.5)  # ilk deneme zaman aşımı, ikinci doğru
+    k.hatalari_kontrol_et("CURR 7")  # sonraki sorgular kaymaz
+    assert "ITECH" in k._sorgula("*IDN?")
+    assert any("sorgu hatası" in (r.yanit or "") for r in k.gunluk.kayitlar)
+
+
+def test_kayma_surerse_acik_hata(monkeypatch):
+    import merkezleme.guc_kaynagi as gk
+
+    monkeypatch.setattr(gk, "GEC_YANIT_BEKLEMESI_S", 0.0)
+
+    class HepKayik(_SahteSeri):
+        def flush(self, _maske):  # boşaltma işe yaramıyor
+            self.bosaltma += 1
+
+        def query(self, komut):
+            return "6.74978\n"
+
+    k = _kaynak(HepKayik())
+    with pytest.raises(gk.GucKaynagiHatasi, match="yanıt kayması"):
+        k.hatalari_kontrol_et("CURR 7")

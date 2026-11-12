@@ -26,6 +26,7 @@ Eklenenler
 from __future__ import annotations
 
 import math
+import re
 import threading
 import time
 from dataclasses import dataclass, field
@@ -102,6 +103,25 @@ class GucKaynagiArayuzu(Protocol):
     def kapat(self) -> None: ...
 
 
+SORGU_ZAMAN_ASIMI_MS = 5000
+GEC_YANIT_BEKLEMESI_S = 0.3
+_SAYI = re.compile(r"^\s*[+-]?(\d+\.?\d*|\.\d+)([eE][+-]?\d+)?\s*$")
+_HATA_KODU = re.compile(r"^\s*[+-]?\d+\s*,")
+
+
+def yanit_bicimi_uygun(komut: str, yanit: str) -> bool:
+    """Yanıtın biçimi sorguya uyuyor mu (yanıt kaymasını yakalamak için)."""
+    k = komut.strip().upper()
+    y = str(yanit).strip()
+    if k.startswith("SYST:ERR"):
+        return bool(_HATA_KODU.match(y))
+    if k.startswith("*IDN"):
+        return "," in y and not _HATA_KODU.match(y) and not _SAYI.match(y)
+    if k.startswith(("MEAS:", "CURR?", "VOLT?")):
+        return bool(_SAYI.match(y))
+    return True
+
+
 class _TemelKaynak:
     """Gerçek ve sahte kaynağın paylaştığı günlük/ayrıştırma mantığı."""
 
@@ -154,6 +174,10 @@ class GucKaynagi(_TemelKaynak):
             ) from hata
         self._rm = pyvisa.ResourceManager("@py")
         self._cihaz = self._rm.open_resource(adres)
+        # MEAS:CURR? ~0.5-0.7 s, ara sıra daha uzun; pyvisa'nın 2 s varsayılanı
+        # aşılınca geç gelen yanıt tamponda kalıyor ve sonraki her sorgu bir
+        # önceki yanıtı alıyordu (12 Kasım: *IDN? -> '0', SYST:ERR? -> '6.74978').
+        self._cihaz.timeout = SORGU_ZAMAN_ASIMI_MS
         # Kararlılık izlemesi akımları ayrı bir iş parçacığında okur; aynı
         # cihaza iki istek iç içe geçmesin (yazma + yanıt okuma tek bütün)
         self._kilit = threading.RLock()
@@ -168,11 +192,38 @@ class GucKaynagi(_TemelKaynak):
             if hata_kontrolu:
                 self.hatalari_kontrol_et(komut)
 
+    def _okuma_tamponunu_bosalt(self) -> None:
+        """Tamponda bekleyen (geç gelmiş) yanıtları atar."""
+        try:
+            from pyvisa import constants
+
+            self._cihaz.flush(constants.BufferOperation.discard_read_buffer)
+        except Exception:  # noqa: BLE001 - desteklenmiyorsa denetim yine kaymayı yakalar
+            pass
+
     def _sorgula(self, komut: str) -> str:
+        """Sorgu: önce bekleyen eski yanıtlar atılır; yanıtın biçimi komuta uymuyorsa
+        (yanıt kayması) tampon boşaltılıp bir kez daha sorulur. Zaman aşımında da
+        geç gelecek yanıt beklenip atılır."""
         with self._kilit:
-            yanit = self._cihaz.query(komut)
-            self._kaydet(komut, yanit=yanit)
-            return yanit
+            for deneme in range(1, 3):
+                self._okuma_tamponunu_bosalt()
+                try:
+                    yanit = self._cihaz.query(komut)
+                except Exception as hata:  # noqa: BLE001 - pyvisa zaman aşımı vb.
+                    self._kaydet(komut, yanit=f"(sorgu hatası: {hata!r})")
+                    time.sleep(GEC_YANIT_BEKLEMESI_S)
+                    self._okuma_tamponunu_bosalt()
+                    if deneme == 2:
+                        raise GucKaynagiHatasi(f"{self.adres}: sorgu başarısız ({komut}): {hata!r}") from hata
+                    continue
+                self._kaydet(komut, yanit=yanit)
+                if yanit_bicimi_uygun(komut, yanit):
+                    return yanit
+                self._kaydet(f"UYARI: yanıt kayması ({komut} <= {yanit!r}); tampon boşaltılıp yeniden soruluyor",
+                             gonderildi=False)
+                time.sleep(GEC_YANIT_BEKLEMESI_S)
+            raise GucKaynagiHatasi(f"{self.adres}: yanıt kayması sürüyor (komut: {komut}, son yanıt {yanit!r})")
 
     def hatalari_kontrol_et(self, baglam: str = "") -> None:
         """`SYST:ERR?` ile cihaz hatası var mı diye bakar; varsa yükseltir."""

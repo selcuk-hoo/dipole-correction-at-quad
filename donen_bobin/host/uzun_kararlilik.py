@@ -175,7 +175,9 @@ class UzunOlcum:
             sayac = self._ayar_sayaci
             try:
                 akim = [float(a) for a in self.grup.akimlari_oku()]
-            except Exception:  # noqa: BLE001 - okunamazsa NaN; sapma denetimi atlanır
+            except Exception as hata:  # noqa: BLE001 - okunamazsa NaN; sapma denetimi atlanır
+                # Yutulmasın: 12 Kasım'da sessiz bir zaman aşımı yanıt kaymasına yol açtı
+                print(f"{datetime.now():%H:%M:%S}  UYARI: akım okunamadı: {hata!r}", flush=True)
                 akim = [math.nan] * 4
             with self._akim_kilidi:
                 self._akim, self._akim_sayaci = akim, sayac

@@ -275,6 +275,8 @@ class UzunOlcum:
         s = dict(zip(FAZLAR, self.sureler_s))
 
         def akimlari_ac(hedef: np.ndarray) -> None:
+            if not self.grup.baslatildi:  # merkezleme atlanınca kaynakları akış başlatmaz
+                self.grup.baslat()
             self._rampala(hedef)
             self.bekle(10.0)  # rampa sonrası ilk ölçümler otursun
             self._biriken = []

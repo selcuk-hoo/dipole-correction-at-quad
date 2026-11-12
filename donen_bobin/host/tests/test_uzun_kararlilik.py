@@ -62,7 +62,6 @@ def duzenek(tmp_path, monkeypatch):
         dongu.tick()
         ilerle()
     assert dongu.durum is Durum.DONUYOR, dongu.durum
-    grup.baslat()
     return types.SimpleNamespace(kfg=kfg, p=p, sim=sim, grup=grup, dunya=dunya, dongu=dongu, ilerle=ilerle)
 
 

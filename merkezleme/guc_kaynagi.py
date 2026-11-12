@@ -103,6 +103,7 @@ class GucKaynagiArayuzu(Protocol):
     def kapat(self) -> None: ...
 
 
+_ORTAK_KILIT = threading.RLock()  # bütün gerçek kaynakların seri iletişimi
 SORGU_ZAMAN_ASIMI_MS = 5000
 GEC_YANIT_BEKLEMESI_S = 0.3
 _SAYI = re.compile(r"^\s*[+-]?(\d+\.?\d*|\.\d+)([eE][+-]?\d+)?\s*$")
@@ -174,13 +175,17 @@ class GucKaynagi(_TemelKaynak):
             ) from hata
         self._rm = pyvisa.ResourceManager("@py")
         self._cihaz = self._rm.open_resource(adres)
-        # MEAS:CURR? ~0.5-0.7 s, ara sıra daha uzun; pyvisa'nın 2 s varsayılanı
-        # aşılınca geç gelen yanıt tamponda kalıyor ve sonraki her sorgu bir
-        # önceki yanıtı alıyordu (12 Kasım: *IDN? -> '0', SYST:ERR? -> '6.74978').
+        # MEAS:CURR? ~0.7 s. 12 Kasım'daki yanıt kaymasında (*IDN? -> '0', SYST:ERR?
+        # -> '6.74978') hiçbir sorgu 2 s'ye yaklaşmamıştı; neden eş zamanlı erişim
+        # görünüyor (bkz. _ORTAK_KILIT). Daha uzun zaman aşımı yalnız ihtiyat.
         self._cihaz.timeout = SORGU_ZAMAN_ASIMI_MS
-        # Kararlılık izlemesi akımları ayrı bir iş parçacığında okur; aynı
-        # cihaza iki istek iç içe geçmesin (yazma + yanıt okuma tek bütün)
-        self._kilit = threading.RLock()
+        # Kararlılık izlemesi akımları ayrı bir iş parçacığında okur. Kilit BÜTÜN
+        # kaynaklar için ortaktır: aynı anda yalnızca bir sorgu. 12 Kasım'da iki
+        # iş parçacığı FARKLI kaynaklara aynı anda sorgu gönderince yanıtlar kaydı
+        # (yalnız okuma iş parçacığı konuşurken 30 dk hiç kayma yoktu; merkezleme
+        # akışı da konuşmaya başlayınca hemen başladı). Cihaz başına kilit bunu
+        # önlemiyordu.
+        self._kilit = _ORTAK_KILIT
 
     # ------------------------------------------------------------------
     # Alt seviye

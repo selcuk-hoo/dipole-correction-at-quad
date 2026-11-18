@@ -22,6 +22,7 @@ bilinçli olarak ASCII'dir; yalnızca insanın okuduğu metinler tam Türkçedir
 """
 from __future__ import annotations
 
+import math
 import time
 import traceback
 from typing import Any
@@ -92,6 +93,7 @@ class MerkezlemePencere(QWidget):
         deneme_kipi: bool = False,
         otomatik_kaynak_etiketi: str | None = None,
         devam: bool = False,
+        tema_yonet: bool = True,
     ) -> None:
         """`devam=True` ise akış `basla()` yerine `devam_ettir()` ile kurulur
         (durum dosyasından geri yüklenmiş bir akış için).
@@ -100,7 +102,11 @@ class MerkezlemePencere(QWidget):
         `akis.olcum_kaynagi`'ndan (örn. `DosyaGirisi`) otomatik doldurulmasını
         istiyorsanız üst şeritte gösterilecek etiketi verin (örn.
         "OTOMATİK ÖLÇÜM (dosya)"); yarı otomatik çalışma içindir - onay
-        düğmelerine yine kullanıcı basar."""
+        düğmelerine yine kullanıcı basar.
+
+        `tema_yonet=False`: pencere uygulamanın stil sayfasına dokunmaz ve tema
+        seçicisini göstermez (birleşik pencerede tema dönen bobin sekmesinden
+        gelir; iki tema sistemi birbirini eziyordu)."""
         super().__init__()
         self.kfg = yapilandirma
         self.akis = akis
@@ -109,7 +115,10 @@ class MerkezlemePencere(QWidget):
         self._otomatik_doldur = deneme_kipi or otomatik_kaynak_etiketi is not None
         self.bicim = yapilandirma.harmonikler.giris_bicimi
         self.tema: Tema = tema_al(yapilandirma.genel.tema)
+        self.tema_yonet = tema_yonet
         self._mesgul = False
+        self._merkez_gecmisi: list[tuple[str, float, float]] = []  # (etiket, x_um, y_um)
+        self._son_y_kimligi: int | None = None
 
         baslik = "pEDM Kuadrupol - Elektriksel Merkezleme"
         self.setWindowTitle(baslik + (" (devam)" if devam else ""))
@@ -130,6 +139,9 @@ class MerkezlemePencere(QWidget):
         duzen.addWidget(self._adim_panelini_kur())
         duzen.addWidget(self._akim_panelini_kur())
         duzen.addWidget(self._giris_panelini_kur())
+        gecmis = self._gecmis_grafigini_kur()
+        if gecmis is not None:
+            duzen.addWidget(gecmis)
         duzen.addWidget(self._sonuc_panelini_kur())
         duzen.addWidget(self._dugmeleri_kur())
         duzen.addWidget(self._rutin_dugmelerini_kur())
@@ -152,7 +164,8 @@ class MerkezlemePencere(QWidget):
         self.deneme_etiketi.setVisible(self._otomatik_doldur)
         duzen.addWidget(self.deneme_etiketi)
         duzen.addStretch(1)
-        duzen.addWidget(QLabel("Tema:"))
+        tema_etiketi = QLabel("Tema:")
+        duzen.addWidget(tema_etiketi)
         self.tema_secici = QComboBox()
         for ad, tema in TEMALAR.items():
             self.tema_secici.addItem(tema.baslik, ad)
@@ -161,6 +174,8 @@ class MerkezlemePencere(QWidget):
         self.tema_secici.setSizeAdjustPolicy(QComboBox.AdjustToContents)
         self.tema_secici.currentIndexChanged.connect(self._tema_degisti)
         duzen.addWidget(self.tema_secici)
+        tema_etiketi.setVisible(self.tema_yonet)
+        self.tema_secici.setVisible(self.tema_yonet)
         kutu.setLayout(duzen)
         return kutu
 
@@ -184,6 +199,8 @@ class MerkezlemePencere(QWidget):
         self.sutun_basliklari: list[QLabel] = []
         for sutun, baslik in enumerate(("Bobin", "ayar (A)", "ölçülen (A)", "nominale göre")):
             etiket = QLabel(baslik)
+            if sutun:
+                etiket.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
             izgara.addWidget(etiket, 0, sutun)
             self.sutun_basliklari.append(etiket)
         self.akim_etiketleri: list[tuple[QLabel, QLabel, QLabel]] = []
@@ -199,10 +216,18 @@ class MerkezlemePencere(QWidget):
 
     def _giris_panelini_kur(self) -> QWidget:
         harm = self.kfg.harmonikler
+        otomatik = self.otomatik_kaynak_etiketi is not None and not self.deneme_kipi
         kutu = QGroupBox(
             f"Harmonik girişi   (r_ref = {harm.r_ref_mm:g} mm, birim: {harm.birim})"
+            + ("  —  dönen bobinden kendiliğinden dolar; görmek ya da elle düzeltmek için işaretleyin"
+               if otomatik else "")
         )
+        dis = QVBoxLayout(kutu)
+        dis.setContentsMargins(4, 4, 4, 4)
+        self.giris_icerigi = QWidget()
+        dis.addWidget(self.giris_icerigi)
         duzen = QVBoxLayout()
+        duzen.setContentsMargins(0, 0, 0, 0)
 
         ust = QHBoxLayout()
         ust.addWidget(QLabel("Giriş biçimi:"))
@@ -267,9 +292,68 @@ class MerkezlemePencere(QWidget):
         self.yorum_etiketi.setWordWrap(True)
         duzen.addWidget(self.yorum_etiketi)
 
-        kutu.setLayout(duzen)
+        self.giris_icerigi.setLayout(duzen)
+        if otomatik:
+            # Otomatik kaynakta alanlar kendiliğinden dolar; ekranın yarısını
+            # kaplamasın (alanlar gizliyken de dolu ve işlevseldir)
+            kutu.setCheckable(True)
+            kutu.setChecked(False)
+            self.giris_icerigi.setVisible(False)
+            kutu.toggled.connect(self.giris_icerigi.setVisible)
+        self.giris_kutusu = kutu
         self._alan_basliklarini_yenile()
         return kutu
+
+    def _gecmis_grafigini_kur(self) -> QWidget | None:
+        """Ölçülen merkezin adım adım küçük grafiği (|x_c|, |y_c|, log eksen) ve tolerans
+        çizgisi: yakınsama ve son yinelemelerdeki salınım bir bakışta görünür."""
+        try:
+            import pyqtgraph as pg
+        except ImportError:  # pragma: no cover - pyqtgraph yoksa grafik yok
+            self.gecmis_grafigi = None
+            return None
+        kutu = QGroupBox("Merkezin seyri (her ölçüm; log eksen)")
+        duzen = QVBoxLayout(kutu)
+        grafik = pg.PlotWidget()
+        grafik.setMinimumHeight(170)
+        grafik.setMaximumHeight(220)
+        grafik.setLogMode(y=True)
+        grafik.showGrid(x=False, y=True, alpha=0.25)
+        grafik.setLabel("left", "µm")
+        grafik.setLabel("bottom", "ölçüm (kalibrasyon sonrası)")
+        grafik.addLegend(offset=(-10, 5))
+        self.gecmis_x = grafik.plot(pen=pg.mkPen("#2a78d6", width=2), symbol="o", symbolSize=8,
+                                    symbolBrush="#2a78d6", symbolPen=None, name="|x_c|")
+        self.gecmis_y = grafik.plot(pen=pg.mkPen("#eb6834", width=2), symbol="s", symbolSize=8,
+                                    symbolBrush="#eb6834", symbolPen=None, name="|y_c|")
+        tol = self.kfg.duzeltme.merkez_toleransi_um
+        self.gecmis_tolerans = pg.InfiniteLine(pos=math.log10(tol), angle=0,
+                                               pen=pg.mkPen("#888888", width=1, style=Qt.DashLine),
+                                               label=f"tolerans {tol:g} µm",
+                                               labelOpts={"position": 0.04, "color": "#888888"})
+        grafik.addItem(self.gecmis_tolerans)
+        grafik.getAxis("bottom").setTickSpacing(5, 1)  # ölçüm numaraları tam sayı
+        grafik.setBackground(None)
+        duzen.addWidget(grafik)
+        self.gecmis_grafigi = grafik
+        return kutu
+
+    def _gecmisi_guncelle(self) -> None:
+        """Yeni bir merkez ölçümü varsa (düzeltme ya da yön doğrulama) geçmişe ekler."""
+        y = self.akis.son_y
+        if y is None or id(y) == self._son_y_kimligi or self.akis.faz is Faz.KALIBRASYON:
+            return
+        self._son_y_kimligi = id(y)
+        self._merkez_gecmisi.append((self.akis.faz.value, y.x_c * 1e6, y.y_c * 1e6))
+        if getattr(self, "gecmis_grafigi", None) is None:
+            return
+        n = list(range(1, len(self._merkez_gecmisi) + 1))
+        taban = 0.01  # log eksende sıfır gösterilemez
+        self.gecmis_x.setData(n, [max(abs(x), taban) for _, x, _ in self._merkez_gecmisi])
+        self.gecmis_y.setData(n, [max(abs(v), taban) for _, _, v in self._merkez_gecmisi])
+        self.gecmis_grafigi.setToolTip("\n".join(
+            f"{i}. ({faz}) x_c = {x:+.1f} µm, y_c = {v:+.1f} µm"
+            for i, (faz, x, v) in enumerate(self._merkez_gecmisi, 1)))
 
     # ==================================================================
     # Tema
@@ -288,7 +372,7 @@ class MerkezlemePencere(QWidget):
         üst seviye pencereler de temalı görünür.
         """
         uygulama = QApplication.instance()
-        if uygulama is not None:
+        if uygulama is not None and self.tema_yonet:
             uygulama.setStyleSheet(self.tema.stil_sayfasi())
 
         self.kip_etiketi.setStyleSheet(self.tema.kip_stili(self.kfg.genel.kip == "canli"))
@@ -575,6 +659,7 @@ class MerkezlemePencere(QWidget):
                 + f"   (faz: {panel['faz']})"
             )
         self.eylem_etiketi.setText("Sonraki eylem: " + panel["sonraki_eylem"])
+        self._gecmisi_guncelle()
         uyari = self.akis.bitti_mi() and (self.akis.faz is not Faz.TAMAMLANDI or self.akis.yakinsadi is False)
         self.adim_etiketi.setStyleSheet(f"color: {UYARI_RENGI};" if uyari else "")
 

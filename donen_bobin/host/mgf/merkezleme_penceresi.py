@@ -8,6 +8,7 @@ pyqtgraph) yükler.
 from __future__ import annotations
 
 import time
+import traceback
 from datetime import datetime
 
 import numpy as np
@@ -736,6 +737,10 @@ class MerkezlemePenceresi(QMainWindow):
         try:
             self.dongu.tick()
         except Exception as hata:  # beklenmeyen: güvenli durdur ve göster
+            # Hatanın yeri günlüğe yazılır: 17 Kasım'daki IndexError'ın
+            # nereden geldiği yalnızca iletiden anlaşılamadı.
+            yer = "".join(traceback.format_exception(hata)[-6:]).rstrip()
+            self.dongu.gunluk("Hatanın yeri:\n" + yer)
             self.dongu.hata_bildir(f"Beklenmeyen hata: {hata!r}")
         self._yenile()
 

@@ -34,6 +34,8 @@ ağırlıklı bir ödünleşmeye zorluyordu.
 """
 from __future__ import annotations
 
+import csv
+import dataclasses
 import json
 import math
 from dataclasses import dataclass, field
@@ -355,6 +357,13 @@ class KalibrasyonSonucu:
     zaman_damgasi: str = field(
         default_factory=lambda: datetime.now(timezone.utc).isoformat(timespec="seconds")
     )
+    # Kalibrasyon sırasında kuadrupolün dönen bobin çerçevesindeki açısı,
+    # arg(C_2)/2 (rad; nominal akımlardaki ölçümlerden). Enkoder artımlı ve
+    # sıfırı her oturumda keyfi olduğu için R'nin x_c/y_c satırları ancak bu
+    # açıyla birlikte başka bir oturumda kullanılabilir (bkz. `dondurulmus`).
+    # 6-17 Kasım'daki dokuz kalibrasyon bu açıya göre döndürülünce ±3° içinde
+    # aynı çıktı (180° belirsizliği dışında).
+    kuadrupol_acisi_rad: float | None = None
 
     # ------------------------------------------------------------------
     @property
@@ -400,6 +409,7 @@ class KalibrasyonSonucu:
             "supheli_nedenleri": list(self.supheli_nedenleri),
             "gradyen_hedefi_T_m": self.gradyen_hedefi_T_m,
             "modulator_acik": self.modulator_acik,
+            "kuadrupol_acisi_rad": self.kuadrupol_acisi_rad,
             "fitler": {mod: fit.sozluk() for mod, fit in self.fitler.items()},
         }
 
@@ -448,7 +458,65 @@ class KalibrasyonSonucu:
             gradyen_hedefi_T_m=float(veri["gradyen_hedefi_T_m"]),
             modulator_acik=bool(veri.get("modulator_acik", False)),
             zaman_damgasi=str(veri.get("zaman_damgasi", "")),
+            kuadrupol_acisi_rad=(
+                None if veri.get("kuadrupol_acisi_rad") is None else float(veri["kuadrupol_acisi_rad"])
+            ),
         )
+
+    def dondurulmus(self, aci_rad: float, isaret: float = 1.0) -> "KalibrasyonSonucu":
+        """x_c/y_c satırları bobin çerçevesinde `aci_rad` döndürülmüş (ve `isaret`
+        ile çarpılmış) bir kopya. Enkoder sıfırı φ kadar kayınca ölçülen merkez
+        z -> z·e^(iφ) olur; R'nin her sütunu da aynı biçimde döner. `isaret` = -1,
+        aynı C_2'yi veren 180°'lik belirsizliğin öbür dalıdır."""
+        R = self.R.copy()
+        sutunlar = isaret * (R[0] + 1j * R[1]) * complex(math.cos(aci_rad), math.sin(aci_rad))
+        R[0], R[1] = sutunlar.real, sutunlar.imag
+        yeni_aci = None if self.kuadrupol_acisi_rad is None else self.kuadrupol_acisi_rad - aci_rad
+        return dataclasses.replace(self, R=R, kuadrupol_acisi_rad=yeni_aci)
+
+
+def kuadrupol_acisi(c2: complex) -> float:
+    """Kuadrupolün dönen bobin çerçevesindeki açısı: arg(C_2)/2 (rad).
+
+    Yerçekimine göre skew açısı DEĞİLDİR: enkoder artımlı ve sıfırı her
+    oturumda keyfi; bu açı yalnızca mıknatıs ile bobinin o anki sıfırı
+    arasındaki farktır."""
+    return 0.5 * math.atan2(c2.imag, c2.real)
+
+
+def _ortalama_aci(acilar: Sequence[float]) -> float:
+    """Kuadrupol açılarının (π periyotlu) ortalaması."""
+    z = sum(complex(math.cos(2 * a), math.sin(2 * a)) for a in acilar)
+    return 0.5 * math.atan2(z.imag, z.real)
+
+
+def csvden_kuadrupol_acisi(dizin: str | Path) -> float | None:
+    """Eski kalibrasyon dosyaları için: çalıştırmanın `olcumler.csv`'sindeki
+    nominal akımlı kalibrasyon noktalarından (epsilon = 0) arg(C_2)/2."""
+    yol = Path(dizin) / "olcumler.csv"
+    if not yol.exists():
+        return None
+    acilar = []
+    with yol.open(encoding="utf-8") as f:
+        for satir in csv.DictReader(f):
+            if satir.get("adim_turu") != "kalibrasyon":
+                continue
+            try:
+                if float(satir.get("epsilon") or "nan") != 0.0:
+                    continue
+                acilar.append(kuadrupol_acisi(complex(float(satir["net_B2"]), float(satir["net_A2"]))))
+            except (KeyError, ValueError):
+                continue
+    return _ortalama_aci(acilar) if acilar else None
+
+
+def kayitli_kalibrasyonu_yukle(dosya: str | Path) -> KalibrasyonSonucu:
+    """Kalibrasyonu yükler; kuadrupol açısı dosyada yoksa (18 Kasım öncesi)
+    aynı klasördeki `olcumler.csv`'den tamamlar."""
+    sonuc = KalibrasyonSonucu.yukle(dosya)
+    if sonuc.kuadrupol_acisi_rad is None:
+        sonuc.kuadrupol_acisi_rad = csvden_kuadrupol_acisi(Path(dosya).parent)
+    return sonuc
 
 
 def _olcekli_kosul_sayisi(R: np.ndarray, duzeltme: DuzeltmeYapilandirmasi) -> float:

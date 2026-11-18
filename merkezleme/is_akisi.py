@@ -24,6 +24,8 @@ Testler ve deneme kipi aynı çağrıları `otomatik_yurut` ile döngüde yapar.
 """
 from __future__ import annotations
 
+import cmath
+import dataclasses
 import math
 from collections import deque
 from dataclasses import dataclass, field
@@ -47,6 +49,7 @@ from .kalibrasyon import (
     KalibrasyonNoktasi,
     KalibrasyonSonucu,
     kalibrasyonu_kur,
+    kuadrupol_acisi,
     mod_fitleri,
     plan_olustur,
 )
@@ -57,6 +60,7 @@ from .kayit import (
     ADIM_MODULATOR,
     ADIM_POLARITE,
     ADIM_TEKRARLANABILIRLIK,
+    ADIM_YON_DOGRULAMA,
     Calistirma,
     OlcumKaydi,
     OzetVerisi,
@@ -66,10 +70,17 @@ from .modlar import ModBazi
 from .olcum_kaynagi import OlcumIstegi, OlcumKaynagi
 from .yapilandirma import BOBIN_SAYISI, Yapilandirma
 
+SON_ARKA_PLAN_SINIRI = 10  # `son_arka_planlar`da tutulan en çok ölçüm
+# Yön doğrulama: döndürülmüş kayıtlı matrisin öngördüğü merkez kayması ile
+# ölçülen kayma bu sınırların dışındaysa kalibrasyon bu düzene uymuyor sayılır.
+YON_ACI_ESIGI_DERECE = 15.0
+YON_ORAN_ARALIGI = (0.7, 1.4)
+
 
 class Faz(str, Enum):
     HAZIR = "hazir"
     KALIBRASYON = "kalibrasyon"
+    YON_DOGRULAMA = "yon_dogrulama"
     DUZELTME = "duzeltme"
     RUTIN = "rutin"
     TAMAMLANDI = "tamamlandi"
@@ -197,6 +208,9 @@ class IsAkisi:
         self.arka_plan_sayisi = 0
         self.atlanan_arka_plan_sayisi = 0
         self.ilk_arka_plan: HarmonikOlcumu | None = None
+        # Son arka plan ölçümleri (yeniden en eskiye; durum dosyasına yazılmaz):
+        # izleme bunların ortalamasını kullanır, tek ölçümün saçılımı ~0.8 µT.
+        self.son_arka_planlar: list[HarmonikOlcumu] = []
 
         self.gradyen_hedefi_T_m: float | None = None
         self.kalibrasyon: KalibrasyonSonucu | None = None
@@ -218,6 +232,21 @@ class IsAkisi:
         self.adim_no = 0
         self.notlar: list[str] = []
         self.durdurma_nedeni: str | None = None
+        # Düzeltme bitince: True = tolerans içinde, False = en fazla iterasyonda
+        # tolerans dışında bitti (ikisi de TAMAMLANDI fazıdır; 17 Kasım'da
+        # 23 µm'de biten merkezleme ekranda "TAMAMLANDI" görünmüştü).
+        self.yakinsadi: bool | None = None
+        # Verilirse (ve kalibrasyon yüklüyse) ilk düzeltme ölçümü nominal yerine
+        # bu akımlarla yapılır; kaynaklar zaten başlatılmışsa yeniden başlatılmaz.
+        # "Mevcut akımlarla yeniden düzelt": mıknatıs sıcak düzeninde kalır.
+        self.baslangic_akimlari_A: np.ndarray | None = None
+        # Kayıtlı (başka oturumdan) kalibrasyon kullanılıyorsa True: düzeltmeden
+        # önce iki ölçümlük yön doğrulama yapılır (enkoder sıfırı her oturumda
+        # keyfi; matris kuadrupol açısına göre döndürülür, 180° belirsizliği
+        # küçük bir H adımıyla çözülür).
+        self.yon_dogrulama_gerekli = False
+        self._yon_olcumleri: list[tuple[np.ndarray, HarmonikOlcumu]] = []
+        self.yon_sonucu: dict[str, float] | None = None
         self._toplam_gorev_tahmini = 0
 
     # ==================================================================
@@ -227,19 +256,107 @@ class IsAkisi:
         """Kaynakları başlatır, kalibrasyon planı varsa kuyruğa koyar."""
         if self.faz is not Faz.HAZIR:
             raise IsAkisiHatasi(f"basla() yalnızca HAZIR fazında çağrılabilir (faz: {self.faz})")
-        self.kaynaklar.baslat()
+        if not getattr(self.kaynaklar, "baslatildi", False):
+            self.kaynaklar.baslat()
         if self.kalibrasyon is None:
             self._kalibrasyonu_kuyrukla()
             self.faz = Faz.KALIBRASYON
+        elif self.yon_dogrulama_gerekli:
+            self.faz = Faz.YON_DOGRULAMA
+            self._yon_dogrulamasini_kuyrukla()
         else:
             self.faz = Faz.DUZELTME
-            self._duzeltme_olcumu_kuyrukla()
+            self._duzeltme_olcumu_kuyrukla(self.baslangic_akimlari_A)
         self._sonraki_gorevi_al()
 
     def kalibrasyonu_yukle(self, sonuc: KalibrasyonSonucu) -> None:
         """Önceki oturumdan kalibrasyon yükler; kalibrasyon fazı atlanır."""
         self.kalibrasyon = sonuc
         self.gradyen_hedefi_T_m = sonuc.gradyen_hedefi_T_m
+
+    def _yon_dogrulamasini_kuyrukla(self) -> None:
+        """Başlangıç akımlarında bir ölçüm, ardından küçük bir H adımıyla bir ölçüm."""
+        if self.kalibrasyon is None or self.kalibrasyon.kuadrupol_acisi_rad is None:
+            raise IsAkisiHatasi("Yön doğrulama için kuadrupol açısı kayıtlı bir kalibrasyon gerekir")
+        baslangic = (self.mod_bazi.nominal_akimlar if self.baslangic_akimlari_A is None
+                     else np.asarray(self.baslangic_akimlari_A, dtype=float))
+        x0 = self.mod_bazi.bagil_sapma(baslangic)
+        sinir = self.kfg.guvenlik.nominale_gore_max_asimetri
+        eps = self.kfg.kalibrasyon.delta_bagil
+        for e in (eps, -eps):
+            x1 = x0 + e * self.mod_bazi.mod_vektoru("H")
+            if np.all(np.abs(x1) <= sinir):
+                break
+        else:
+            raise IsAkisiHatasi("Yön doğrulama adımı asimetri sınırını aşıyor")
+        self._yon_olcumleri = []
+        self.kuyruk.append(OlcumGorevi(
+            tur=ADIM_YON_DOGRULAMA, etiket="yön doğrulama 1/2: başlangıç akımları",
+            akimlar_A=baslangic, arka_plan_al=True, modulator_acik=self.kfg.genel.modulator_acik))
+        self.kuyruk.append(OlcumGorevi(
+            tur=ADIM_YON_DOGRULAMA, etiket=f"yön doğrulama 2/2: H adımı ({e:+.3f})",
+            akimlar_A=self.mod_bazi.akimlar(x1), mod="H", epsilon=e, arka_plan_al=False,
+            modulator_acik=self.kfg.genel.modulator_acik))
+        self._toplam_gorev_tahmini = 2 + self.kfg.duzeltme.max_iterasyon
+
+    def _yon_dogrulamasini_tamamla(self) -> None:
+        """Kayıtlı matrisi bu oturumun bobin çerçevesine döndürür ve doğrular.
+
+        Döndürme açısı φ = ψ_kayıtlı − ψ_şimdi (ψ = arg(C_2)/2). Aynı C_2'yi
+        veren iki daldan (φ ve φ+180°), H adımındaki ölçülen merkez kaymasına
+        uyan seçilir. Uyum açı ya da büyüklükte zayıfsa akış durur."""
+        (I0, net0), (I1, net1) = self._yon_olcumleri
+        kal = self.kalibrasyon
+        assert kal is not None and kal.kuadrupol_acisi_rad is not None
+        # Gradyen hedefi bu oturumun başlangıç ölçümünden: dosyadaki hedef başka
+        # bir oturumun (ve 18 Kasım öncesinde bobin çerçevesindeki B_2'nin) değeri.
+        self.gradyen_hedefi_T_m = self.konvansiyon.gradyen_T_m(net0)
+        y0 = self.konvansiyon.kontrol_vektoru(net0, self.gradyen_hedefi_T_m)
+        y1 = self.konvansiyon.kontrol_vektoru(net1, self.gradyen_hedefi_T_m)
+        self.son_y = y1
+        psi = kuadrupol_acisi(net0.bilesen(2))
+        phi = kal.kuadrupol_acisi_rad - psi
+        d_eps = self.mod_bazi.bagil_sapma(I1) - self.mod_bazi.bagil_sapma(I0)
+        sutun = (kal.R[0] + 1j * kal.R[1]) * complex(math.cos(phi), math.sin(phi))
+        ongoru = complex(sutun @ d_eps)
+        olculen = complex(y1.x_c - y0.x_c, y1.y_c - y0.y_c)
+        isaret = 1.0 if abs(olculen - ongoru) <= abs(olculen + ongoru) else -1.0
+        q = olculen / (isaret * ongoru) if ongoru != 0 else complex("nan")
+        aci_hata = math.degrees(cmath.phase(q))
+        oran = abs(q)
+        self.yon_sonucu = {
+            "kayitli_kuadrupol_acisi_derece": math.degrees(kal.kuadrupol_acisi_rad),
+            "simdiki_kuadrupol_acisi_derece": math.degrees(psi),
+            "dondurme_derece": math.degrees(phi) + (180.0 if isaret < 0 else 0.0),
+            "olculen_kayma_um": abs(olculen) * 1e6,
+            "ongorulen_kayma_um": abs(ongoru) * 1e6,
+            "oran": oran,
+            "aci_farki_derece": aci_hata,
+        }
+        metin = (
+            f"Yön doğrulama: kayıtlı kalibrasyonda kuadrupol açısı {math.degrees(kal.kuadrupol_acisi_rad):+.2f}°, "
+            f"şimdi {math.degrees(psi):+.2f}°; matris {self.yon_sonucu['dondurme_derece']:+.1f}° döndürüldü. "
+            f"H adımında ölçülen kayma {abs(olculen) * 1e6:.1f} um, öngörülen {abs(ongoru) * 1e6:.1f} um "
+            f"(oran {oran:.2f}, açı farkı {aci_hata:+.1f}°)."
+        )
+        self.notlar.append(metin)
+        alt, ust = YON_ORAN_ARALIGI
+        if not (abs(aci_hata) <= YON_ACI_ESIGI_DERECE and alt <= oran <= ust):
+            self.durdurma_nedeni = (
+                metin + f" Kayıtlı kalibrasyon bu düzene uymuyor (sınır ±{YON_ACI_ESIGI_DERECE:g}°, "
+                f"oran {alt:g}-{ust:g}); yeni kalibrasyon kurun."
+            )
+            self.faz = Faz.DURDURULDU
+            self.bekleme = Bekleme.YOK
+            self.mevcut_istek = None
+            return
+        self.kalibrasyon = dataclasses.replace(kal.dondurulmus(phi, isaret),
+                                               gradyen_hedefi_T_m=self.gradyen_hedefi_T_m)
+        self.calistirma.kalibrasyon_yaz(self.kalibrasyon)
+        self.faz = Faz.DUZELTME
+        self.iterasyon = 0
+        # Akımlar H adımında; düzeltme bu ölçümden başlar (yeniden ölçmeye gerek yok)
+        self._duzeltmeyi_degerlendir(y1)
 
     def _kalibrasyonu_kuyrukla(self) -> None:
         plan = plan_olustur(self.kfg.kalibrasyon)
@@ -384,6 +501,7 @@ class IsAkisi:
                 olculen_y = None
             if (
                 olculen_y is not None
+                and self.faz is not Faz.YON_DOGRULAMA
                 and self.kalibrasyon is not None
                 and self.son_y is not None
                 and self.mevcut_gorev is not None
@@ -424,6 +542,7 @@ class IsAkisi:
 
     def _arka_plani_isle(self, olcum: HarmonikOlcumu) -> None:
         self.son_arka_plan = olcum
+        self.son_arka_planlar = [olcum, *self.son_arka_planlar[:SON_ARKA_PLAN_SINIRI - 1]]
         self.arka_plan_taze = True
         self.arka_plan_sayisi += 1
         if self.ilk_arka_plan is None:
@@ -505,6 +624,12 @@ class IsAkisi:
             self._duzeltmeyi_degerlendir(y)
             self.durumu_kaydet()
             return
+        elif gorev.tur == ADIM_YON_DOGRULAMA:
+            self._yon_olcumleri.append((self.mevcut_akimlar_A.copy(), net))
+            if len(self._yon_olcumleri) == 2:
+                self._yon_dogrulamasini_tamamla()
+                self.durumu_kaydet()
+                return
 
         self._sonraki_gorevi_al()
         self.durumu_kaydet()
@@ -552,6 +677,9 @@ class IsAkisi:
             hedef,
             self.kfg.genel.modulator_acik,
         )
+        sifirlar = [net.bilesen(2) for nokta, net in self._kalibrasyon_olcumleri if nokta.epsilon == 0.0]
+        if sifirlar:
+            self.kalibrasyon.kuadrupol_acisi_rad = kuadrupol_acisi(sum(sifirlar) / len(sifirlar))
         self.calistirma.kalibrasyon_yaz(self.kalibrasyon)
         if self.kalibrasyon.supheli:
             self.notlar.extend(f"Kalibrasyon uyarisi: {n}" for n in self.kalibrasyon.supheli_nedenleri)
@@ -565,6 +693,7 @@ class IsAkisi:
         durum = yakinsama_durumu(y, self.kfg.duzeltme)
         if durum.yakinsadi:
             self.notlar.append(f"Yakınsadı ({self.iterasyon} iterasyon): {durum.metin(self.kfg.duzeltme)}")
+            self.yakinsadi = True
             self.faz = Faz.TAMAMLANDI
             self.bekleme = Bekleme.YOK
             self.mevcut_istek = None
@@ -575,6 +704,7 @@ class IsAkisi:
                 f"{durum.metin(self.kfg.duzeltme)}"
             )
             self.notlar.append(self.durdurma_nedeni)
+            self.yakinsadi = False
             self.faz = Faz.TAMAMLANDI
             self.bekleme = Bekleme.YOK
             self.mevcut_istek = None
@@ -845,6 +975,8 @@ class IsAkisi:
             gorev = self.mevcut_gorev
             return gorev.kullanici_eylemi if gorev and gorev.kullanici_eylemi else "Eylem bekleniyor"
         if self.faz is Faz.TAMAMLANDI:
+            if self.yakinsadi is False:
+                return f"TOLERANS DIŞINDA BİTTİ: {self.durdurma_nedeni or ''}"
             return "TAMAMLANDI"
         if self.faz is Faz.DURDURULDU:
             return f"DURDURULDU: {self.durdurma_nedeni or ''}"
@@ -911,6 +1043,8 @@ class IsAkisi:
             ),
             "notlar": list(self.notlar),
             "durdurma_nedeni": self.durdurma_nedeni,
+            "yakinsadi": self.yakinsadi,
+            "yon_dogrulama": self.yon_sonucu,
         }
 
     def durumu_kaydet(self) -> None:
@@ -931,6 +1065,7 @@ class IsAkisi:
             )
 
         self.faz = Faz(durum["faz"])
+        self.yakinsadi = durum.get("yakinsadi")
         self.bekleme = Bekleme(durum["bekleme"])
         self.adim_no = int(durum.get("adim_no", 0))
         self.iterasyon = int(durum.get("iterasyon", 0))
@@ -968,6 +1103,10 @@ class IsAkisi:
         """Durum yüklendikten sonra donanımı hazırlar ve mevcut adımı tekrar kurar."""
         self.kaynaklar.baslat()
         self.arka_plan_taze = False
+        if self.faz is Faz.YON_DOGRULAMA:  # ara ölçümler durum dosyasında yok: baştan
+            self.kuyruk.clear()
+            self.mevcut_gorev = None
+            self._yon_dogrulamasini_kuyrukla()
         if self.mevcut_gorev is not None:
             self.notlar.append(f"Kaldığı yerden devam: {self.mevcut_gorev.etiket}")
             self._gorevi_hazirla()

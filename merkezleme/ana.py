@@ -28,7 +28,7 @@ from pathlib import Path
 from .guc_kaynagi import KaynakGrubu, KomutGunlugu
 from .harmonikler import HarmonikKonvansiyonu
 from .is_akisi import IsAkisi, otomatik_yurut
-from .kalibrasyon import KalibrasyonSonucu
+from .kalibrasyon import KalibrasyonSonucu, kayitli_kalibrasyonu_yukle
 from .kayit import Calistirma
 from .modlar import ModBazi
 from .olcum_kaynagi import ElleGiris, SimulatorGirisi
@@ -182,7 +182,8 @@ def calistir(argumanlar: argparse.Namespace) -> int:
         calistirma = Calistirma(kfg)
         akis = IsAkisi(kfg, grup, olcum_kaynagi, calistirma, konvansiyon, mod_bazi)  # type: ignore[arg-type]
         if argumanlar.kalibrasyon:
-            akis.kalibrasyonu_yukle(KalibrasyonSonucu.yukle(argumanlar.kalibrasyon))
+            akis.kalibrasyonu_yukle(kayitli_kalibrasyonu_yukle(argumanlar.kalibrasyon))
+            akis.yon_dogrulama_gerekli = True  # enkoder sıfırı oturumdan oturuma değişir
         try:
             akis.basla()
             otomatik_yurut(akis, olcum_kaynagi)  # type: ignore[arg-type]
@@ -238,7 +239,8 @@ def calistir(argumanlar: argparse.Namespace) -> int:
 
     akis = IsAkisi(kfg, grup, olcum_kaynagi, calistirma, konvansiyon, mod_bazi)  # type: ignore[arg-type]
     if argumanlar.kalibrasyon:
-        akis.kalibrasyonu_yukle(KalibrasyonSonucu.yukle(argumanlar.kalibrasyon))
+        akis.kalibrasyonu_yukle(kayitli_kalibrasyonu_yukle(argumanlar.kalibrasyon))
+        akis.yon_dogrulama_gerekli = True  # enkoder sıfırı oturumdan oturuma değişir
 
     if devam_durumu is not None:
         akis.durumu_uygula(devam_durumu)

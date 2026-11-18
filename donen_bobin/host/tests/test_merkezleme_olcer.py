@@ -115,6 +115,17 @@ def test_tam_tur_penceresi(yon):
     assert abs(teta[-1] - teta[bas]) == pytest.approx(45 * 2 * math.pi, abs=2 * math.pi * 23 / SPS)
 
 
+def test_bos_kalan_pencere_valueerror_verir(p):
+    """Kırpma pencereyi boşaltırsa IndexError değil ValueError: ölçüm atlanır,
+    motor durmaz (17 Kasım 16:51'de IndexError motoru durdurmuştu)."""
+    n = 400
+    aci = np.degrees(2 * math.pi * 8.0 * np.arange(n) / SPS) % 360
+    with pytest.raises(ValueError):
+        mk.olcum_hesapla(aci, np.zeros(n), SPS, p.bobin, p.r_ref_m, aci_duzelt=False,
+                         gecikme_s=(n // 2 + 5) / SPS)
+    assert mk._tam_tur(np.array([])) == (0, 0)
+
+
 def test_referans_ofseti_dipolu_saf_normal_yapar(p):
     c1 = 3e-4 * np.exp(1j * math.radians(37.0))
     teta = 2 * math.pi * 23.0 * np.arange(int(2.0 * SPS)) / SPS

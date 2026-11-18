@@ -247,9 +247,16 @@ class HarmonikKonvansiyonu:
     # Yalnızca izleme
     # ------------------------------------------------------------------
     def izleme(self, olcum: HarmonikOlcumu) -> IzlemeBuyuklukleri:
-        """SQ/G (roll) ve varsa b3/a3/b4/a4. Hiçbiri hedeflenmez.
+        """a2/b2 (`sq_over_g`), kuadrupol açısı (`roll_mrad`) ve varsa b3/a3/b4/a4.
+        Hiçbiri hedeflenmez.
 
-        İŞARET NOTU: roll, alan çerçevesinde okunan açıdır. Kaynak köşegen
+        ÇERÇEVE NOTU (18 Kasım): hepsi dönen bobinin çerçevesindedir. Enkoder
+        artımlı (index kullanılmıyor) ve sıfırı her oturumda keyfi olduğu için
+        `roll_mrad` yerçekimine göre roll DEĞİL, yalnızca arg(C_2)/2'dir: 6-17
+        Kasım arasında -82° ile +32° arasında "değişti". Yerçekimine göre skew
+        için ayrı bir açı referansı gerekir. Alan adları uyumluluk için korundu.
+
+        İŞARET NOTU: açı, alan çerçevesinde okunur. Kaynak köşegen
         dönünce C_2 -> C_2 * exp(-2i*rho) olduğu için, harmoniklerden okunan
         roll mekanik dönüşün TERS işaretiyle çıkar. Yalnızca izleme amaçlı
         olduğu ve büyüklüğü doğru verdiği için olduğu gibi raporlanır.

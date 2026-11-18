@@ -57,6 +57,8 @@ from .olcum_kaynagi import (
 from .tema import TEMALAR, Tema, tema_al
 from .yapilandirma import BOBIN_SAYISI, Yapilandirma
 
+UYARI_RENGI = "#c0392b"  # iki temada da okunur kırmızı (birleşik pencerenin kip etiketiyle aynı)
+
 BICIM_ETIKETLERI = {
     "genlik_faz": "Genlik + faz",
     "normal_skew": "Normal + skew (B_n, A_n)",
@@ -260,7 +262,7 @@ class MerkezlemePencere(QWidget):
 
         # Girişin FİZİKSEL KARŞILIĞI, yazarken canlı gösterilir: yanlış yazılan
         # bir rakam, Onayla'ya basmadan önce burada görülür. (Modal onay
-        # yalnızca "olası yazım hatası" uyarısında çıkar.)
+        # yalnızca "beklenenden sapma" uyarısında çıkar.)
         self.yorum_etiketi = QLabel("")
         self.yorum_etiketi.setWordWrap(True)
         duzen.addWidget(self.yorum_etiketi)
@@ -321,6 +323,13 @@ class MerkezlemePencere(QWidget):
         self.oneri_metni.setFont(QFont("monospace"))
         self.oneri_metni.setLineWrapMode(QPlainTextEdit.NoWrap)
         self.oneri_metni.setVisible(False)
+        # Kalibrasyon şüpheliyse kalıcı uyarı: nedenler önceden yalnızca notlarda
+        # ve öneri metninin altında kalıyordu (17 Kasım'da dört neden vardı).
+        self.kalibrasyon_uyari_etiketi = QLabel("")
+        self.kalibrasyon_uyari_etiketi.setWordWrap(True)
+        self.kalibrasyon_uyari_etiketi.setStyleSheet(f"color: {UYARI_RENGI};")
+        self.kalibrasyon_uyari_etiketi.setVisible(False)
+        duzen.addWidget(self.kalibrasyon_uyari_etiketi)
         duzen.addWidget(self.sonuc_etiketi)
         duzen.addWidget(self.arka_plan_etiketi)
         duzen.addWidget(self.izleme_etiketi)
@@ -540,13 +549,23 @@ class MerkezlemePencere(QWidget):
         # görünüp bitmemiş sanılırdı). Düzeltmede iterasyon sayısı, bitince açık bir sonuç gösterilir.
         max_it = self.kfg.duzeltme.max_iterasyon
         if self.akis.bitti_mi():
-            durum = "TAMAMLANDI" if self.akis.faz is Faz.TAMAMLANDI else "DURDURULDU"
+            if self.akis.faz is not Faz.TAMAMLANDI:
+                durum = "DURDURULDU"
+            elif self.akis.yakinsadi is False:
+                durum = "TOLERANS DIŞINDA BİTTİ"
+            else:
+                durum = "TAMAMLANDI (tolerans içinde)"
             self.adim_etiketi.setText(
                 f"{durum} — {panel['iterasyon']} düzeltme iterasyonu, toplam {panel['adim_no']} ölçüm noktası"
             )
         elif self.akis.faz is Faz.KALIBRASYON:
             self.adim_etiketi.setText(
                 f"Kalibrasyon: nokta {panel['adim_no']} / {panel['toplam_adim']}"
+                + (f"  -  {panel['etiket']}" if panel["etiket"] else "")
+            )
+        elif self.akis.faz is Faz.YON_DOGRULAMA:
+            self.adim_etiketi.setText(
+                "Yön doğrulama (kayıtlı kalibrasyon bu oturuma uyarlanıyor)"
                 + (f"  -  {panel['etiket']}" if panel["etiket"] else "")
             )
         else:
@@ -556,6 +575,8 @@ class MerkezlemePencere(QWidget):
                 + f"   (faz: {panel['faz']})"
             )
         self.eylem_etiketi.setText("Sonraki eylem: " + panel["sonraki_eylem"])
+        uyari = self.akis.bitti_mi() and (self.akis.faz is not Faz.TAMAMLANDI or self.akis.yakinsadi is False)
+        self.adim_etiketi.setStyleSheet(f"color: {UYARI_RENGI};" if uyari else "")
 
         nominal = self.kfg.miknatis.nominal_akim_A
         for i, (ayar_e, olculen_e, asimetri_e) in enumerate(self.akim_etiketleri):
@@ -585,17 +606,29 @@ class MerkezlemePencere(QWidget):
         else:
             self.izleme_etiketi.setVisible(True)
             parcalar = []
+            # Bobin çerçevesinde: enkoder sıfırı her oturumda keyfi olduğu için
+            # bunlar yerçekimine göre skew/roll DEĞİL (18 Kasım).
             if izleme.sq_over_g is not None:
-                parcalar.append(f"SQ/G = {izleme.sq_over_g:+.5f}")
+                parcalar.append(f"a2/b2 = {izleme.sq_over_g:+.5f}")
             if izleme.roll_mrad is not None:
-                parcalar.append(f"roll = {izleme.roll_mrad:+.3f} mrad")
+                parcalar.append(f"kuadrupol açısı = {izleme.roll_mrad:+.3f} mrad")
             for ad in ("b3", "a3", "b4", "a4"):
                 deger = getattr(izleme, ad)
                 if deger is not None:
                     parcalar.append(f"{ad} = {deger:.4g}")
-            self.izleme_etiketi.setText("İzleme:  " + "   ".join(parcalar))
+            self.izleme_etiketi.setText("İzleme (bobin çerçevesinde, yerçekimine göre değil):  "
+                                        + "   ".join(parcalar))
         if self.akis.son_arka_plan is None:
             self.arka_plan_etiketi.setText("Henüz arka plan ölçümü girilmedi.")
+
+        kal = self.akis.kalibrasyon
+        if kal is not None and kal.supheli:
+            self.kalibrasyon_uyari_etiketi.setText(
+                "KALİBRASYON ŞÜPHELİ — düzeltme adımları hedefi aşabilir:\n"
+                + "\n".join(f"  • {n}" for n in kal.supheli_nedenleri))
+            self.kalibrasyon_uyari_etiketi.setVisible(True)
+        else:
+            self.kalibrasyon_uyari_etiketi.setVisible(False)
 
         if self.akis.bekleyen_oneri is not None:
             self.oneri_metni.setPlainText(self.akis.bekleyen_oneri.ozet_metni(nominal))
@@ -696,10 +729,20 @@ class MerkezlemePencere(QWidget):
 
         dogrulama = self.akis.olcum_dogrula(olcum)
         if dogrulama.onay_gerekli:
+            if self.otomatik_kaynak_etiketi is not None:
+                # Ölçüm dönen bobinden geldi: yazım hatası olamaz
+                soru = (
+                    "\n\nÖlçüm otomatik geldiği için bu bir yazım hatası değil: kalibrasyon bu adımı "
+                    "iyi öngöremedi (düzeltme hedefi aşmış, kalibrasyon bu bölgede geçersiz ya da düzen "
+                    "sürükleniyor olabilir). Tekrar ederse yeniden kalibrasyon düşünün.\n\n"
+                    "Ölçüm kabul edilsin mi? (Hayır: uygulanmaz; 'Bu noktayı tekrarla' ile yeniden ölçülebilir.)"
+                )
+            else:
+                soru = "\n\nGirdiğiniz değer doğru mu? (Elle girişte en olası neden yazım hatasıdır.)"
             yanit = QMessageBox.question(
                 self,
-                "Olası yazım hatası",
-                dogrulama.metin() + "\n\nGirdiğiniz değer doğru mu?",
+                "Ölçüm beklenenden sapıyor",
+                dogrulama.metin() + soru,
                 QMessageBox.Yes | QMessageBox.No,
                 QMessageBox.No,
             )

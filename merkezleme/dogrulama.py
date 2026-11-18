@@ -11,6 +11,12 @@ doğrulama uygulanır:
    Beklenen y, referans ölçüm ve R üzerinden hesaplanır; sapma, ölçülen
    tekrarlanabilirliğin (ya da tolerans ölçeğinin) belirli bir katını geçerse
    uyarı verilir ve yeniden onay istenir.
+
+Ölçüm dönen bobinden kendiliğinden geldiğinde yazım hatası olamaz; 2. katmanın
+uyarısı o zaman kalibrasyon modelinin bu adımı öngöremediğini söyler (düzeltme
+hedefi aştı, kalibrasyon bu bölgede geçersiz ya da düzen sürükleniyor). 17
+Kasım'da "olası yazım hatası" diye sunulduğu için 8 kez onaylanıp geçildi;
+metin bu yüzden "BEKLENENDEN SAPMA" olarak yazılır.
 """
 from __future__ import annotations
 
@@ -80,15 +86,15 @@ def beklenenden_sapma_kontrolu(
     )
     if merkez_sapmasi > carpan * merkez_olcegi:
         uyarilar.append(
-            f"OLASI YAZIM HATASI: ölçülen merkez, beklenenden {merkez_sapmasi * 1e6:.1f} um "
-            f"sapıyor (eşik {carpan * merkez_olcegi * 1e6:.1f} um).\n"
+            f"BEKLENENDEN SAPMA: ölçülen merkez, kalibrasyonun öngördüğünden {merkez_sapmasi * 1e6:.1f} um "
+            f"farklı (eşik {carpan * merkez_olcegi * 1e6:.1f} um).\n"
             f"  beklenen: {beklenen}\n  ölçülen : {olculen}"
         )
 
     g_sapmasi = abs(olculen.g - beklenen.g)
     if g_sapmasi > carpan * g_olcegi:
         uyarilar.append(
-            f"OLASI YAZIM HATASI: ölçülen g, beklenenden {g_sapmasi:.5f} sapıyor "
+            f"BEKLENENDEN SAPMA: ölçülen g, kalibrasyonun öngördüğünden {g_sapmasi:.5f} farklı "
             f"(eşik {carpan * g_olcegi:.5f}); beklenen g = {beklenen.g:+.5f}, "
             f"ölçülen g = {olculen.g:+.5f}"
         )

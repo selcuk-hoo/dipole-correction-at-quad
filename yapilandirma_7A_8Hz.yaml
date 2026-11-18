@@ -79,7 +79,10 @@ harmonikler:
   feed_down_isareti: 1
   eslenik: false
   # Gradyen hangi bileşenden okunur: normal (B_2/r_ref) | genlik (|C_2|/r_ref)
-  gradyen_kaynagi: normal
+  # 18.11.2026: normal -> genlik. Enkoder artımlı, sıfırı her oturumda keyfi; B_2 bobin
+  # çerçevesine bağlı (17 Kasım'da B_2 = 0.45|C_2|, 6 Kasım akşamı 0.18|C_2|) ve kuadrupolün
+  # açısındaki 1 mrad'lik oynama gradyende %0.4-1'lik sahte değişim gibi görünüyordu.
+  gradyen_kaynagi: genlik
 
   # Arka plan çıkarma: tum | yalniz_dipol
   arka_plan_cikarma: tum
@@ -114,7 +117,7 @@ kalibrasyon:
   delta_bagil: 0.02   # 7A ÇALIŞTIRMASI: 0.005 -> 0.02 (7 A'da sinyal/gürültü için)
   ortak_sifir_noktasi: true              # sıfır noktası modlar arasında paylaşılır
   monoton_olmayan_sira: true             # sürüklenmeyi eğimden ayırmak için
-  arka_plan_her_n_noktada: 1             # 1 = her noktada (varsayılan)
+  arka_plan_her_n_noktada: 3             # 1 = her noktada; 3: ısıl döngüyü azaltır (18.11.2026, bkz. yapilandirma.yaml)
   olcum_basi_tahmini_sure_dk: 5.0        # süre tahmini için
   kosul_sayisi_esigi: 20.0               # üstünde kalibrasyon şüpheli
   m_sutunu_esigi_bagil: 0.10             # M sütunu, H/V sütunlarının bu katından büyükse şüpheli

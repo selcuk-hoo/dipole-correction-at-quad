@@ -307,6 +307,8 @@ class OlcumSonucu:
 
 
 def _tam_tur(acilmis: np.ndarray) -> tuple[int, int]:
+    if len(acilmis) < 2:
+        return 0, 0
     gidilen = np.abs(acilmis - acilmis[-1])
     tur = int(gidilen[0] // (2 * math.pi))
     if tur < 1:
@@ -482,6 +484,11 @@ def olcum_hesapla(
         acilmis = np.interp(sira - kayma, sira, acilmis)
         kenar = int(math.ceil(abs(kayma))) + 1
         acilmis, aki, v = acilmis[kenar:-kenar], aki[kenar:-kenar], v[kenar:-kenar]
+    if len(acilmis) < 100:
+        # Açı düzeltmesi ya da gecikme kırpması pencereyi boşaltmış olabilir.
+        # 17 Kasım 16:51'de buna benzer bir boş dizi IndexError verip motoru
+        # durdurmuştu; ValueError ölçümü atlatır, motor dönmeye devam eder.
+        raise ValueError(f"Açı düzeltmesinden sonra yalnızca {len(acilmis)} örnek kaldı")
     bas, tur = _tam_tur(acilmis)
     if tur < 1:
         raise ValueError("Pencerede tam bir tur bile yok (motor dönüyor mu?)")

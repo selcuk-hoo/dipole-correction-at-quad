@@ -167,7 +167,7 @@ def test_bozuk_giris_yazim_hatasi_onayi_ister(pencere_uret, diyalog_yanitlari, k
     soru_sayisi = len(diyalog_yanitlari["question"])
     pencere._onayla()
     assert len(diyalog_yanitlari["question"]) > soru_sayisi
-    assert "YAZIM HATASI" in diyalog_yanitlari["question"][-1]
+    assert "BEKLENENDEN SAPMA" in diyalog_yanitlari["question"][-1]
 
 
 def test_tam_akis_arayuzden_yurutulur(pencere_uret, kfg):
@@ -180,7 +180,7 @@ def test_tam_akis_arayuzden_yurutulur(pencere_uret, kfg):
     # Panel son sonucu gösteriyor
     assert "x_c" in pencere.sonuc_etiketi.text()
     assert "Son arka plan" in pencere.arka_plan_etiketi.text()
-    assert "SQ/G" in pencere.izleme_etiketi.text()
+    assert "a2/b2" in pencere.izleme_etiketi.text() and "kuadrupol açısı" in pencere.izleme_etiketi.text()
 
 
 def test_duzeltme_onerisi_panelde_gosterilir(pencere_uret, kfg):

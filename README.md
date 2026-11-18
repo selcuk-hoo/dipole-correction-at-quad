@@ -50,6 +50,45 @@ açık kalır, dönen bobin sürekli ölçüme geçer ve her N saniyede (varsay�
 `kayitlar/<oturum>/izleme_<saat>.csv`'ye yazılıp çizilir; her satır o aralıktaki bütün sağlıklı
 ölçümlerin ortalamasıdır (`n_olcum`, saçılım `sx_um`/`sy_um`); sürüklenme (µm/saat) hesaplanır.
 Akımları ayrı bir iş parçacığı okur, arayüz donmaz.
+
+**18 Kasım 2026'da eklenenler** (17 Kasım ölçümünden çıkan dersler, `raporlar/izleme_2026-11-17/`):
+- Merkezleme en fazla iterasyonda toleransa ulaşmadan biterse ekranda kırmızı **"TOLERANS DIŞINDA BİTTİ"**
+  yazar (önceden yakınsamayla aynı "TAMAMLANDI" görünüyordu); izleme başlatılırken ayrıca sorulur.
+- **"Mevcut akımlarla yeniden düzelt"** (Merkezleme sekmesi, akış bitince): akımları sıfırlamadan ve
+  kalibrasyonu yinelemeden aynı kalibrasyonla düzeltmeyi yeni bir çalıştırma olarak yeniden başlatır;
+  mıknatıs sıcak düzeninde kalır (yalnızca arka plan için akımlar kısa süre sıfıra iner). Isınmayla kayan
+  merkezi izleme sırasında düzeltmek içindir; sürmekte olan izleme durdurulur.
+- İzleme bekçisi: 60 s yeni ölçüm gelmezse günlüğe ve Kararlılık sekmesine kırmızı uyarı yazılır ve
+  `~/bin/telegram-mesaj` ile telefona bildirim gider (ölçüm yeniden gelince de). Kapatmak için
+  `MERKEZLE_TELEGRAM=0 ./merkezle`.
+- "Olası yazım hatası" uyarısının adı **"beklenenden sapma"** oldu: ölçüm dönen bobinden geldiğinde yazım
+  hatası olamaz; uyarı, kalibrasyonun o adımı öngöremediğini söyler (düzeltme hedefi aştı, kalibrasyon
+  geçersiz ya da düzen sürükleniyor). Kalibrasyon "şüpheli" ise nedenleri pencerede sürekli görünür.
+- Arka plan artık her 3 noktada bir alınır (`arka_plan_her_n_noktada: 3`; önce her noktada): her arka planda
+  akımlar sıfıra inip geri çıkıyor, mıknatıs merkezleme boyunca soğuyordu.
+- Akımlar açıkken, izleme sürerken ya da motor dönerken pencere kapatılmadan önce sorulur (SIGTERM sormaz).
+
+**Kayıtlı kalibrasyonu yeniden kullanma (18 Kasım 2026).** Enkoder artımlı (kuadrupol enkoder, 3600 sayım/tur,
+index kullanılmıyor): sıfırı stator açıldığı ya da sayaç sıfırlandığı andaki konumdur, her oturumda keyfidir.
+Bu yüzden kalibrasyon matrisinin x_c/y_c satırları oturumdan oturuma döner. 6–17 Kasım'daki dokuz kalibrasyon,
+kuadrupolün o oturumdaki açısına (ψ = arg(C₂)/2) göre döndürülünce ±3° ve %10 içinde aynı çıktı (180°
+belirsizliği dışında). Buna dayanarak:
+- Kalibrasyon dosyası artık `kuadrupol_acisi_rad`'ı da saklar; eski dosyalar için açı aynı klasördeki
+  `olcumler.csv`'den tamamlanır (`kalibrasyon.kayitli_kalibrasyonu_yukle`).
+- Ayar panelinde **"Kalibrasyon"** seçimi: "Yeni kalibrasyon kur" ya da önceki çalıştırmalardan biri (kuru
+  çalıştırmalar canlı kipte listelenmez); tamamlanmış çalıştırmalar için **"o çalıştırmanın son akımlarından
+  başla"**. Kayıtlı kalibrasyonla akış önce **yön doğrulama** yapar (iki ölçüm: başlangıç akımları ve küçük bir
+  H adımı): matris bu oturumun açısına döndürülür, 180° dalı H adımındaki merkez kaymasıyla seçilir; ölçülen
+  kayma öngörüden ±15°/oran 0.7–1.4 dışındaysa akış durur ve yeni kalibrasyon önerir. Gradyen hedefi bu
+  oturumun ilk ölçümünden alınır. `python -m merkezleme --kalibrasyon D.json` da aynı yolu izler.
+- **Gradyen artık |C₂|'den** (`gradyen_kaynagi: genlik`; önce `normal`, yani B₂). B₂ bobin çerçevesine bağlıydı:
+  17 Kasım'da B₂ = 0.45|C₂|, 6 Kasım akşamı 0.18|C₂| ve kuadrupol açısındaki 1 mrad'lik oynama gradyende
+  %0.4–1'lik sahte değişim gibi görünüyordu (tolerans %0.1).
+- "roll" ve "SQ/G" göstergelerinin adı **"kuadrupol açısı (bobin sıfırına göre)"** ve **"a2/b2 (bobin
+  çerçevesinde)"** oldu: yerçekimine göre skew/roll değildir (6–17 Kasım arasında −82° ile +32° arasında
+  "değişti"). CSV sütun adları (`roll_mrad`, `sq_over_g`) uyumluluk için korundu. Yerçekimi referansı için
+  plan: `planlar/yercekimi_referansi_PROMPT.md`. Ertelenen bütün işler: `planlar/YAPILACAKLAR.md`.
+- Aynı saniyede başlayan iki çalıştırma artık aynı klasöre yazmaz (`_2` eki).
 Akımlar pencereyi kapatana ya da "Yeni çalıştırma"ya kadar açık kalır. Dönen bobin
 sekmesindeki "Alan grafiğinden arka planı çıkar" kutusu, quad en son sıfırken ölçülen alanı
 (merkezleme'nin son arka plan ölçümü) grafikten çıkarır; yalnızca gösterimi etkiler.

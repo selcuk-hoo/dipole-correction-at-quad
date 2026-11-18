@@ -154,6 +154,12 @@ def test_kararlilik_izleme_kaydeder_ve_arka_plani_cikarir(qt_uygulama, kfg_tmp, 
             break
         sekme._otomatik_ilerle(); QApplication.processEvents()
     assert akis.faz.value == "tamamlandi" and sekme.arka_plan() is not None
+    # Arka plan, son beş arka plan ölçümünün ortalamasıdır (tek ölçüm gürültülü)
+    from merkezleme.birlesik import ARKA_PLAN_ORTALAMA_SAYISI
+    son = akis.son_arka_planlar[:ARKA_PLAN_ORTALAMA_SAYISI]
+    assert len(son) == min(ARKA_PLAN_ORTALAMA_SAYISI, akis.arka_plan_sayisi) >= 2
+    assert son[0] is akis.son_arka_plan
+    assert sekme.arka_plan()[1] == pytest.approx(sum(o.bilesenler[1] for o in son) / len(son))
     ark = sekme.arka_plan()[1]
     ark2 = sekme.arka_plan().get(2, 0j)  # kuadrupol arka planı da çıkarılır
 
@@ -180,6 +186,18 @@ def test_kararlilik_izleme_kaydeder_ve_arka_plani_cikarir(qt_uygulama, kfg_tmp, 
     assert len(satirlar) == 2 and satirlar[0][2] == "n_olcum" and satirlar[1][2] == "3"
     assert float(satirlar[1][5]) == pytest.approx(0.025 * 2e-6 / 2.4e-3 * 1e6, rel=1e-3)  # sx
     assert all(np.isfinite(float(v)) for v in satirlar[1][-4:])  # akımlar iş parçacığından
+    # Akım okuma hatası günlüğe yazılır (önce sessizce NaN yazılıyordu); düzelince de
+    gunluk: list[str] = []
+    bobin.dongu.gunluk = gunluk.append
+    with izleme._akim_kilidi:
+        izleme._akim_hatasi, izleme._akim_hata_sayisi = "OSError('zaman aşımı')", 1
+    izleme._akim_hatasini_bildir()
+    izleme._akim_hatasini_bildir()  # aynı hata ikinci kez yazılmaz
+    assert len(gunluk) == 1 and "okunamıyor" in gunluk[0] and "zaman aşımı" in gunluk[0]
+    with izleme._akim_kilidi:
+        izleme._akim_hatasi, izleme._akim_hata_sayisi, izleme._akim_duzeldi = None, 0, 3
+    izleme._akim_hatasini_bildir()
+    assert len(gunluk) == 2 and "yeniden okunuyor (3" in gunluk[1]
     izleme.durdur()
     assert bobin.dongu.otomatik_yaz is True
     sekme.kapat()
@@ -285,4 +303,159 @@ def test_ortam_alani_akimsiz_izlenir(qt_uygulama, kfg_tmp, tmp_path, monkeypatch
     sekme.baslat()  # akımlar nominalde açık -> akımsız izleme reddedilir
     izleme.ortam_degistir()
     assert not izleme.calisiyor and "Merkezleme sürüyor" in uyarilar[-1]
+    sekme.kapat()
+
+
+def test_izleme_bekcisi_olcum_gelmezse_uyarir(qt_uygulama, kfg_tmp, tmp_path):
+    """Ölçüm OLCUM_YOK_ESIGI_S boyunca gelmezse günlüğe ve özete bir kez uyarı;
+    ölçüm gelince "yeniden geliyor" (17 Kasım: motor durdu, izleme sessizce bitti)."""
+    pytest.importorskip("pyqtgraph")
+    from types import SimpleNamespace
+
+    from merkezleme.birlesik import OLCUM_YOK_ESIGI_S, KararlilikSekmesi
+
+    sekme = MerkezlemeSekmesi(kfg_tmp, False, lambda: (True, "dönüyor"), olcum_kaynagi_uret=_simulator)
+    sekme.otomatik_zamanlayici.stop()
+    gunluk: list[str] = []
+
+    class SahteDongu:
+        otomatik_yaz = True
+        saglik: list = []
+        son_sonuc = None
+        hata_metni = "Beklenmeyen hata: IndexError('index -1')"
+        donuyor = False
+        oturum = SimpleNamespace(klasor=lambda: tmp_path)
+
+        def otomatik_yaz_ayarla(self, acik):
+            self.otomatik_yaz = acik
+            return True
+
+        def gunluk(self, m):
+            gunluk.append(m)
+
+    bobin = SimpleNamespace(dongu=SahteDongu(), p=SimpleNamespace(r_ref_m=0.025))
+    izleme = KararlilikSekmesi(bobin, sekme)  # type: ignore[arg-type]
+    izleme.zamanlayici.stop()
+    izleme.ortam_degistir()
+    izleme._ornekle()
+    assert gunluk == []  # henüz süre dolmadı
+    izleme._son_olcum_t -= OLCUM_YOK_ESIGI_S + 1
+    izleme._ornekle()
+    izleme._ornekle()  # ikinci kez yazılmaz
+    assert len(gunluk) == 1 and "yeni ölçüm yok" in gunluk[0] and "IndexError" in gunluk[0]
+    assert izleme.ozet.text().startswith("ÖLÇÜM GELMİYOR")
+    bobin.dongu.son_sonuc = SimpleNamespace(
+        harmonikler=(complex(1e-6, 0), complex(0.3e-6, 0), 0j, 0j, 0j, 0j), hiz_hz=8.0, artik_orani=0.2)
+    izleme._ornekle()
+    assert len(gunluk) == 2 and "yeniden geliyor" in gunluk[1]
+    izleme.ortam_degistir()
+
+
+def _sonuna_kadar(sekme):
+    from PySide6.QtWidgets import QApplication
+
+    sekme.otomatik_calisma.setChecked(True)
+    for _ in range(800):
+        if sekme.pencere.akis.bitti_mi():
+            break
+        sekme._otomatik_ilerle(); QApplication.processEvents()
+
+
+def test_mevcut_akimlarla_yeniden_duzelt(qt_uygulama, kfg_tmp, monkeypatch):
+    """Akımlar sıfırlanmadan, aynı kaynak grubu ve kalibrasyonla yeni çalıştırma."""
+    import numpy as np
+
+    from merkezleme.is_akisi import Bekleme, Faz
+
+    hizli = dataclasses.replace(
+        kfg_tmp,
+        guc_kaynaklari=dataclasses.replace(kfg_tmp.guc_kaynaklari, rampa_hizi_A_s=1e4, oturma_suresi_s=0.0,
+                                           oturma_kontrol_periyodu_s=0.0),
+    )
+    sekme = MerkezlemeSekmesi(hizli, False, lambda: (True, "dönüyor"), olcum_kaynagi_uret=_simulator)
+    sekme.otomatik_zamanlayici.stop()
+    sekme.baslat()
+    assert not sekme.yeniden_duzeltilebilir()  # kalibrasyon sürüyor
+    _sonuna_kadar(sekme)
+    eski = sekme.pencere.akis
+    assert eski.faz is Faz.TAMAMLANDI and sekme.yeniden_duzeltilebilir()
+    akimlar = np.asarray(eski.kaynaklar.ayar_akimlari_A).copy()
+    kancalar = []
+    sekme.kapanis_kancalari.append(lambda: kancalar.append(1))
+
+    sekme.yeniden_duzelt(sor=False)
+    yeni = sekme.pencere.akis
+    assert yeni is not eski and kancalar == [1]  # izleme durduruldu
+    assert eski.faz is Faz.TAMAMLANDI  # eski akış durdurulmadı (akımlar sıfırlanmadı)
+    assert yeni.kaynaklar is eski.kaynaklar and yeni.kalibrasyon is eski.kalibrasyon
+    assert yeni.faz is Faz.DUZELTME and yeni.calistirma.dizin != eski.calistirma.dizin
+    # ilk adım: arka plan, ardından eski akımlarla ölçüm (nominal değil)
+    assert yeni.bekleme is Bekleme.ARKA_PLAN_GIRISI
+    assert np.allclose(yeni.mevcut_gorev.akimlar_A, akimlar)
+    assert "önceki çalıştırmadan" in (yeni.calistirma.dizin / "arayuz_ayarlari.txt").read_text(encoding="utf-8")
+    _sonuna_kadar(sekme)
+    assert yeni.faz is Faz.TAMAMLANDI and yeni.yakinsadi is True
+    sekme.kapat()
+
+
+def test_pencere_akimlar_aciksa_kapatmadan_once_sorar(qt_uygulama, kfg_tmp, monkeypatch):
+    sorular = []
+    yanit = [QMessageBox.StandardButton.No]
+    monkeypatch.setattr(QMessageBox, "question",
+                        staticmethod(lambda *a, **k: (sorular.append(a[2]), yanit[0])[1]))
+
+    class SahteBobin(QMainWindow):
+        pass
+
+    hizli = dataclasses.replace(
+        kfg_tmp,
+        guc_kaynaklari=dataclasses.replace(kfg_tmp.guc_kaynaklari, rampa_hizi_A_s=1e4, oturma_suresi_s=0.0,
+                                           oturma_kontrol_periyodu_s=0.0),
+    )
+    sekme = MerkezlemeSekmesi(hizli, False, lambda: (True, "dönüyor"), olcum_kaynagi_uret=_simulator)
+    sekme.otomatik_zamanlayici.stop()
+    sekme.baslat()
+    _sonuna_kadar(sekme)  # akımlar merkezlenmiş değerlerde açık
+    pencere = BirlesikPencere(SahteBobin(), sekme)
+    pencere.show()
+    pencere.close()
+    assert sorular and "akımları açık" in sorular[-1] and sekme.pencere is not None  # kapanmadı
+    yanit[0] = QMessageBox.StandardButton.Yes
+    pencere.close()
+    assert sekme.pencere is None
+
+
+def test_kayitli_kalibrasyon_ve_son_akimlarla_baslar(qt_uygulama, kfg_tmp, monkeypatch):
+    """Ayarlarda kayıtlı kalibrasyon seçilince kalibrasyon yinelenmez: yön doğrulama
+    (iki ölçüm) ardından düzeltme; başlangıç akımları o çalıştırmanın son akımları."""
+    import numpy as np
+
+    from merkezleme.is_akisi import Faz
+
+    monkeypatch.setattr(QMessageBox, "question", staticmethod(lambda *a, **k: QMessageBox.StandardButton.Yes))
+    hizli = dataclasses.replace(
+        kfg_tmp,
+        guc_kaynaklari=dataclasses.replace(kfg_tmp.guc_kaynaklari, rampa_hizi_A_s=1e4, oturma_suresi_s=0.0,
+                                           oturma_kontrol_periyodu_s=0.0),
+    )
+    sekme = MerkezlemeSekmesi(hizli, False, lambda: (True, "dönüyor"), olcum_kaynagi_uret=_simulator)
+    sekme.otomatik_zamanlayici.stop()
+    assert sekme.kalibrasyon_secici.count() == 1  # henüz kayıtlı yok
+    sekme.baslat()
+    _sonuna_kadar(sekme)
+    ilk = sekme.pencere.akis
+    son_akimlar = np.asarray(ilk.mevcut_akimlar_A).copy()
+    sekme.yeni_calistirma()
+    assert sekme.kalibrasyon_secici.count() == 2
+    sekme.kalibrasyon_secici.setCurrentIndex(1)
+    assert sekme.akimdan_basla.isEnabled() and sekme.akimdan_basla.isChecked()
+    assert "yön doğrulama" in sekme.kalibrasyon_bilgi.text()
+    sekme.baslat()
+    akis = sekme.pencere.akis
+    assert akis.faz is Faz.YON_DOGRULAMA and akis.kalibrasyon is not None
+    assert np.allclose(akis.mevcut_gorev.akimlar_A, son_akimlar)
+    _sonuna_kadar(sekme)
+    assert akis.faz is Faz.TAMAMLANDI and akis.yakinsadi is True, akis.notlar
+    assert akis.yon_sonucu is not None and abs(akis.yon_sonucu["aci_farki_derece"]) < 5
+    assert akis.adim_no < ilk.adim_no  # kalibrasyon yinelenmedi
     sekme.kapat()

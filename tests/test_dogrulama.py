@@ -54,7 +54,7 @@ def test_beklenenden_buyuk_sapma_yazim_hatasi_uyarisi_verir(kfg, konvansiyon):
         merkez_sacilimi_m=1e-6,
     )
     assert sonuc.onay_gerekli
-    assert any("OLASI YAZIM HATASI" in u for u in sonuc.uyarilar)
+    assert any("BEKLENENDEN SAPMA" in u for u in sonuc.uyarilar)
 
 
 def test_beklenene_yakin_giris_uyari_vermez(kfg, konvansiyon):
@@ -111,7 +111,7 @@ def test_bilerek_bozulmus_giris_akista_yakalanir(
     )
     sonuc = akis.olcum_dogrula(bozuk)
     assert sonuc.onay_gerekli, "10 kat büyütülmüş C_1 uyarı üretmeliydi"
-    assert any("YAZIM HATASI" in u for u in sonuc.uyarilar)
+    assert any("BEKLENENDEN SAPMA" in u for u in sonuc.uyarilar)
 
 
 # ---------------------------------------------------------------------------

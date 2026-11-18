@@ -32,6 +32,7 @@ from .yapilandirma import BOBIN_SAYISI, Yapilandirma
 ADIM_ARKA_PLAN = "arka_plan"
 ADIM_KALIBRASYON = "kalibrasyon"
 ADIM_DUZELTME = "duzeltme"
+ADIM_YON_DOGRULAMA = "yon_dogrulama"   # kayıtlı kalibrasyonun bu oturuma uyarlanması
 ADIM_TEKRARLANABILIRLIK = "tekrarlanabilirlik"
 ADIM_POLARITE = "polarite_dogrulama"
 ADIM_MODULATOR = "modulator_karsilastirma"
@@ -87,9 +88,19 @@ class Calistirma:
     def __init__(self, yapilandirma: Yapilandirma, kok: str | Path | None = None) -> None:
         self.yapilandirma = yapilandirma
         kok_dizin = Path(kok) if kok is not None else Path(yapilandirma.genel.calistirma_kok_dizini)
-        self.etiket = datetime.now().strftime("%Y-%m-%d_%H%M%S")
+        # Aynı saniyede ikinci çalıştırma (ör. "mevcut akımlarla yeniden düzelt")
+        # öncekinin klasörüne yazmasın: _2, _3 ... eki
+        temel = datetime.now().strftime("%Y-%m-%d_%H%M%S")
+        kok_dizin.mkdir(parents=True, exist_ok=True)
+        self.etiket, sira = temel, 1
+        while True:
+            try:
+                (kok_dizin / self.etiket).mkdir()
+                break
+            except FileExistsError:
+                sira += 1
+                self.etiket = f"{temel}_{sira}"
         self.dizin = kok_dizin / self.etiket
-        self.dizin.mkdir(parents=True, exist_ok=True)
 
         self.harmonikler = yapilandirma.harmonikler.tum_harmonikler
         self.olcumler_csv = self.dizin / "olcumler.csv"
@@ -341,6 +352,10 @@ def ozet_yaz(calistirma: Calistirma, veri: OzetVerisi) -> Path:
 
     ekle("## Yalnızca izlenen büyüklükler")
     ekle("")
+    ekle("Bobin çerçevesinde: enkoder artımlı ve sıfırı her oturumda keyfi olduğu için "
+         "bunlar yerçekimine göre skew ya da roll değildir. (CSV sütun adları `sq_over_g`, "
+         "`roll_mrad` uyumluluk için korunmuştur.)")
+    ekle("")
     ekle("| Büyüklük | düzeltme öncesi | düzeltme sonrası |")
     ekle("|---|---|---|")
 
@@ -353,8 +368,8 @@ def ozet_yaz(calistirma: Calistirma, veri: OzetVerisi) -> Path:
         return f"{deger:.6g}"
 
     for ad, baslik in (
-        ("sq_over_g", "SQ/G"),
-        ("roll_mrad", "roll (mrad)"),
+        ("sq_over_g", "a2/b2 (bobin çerçevesinde)"),
+        ("roll_mrad", "kuadrupol açısı, bobin sıfırına göre (mrad)"),
         ("b3", "b3"),
         ("a3", "a3"),
         ("b4", "b4"),

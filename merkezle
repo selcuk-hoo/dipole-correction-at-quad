@@ -9,8 +9,9 @@
 #   ./merkezle eslestir   güç kaynaklarını bobinlerle eşleştir (USB takıldıktan sonra bir kez)
 #   ./merkezle kanal_testi  dört ADC kanalını akım 0 / eşit nominal akımda ölç (hangisi düz bobin?)
 #
-# Pencerede dönen bobin sekmesi Pico'ya bağlanıp motoru başlatır; merkezleme
-# sekmesinde nominal akım ve tolerans seçilip "Merkezlemeyi başlat"a basılır.
+# Pencerede dönen bobin sekmesi Pico'ya bağlanır; motoru o sekmedeki "Başlat" ile
+# siz çalıştırırsınız (açılışta motor dönmez). Merkezleme sekmesinde nominal akım ve
+# tolerans seçilip "Merkezlemeyi başlat"a basılır.
 # otomatik kipte: dönen bobin açılır, ilk sağlıklı ölçümü yazınca merkezleme
 # arayüzsüz başlar, bitince dönen bobin de kapanır.
 #

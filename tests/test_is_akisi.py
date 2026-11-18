@@ -4,6 +4,7 @@ from __future__ import annotations
 import csv
 import dataclasses
 import json
+import math
 
 import numpy as np
 import pytest
@@ -95,8 +96,9 @@ def test_arka_plan_her_n_noktada_politikasi(kfg, simulator_uret, akis_uret, tmp_
     """arka_plan_her_n_noktada = 3 ise arka plan sayısı belirgin azalmalı."""
     from merkezleme.kalibrasyon import plan_olustur
 
+    her = dataclasses.replace(kfg.kalibrasyon, arka_plan_her_n_noktada=1)
     seyrek = dataclasses.replace(kfg.kalibrasyon, arka_plan_her_n_noktada=3)
-    assert plan_olustur(seyrek).arka_plan_sayisi < plan_olustur(kfg.kalibrasyon).arka_plan_sayisi
+    assert plan_olustur(seyrek).arka_plan_sayisi < plan_olustur(her).arka_plan_sayisi
 
 
 def test_arka_plan_atlanirsa_son_gecerli_kullanilir_ve_kaydedilir(
@@ -104,6 +106,9 @@ def test_arka_plan_atlanirsa_son_gecerli_kullanilir_ve_kaydedilir(
 ):
     sim = simulator_uret(ofset_m=complex(90e-6, 0), tohum=54)
     akis, kaynak, calistirma = akis_uret(sim)
+    # her noktada arka plan (yapilandirma.yaml'daki değerden bağımsız)
+    akis.kfg = dataclasses.replace(
+        kfg, kalibrasyon=dataclasses.replace(kfg.kalibrasyon, arka_plan_her_n_noktada=1))
     akis.basla()
     akis.olcum_gonder(kaynak.olcum_al(akis.mevcut_istek))  # ilk arka plan
     ilk_arka_plan = akis.son_arka_plan
@@ -208,7 +213,26 @@ def test_buyuk_ofset_kucuk_adimlarla_yakinsar(
     akis.basla()
     otomatik_yurut(akis, kaynak, max_adim=400)
     assert akis.faz is Faz.TAMAMLANDI, akis.durdurma_nedeni
+    assert akis.yakinsadi is True and akis.sonraki_eylem_metni() == "TAMAMLANDI"
     assert any("tam adımın" in n for n in akis.notlar)
+
+
+def test_en_fazla_iterasyonda_tolerans_disi_bitis_ayrilir(
+    kfg, konvansiyon, mod_bazi, simulator_uret, kaynak_grubu_uret, tmp_path
+):
+    """Tolerans dışında, iterasyon sınırında biten akış TAMAMLANDI fazındadır ama
+    yakinsadi=False; sonraki eylem metni ve durum dosyası bunu söyler."""
+    sim = simulator_uret(ofset_m=complex(-1400e-6, -120e-6), tohum=61)
+    kaynak = SimulatorGirisi(sim)
+    k = dataclasses.replace(kfg, duzeltme=dataclasses.replace(kfg.duzeltme, max_iterasyon=1))
+    cal = Calistirma(k, kok=tmp_path)
+    akis = IsAkisi(k, kaynak_grubu_uret(), kaynak, cal, konvansiyon, mod_bazi)
+    akis.basla()
+    otomatik_yurut(akis, kaynak, max_adim=400)
+    assert akis.faz is Faz.TAMAMLANDI and akis.yakinsadi is False
+    assert akis.sonraki_eylem_metni().startswith("TOLERANS DIŞINDA BİTTİ")
+    akis.durumu_kaydet()
+    assert cal.durum_oku()["yakinsadi"] is False
 
 
 # ---------------------------------------------------------------------------
@@ -344,7 +368,7 @@ def test_ciktilar_duz_metin_ve_eksiksiz(kfg, simulator_uret, akis_uret):
                    "## Yalnızca izlenen büyüklükler", "## Arka plan", "## Tekrarlanabilirlik"):
         assert baslik in metin, baslik
     assert "R_eff" in metin and "Tekil değerler" in metin
-    assert "SQ/G" in metin and "b3" in metin
+    assert "a2/b2" in metin and "bobin sıfırına göre" in metin and "b3" in metin
 
 
 def test_calistirma_klasoru_tarihli(kfg, tmp_path):
@@ -353,3 +377,88 @@ def test_calistirma_klasoru_tarihli(kfg, tmp_path):
     # 2026-09-17_123456 biçimi
     assert len(calistirma.etiket) == len("2026-09-17_123456")
     assert calistirma.etiket[4] == "-" and calistirma.etiket[10] == "_"
+
+
+# ---------------------------------------------------------------------------
+# Kayıtlı kalibrasyonu başka oturumda kullanma (yön doğrulama)
+# ---------------------------------------------------------------------------
+def _kalibre_et(kfg, konvansiyon, mod_bazi, simulator_uret, kaynak_grubu_uret, tmp_path):
+    sim = simulator_uret(ofset_m=complex(300e-6, -200e-6), tohum=70)
+    kaynak = SimulatorGirisi(sim)
+    akis = IsAkisi(kfg, kaynak_grubu_uret(), kaynak, Calistirma(kfg, kok=tmp_path / "ilk"), konvansiyon, mod_bazi)
+    akis.basla()
+    otomatik_yurut(akis, kaynak, max_adim=400)
+    assert akis.kalibrasyon is not None and akis.kalibrasyon.kuadrupol_acisi_rad is not None
+    return akis.kalibrasyon
+
+
+@pytest.mark.parametrize("roll", [0.0, 0.4, math.pi + 0.3])
+def test_kayitli_kalibrasyon_enkoder_sifiri_kaysa_da_kullanilir(
+    roll, kfg, konvansiyon, mod_bazi, simulator_uret, kaynak_grubu_uret, tmp_path
+):
+    """Enkoder sıfırının kayması = bütün düzenin dönmesi (simülatörde roll). Yön
+    doğrulama matrisi döndürür, 180° belirsizliğini H adımıyla çözer ve düzeltme
+    kalibrasyon yinelenmeden yakınsar."""
+    kal = _kalibre_et(kfg, konvansiyon, mod_bazi, simulator_uret, kaynak_grubu_uret, tmp_path)
+    sim = simulator_uret(ofset_m=complex(-150e-6, 250e-6), tohum=71)
+    sim.roll_rad += roll
+    kaynak = SimulatorGirisi(sim)
+    akis = IsAkisi(kfg, kaynak_grubu_uret(), kaynak, Calistirma(kfg, kok=tmp_path / "yeni"), konvansiyon, mod_bazi)
+    akis.kalibrasyonu_yukle(kal)
+    akis.yon_dogrulama_gerekli = True
+    akis.basla()
+    assert akis.faz is Faz.YON_DOGRULAMA
+    otomatik_yurut(akis, kaynak, max_adim=200)
+    assert akis.faz is Faz.TAMAMLANDI and akis.yakinsadi is True, akis.notlar
+    s = akis.yon_sonucu
+    assert s is not None and abs(s["aci_farki_derece"]) < 3 and 0.9 < s["oran"] < 1.1
+    fark = (s["dondurme_derece"] - math.degrees(roll) + 180) % 360 - 180
+    assert abs(fark) < 1.0
+    assert not any(n.startswith("Kalibrasyon uyarisi") for n in akis.notlar[:1])
+    assert any("Yön doğrulama" in n for n in akis.notlar)
+
+
+def test_kayitli_kalibrasyon_uymazsa_durur(
+    kfg, konvansiyon, mod_bazi, simulator_uret, kaynak_grubu_uret, tmp_path
+):
+    kal = _kalibre_et(kfg, konvansiyon, mod_bazi, simulator_uret, kaynak_grubu_uret, tmp_path)
+    bozuk = dataclasses.replace(kal, R=kal.R * np.array([[3.0], [3.0], [1.0]]))
+    sim = simulator_uret(ofset_m=complex(-150e-6, 250e-6), tohum=72)
+    kaynak = SimulatorGirisi(sim)
+    akis = IsAkisi(kfg, kaynak_grubu_uret(), kaynak, Calistirma(kfg, kok=tmp_path / "yeni"), konvansiyon, mod_bazi)
+    akis.kalibrasyonu_yukle(bozuk)
+    akis.yon_dogrulama_gerekli = True
+    akis.basla()
+    otomatik_yurut(akis, kaynak, max_adim=50)
+    assert akis.faz is Faz.DURDURULDU and "uymuyor" in (akis.durdurma_nedeni or "")
+    assert akis.iterasyon == 0
+
+
+def test_kuadrupol_acisi_kalibrasyon_dosyasinda_ve_csvden(tmp_path):
+    import csv as _csv
+
+    from merkezleme.kalibrasyon import KalibrasyonSonucu, csvden_kuadrupol_acisi, kayitli_kalibrasyonu_yukle
+
+    psi = math.radians(31.6)
+    c2 = 2.5e-3 * complex(math.cos(2 * psi), math.sin(2 * psi))
+    with (tmp_path / "olcumler.csv").open("w", newline="", encoding="utf-8") as f:
+        w = _csv.writer(f)
+        w.writerow(["adim_turu", "epsilon", "net_B2", "net_A2"])
+        w.writerow(["arka_plan", "", "1e-7", "1e-7"])
+        w.writerow(["kalibrasyon", "0.000000", c2.real, c2.imag])
+        w.writerow(["kalibrasyon", "0.005000", 0.0, 1.0])  # epsilon != 0: alınmaz
+    assert csvden_kuadrupol_acisi(tmp_path) == pytest.approx(psi)
+    kal = KalibrasyonSonucu(
+        R=np.array([[0.0, 1.0, 0.0, -1.0], [1.0, 0.0, -1.0, 0.0], [0.3, 0.3, 0.3, 0.3]]) * 0.02,
+        fitler={}, tekil_degerler=np.ones(3), kosul_sayisi=1.0, kosul_sayisi_olcekli=1.0, r_eff_m=0.03,
+        m_sutunu_orani=None, supheli=False, supheli_nedenleri=[], gradyen_hedefi_T_m=0.1, modulator_acik=False)
+    kal.kaydet(tmp_path / "kalibrasyon.json")  # açı yok (18 Kasım öncesi gibi)
+    yuklu = kayitli_kalibrasyonu_yukle(tmp_path / "kalibrasyon.json")
+    assert yuklu.kuadrupol_acisi_rad == pytest.approx(psi)
+    # döndürme: sütunlar e^(iφ) ile döner, g satırı değişmez, açı φ kadar azalır
+    d = yuklu.dondurulmus(0.5, -1.0)
+    s0, s1 = yuklu.R[0] + 1j * yuklu.R[1], d.R[0] + 1j * d.R[1]
+    assert np.allclose(s1, -s0 * complex(math.cos(0.5), math.sin(0.5)))
+    assert np.allclose(d.R[2], yuklu.R[2]) and d.kuadrupol_acisi_rad == pytest.approx(psi - 0.5)
+    yuklu.kaydet(tmp_path / "k2.json")
+    assert KalibrasyonSonucu.yukle(tmp_path / "k2.json").kuadrupol_acisi_rad == pytest.approx(psi)

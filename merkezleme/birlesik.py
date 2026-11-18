@@ -20,10 +20,14 @@ import csv
 import dataclasses
 import math
 import os
+import html
+import json
 import signal
+import subprocess
 import sys
 import threading
 import time
+from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 from typing import Callable
@@ -35,6 +39,7 @@ from PySide6.QtGui import QColor
 from PySide6.QtWidgets import (
     QApplication,
     QCheckBox,
+    QComboBox,
     QDoubleSpinBox,
     QFormLayout,
     QGraphicsColorizeEffect,
@@ -57,6 +62,7 @@ from .arayuz import MerkezlemePencere, qt_bekle
 from .guc_kaynagi import KomutGunlugu
 from .harmonikler import HarmonikKonvansiyonu
 from .is_akisi import IsAkisi
+from .kalibrasyon import KalibrasyonSonucu, kayitli_kalibrasyonu_yukle
 from .kayit import Calistirma
 from .modlar import ModBazi
 from .olcum_kaynagi import DosyaGirisi
@@ -64,6 +70,106 @@ from .yapilandirma import Yapilandirma, yapilandirma_yukle
 
 KOK = Path(__file__).resolve().parents[1]
 HOST = KOK / "donen_bobin" / "host"
+ARKA_PLAN_ORTALAMA_SAYISI = 5  # izlemede ortalaması alınan son arka plan ölçümü
+OLCUM_YOK_ESIGI_S = 60.0  # izlemede bu kadar yeni ölçüm gelmezse uyarı (+ Telegram)
+TELEGRAM_KOMUTU = Path.home() / "bin" / "telegram-mesaj"
+
+
+def telegram_bildir(baslik: str, ayrinti: str = "") -> None:
+    """Kullanıcının telefonuna kısa bir bildirim gönderir (arka planda, beklemeden).
+
+    Komut yoksa, testlerde ya da MERKEZLE_TELEGRAM=0 iken sessizce geçer;
+    gönderilemezse ölçüm etkilenmez."""
+    if (os.environ.get("MERKEZLE_TELEGRAM") == "0" or "PYTEST_CURRENT_TEST" in os.environ
+            or not TELEGRAM_KOMUTU.exists()):
+        return
+    metin = f"<b>{html.escape(baslik)}</b>"
+    if ayrinti:
+        metin += f"\n\n{html.escape(ayrinti)}"
+    metin += f"\n\n<i>{datetime.now():%H:%M}</i>"
+    try:
+        subprocess.Popen([str(TELEGRAM_KOMUTU), "-h", metin], stdout=subprocess.DEVNULL,
+                         stderr=subprocess.DEVNULL, start_new_session=True)
+    except OSError:
+        pass
+
+
+@dataclass
+class KayitliKalibrasyon:
+    """Önceki bir çalıştırmanın kalibrasyonu (yeniden kullanmak için)."""
+
+    dosya: Path
+    kalibrasyon: KalibrasyonSonucu
+    nominal_A: float | None
+    son_akimlar_A: np.ndarray | None  # çalıştırma tamamlandıysa son ayar akımları
+    etiket: str
+
+
+def _calistirma_nominali(dizin: Path) -> float | None:
+    ayarlar = dizin / "arayuz_ayarlari.txt"
+    if ayarlar.exists():
+        for satir in ayarlar.read_text(encoding="utf-8").splitlines():
+            if satir.startswith("nominal_akim_A:"):
+                try:
+                    return float(satir.split(":", 1)[1])
+                except ValueError:
+                    return None
+    try:
+        import yaml
+
+        return float(yaml.safe_load((dizin / "yapilandirma.yaml").read_text(encoding="utf-8"))
+                     ["miknatis"]["nominal_akim_A"])
+    except Exception:  # noqa: BLE001 - bilinmiyorsa None
+        return None
+
+
+def _kuru_calistirma_mi(dizin: Path) -> bool:
+    """Komutlar güç kaynaklarına gitmediyse True. SCPI günlüğüne bakılır: 6 Kasım
+    öncesi yapılandırma kopyası --canli'yi yansıtmıyordu (kip yanlışlıkla "kuru")."""
+    gunluk = dizin / "scpi_gunlugu.txt"
+    if gunluk.exists():
+        with gunluk.open(encoding="utf-8", errors="replace") as f:
+            ilk = [f.readline() for _ in range(5)]
+        return any("(kuru)" in s for s in ilk)
+    ayarlar = dizin / "arayuz_ayarlari.txt"
+    return ayarlar.exists() and "kip: kuru" in ayarlar.read_text(encoding="utf-8")
+
+
+def kayitli_kalibrasyonlari_bul(kok: Path, canli: bool, en_fazla: int = 15) -> list[KayitliKalibrasyon]:
+    """`kok` altındaki çalıştırmaların kalibrasyonları, en yeniden eskiye.
+
+    Kuadrupol açısı bilinmeyenler (yeniden kullanılamaz) ve canlı kipte, kuru
+    kipte yapılmış çalıştırmalar alınmaz."""
+    sonuc: list[KayitliKalibrasyon] = []
+    if not kok.is_dir():
+        return sonuc
+    for dizin in sorted((d for d in kok.iterdir() if d.is_dir()), reverse=True):
+        dosya = dizin / "kalibrasyon.json"
+        if not dosya.exists():
+            continue
+        if canli and _kuru_calistirma_mi(dizin):
+            continue
+        try:
+            kal = kayitli_kalibrasyonu_yukle(dosya)
+        except Exception:  # noqa: BLE001 - bozuk dosya listelenmez
+            continue
+        if kal.kuadrupol_acisi_rad is None:
+            continue
+        son = None
+        try:
+            durum = json.loads((dizin / "durum.json").read_text(encoding="utf-8"))
+            akimlar = np.asarray(durum.get("mevcut_akimlar_A", []), dtype=float)
+            if durum.get("faz") == "tamamlandi" and akimlar.size == 4 and np.all(akimlar > 0):
+                son = akimlar
+        except Exception:  # noqa: BLE001
+            pass
+        nominal = _calistirma_nominali(dizin)
+        etiket = (dizin.name + (f", {nominal:g} A" if nominal else "")
+                  + (", ŞÜPHELİ" if kal.supheli else "") + ("" if son is None else ", son akımlar var"))
+        sonuc.append(KayitliKalibrasyon(dosya, kal, nominal, son, etiket))
+        if len(sonuc) >= en_fazla:
+            break
+    return sonuc
 
 
 def ayarlari_uygula(kfg: Yapilandirma, nominal_akim_A: float, merkez_toleransi_um: float) -> Yapilandirma:
@@ -114,6 +220,13 @@ class MerkezlemeSekmesi(QWidget):
             "Ölçümleri ve düzeltme önerilerini kendiliğinden onaylar. Röle/modülatör gibi\n"
             "kullanıcı eylemleri ve duraklatma yine size bırakılır. İstediğiniz an kapatılabilir.")
         ust.addWidget(self.otomatik_calisma)
+        self.yeniden_dugmesi = QPushButton("Mevcut akımlarla yeniden düzelt")
+        self.yeniden_dugmesi.setToolTip(
+            "Akımları SIFIRLAMADAN, bu çalıştırmanın kalibrasyonuyla düzeltmeyi yeniden başlatır.\n"
+            "Mıknatıs sıcak düzeninde kalır (yalnızca arka plan için akımlar kısa süre sıfırlanır).\n"
+            "Isınmayla kayan merkezi izleme sırasında düzeltmek için.")
+        self.yeniden_dugmesi.clicked.connect(self.yeniden_duzelt)
+        ust.addWidget(self.yeniden_dugmesi)
         self.yeni_dugmesi = QPushButton("Yeni çalıştırma (akımları sıfırla, ayarlara dön)")
         self.yeni_dugmesi.clicked.connect(self.yeni_calistirma)
         ust.addWidget(self.yeni_dugmesi)
@@ -161,6 +274,21 @@ class MerkezlemeSekmesi(QWidget):
         form.addRow("Merkez toleransı", self.tolerans_kutusu)
         self.otomatik_kutusu = QCheckBox("onay beklemeden baştan sona yürü (çalışırken de değiştirilebilir)")
         form.addRow("Otomatik", self.otomatik_kutusu)
+        self.kalibrasyon_secici = QComboBox()
+        self.kalibrasyon_secici.setToolTip(
+            "Kayıtlı bir kalibrasyon seçilirse kalibrasyon yinelenmez (~7 dk ve 15 akım değişimi yerine\n"
+            "2 ölçümlük yön doğrulama): matris, kuadrupolün bu oturumdaki açısına göre döndürülür,\n"
+            "180° belirsizliği küçük bir H adımıyla çözülür. Uymazsa akış durur ve yeni kalibrasyon önerir.")
+        self.kalibrasyon_secici.currentIndexChanged.connect(self._kalibrasyon_secildi)
+        form.addRow("Kalibrasyon", self.kalibrasyon_secici)
+        self.akimdan_basla = QCheckBox("o çalıştırmanın son akımlarından başla (nominal yerine)")
+        form.addRow("", self.akimdan_basla)
+        self.kalibrasyon_bilgi = QLabel()
+        self.kalibrasyon_bilgi.setWordWrap(True)
+        form.addRow("", self.kalibrasyon_bilgi)
+        self.nominal_kutusu.valueChanged.connect(self._kalibrasyon_secildi)
+        self.kayitlilar: list[KayitliKalibrasyon] = []
+        self._kalibrasyonlari_yenile()
         self.sinir_etiketi = QLabel()
         self.sinir_etiketi.setWordWrap(True)
         form.addRow("Sınırlar", self.sinir_etiketi)
@@ -180,6 +308,39 @@ class MerkezlemeSekmesi(QWidget):
         duzen.addStretch()
         return sayfa
 
+    def _kalibrasyonlari_yenile(self) -> None:
+        self.kayitlilar = kayitli_kalibrasyonlari_bul(Path(self.kfg.genel.calistirma_kok_dizini), self.canli)
+        self.kalibrasyon_secici.blockSignals(True)
+        self.kalibrasyon_secici.clear()
+        self.kalibrasyon_secici.addItem("Yeni kalibrasyon kur (~7 dk)", None)
+        for i, k in enumerate(self.kayitlilar):
+            self.kalibrasyon_secici.addItem("Kayıtlı: " + k.etiket, i)
+        self.kalibrasyon_secici.blockSignals(False)
+        self._kalibrasyon_secildi()
+
+    def secili_kayitli(self) -> KayitliKalibrasyon | None:
+        i = self.kalibrasyon_secici.currentData()
+        return None if i is None else self.kayitlilar[i]
+
+    def _kalibrasyon_secildi(self) -> None:
+        k = self.secili_kayitli()
+        nominal = self.nominal_kutusu.value()
+        ayni_nominal = k is not None and k.nominal_A is not None and abs(k.nominal_A - nominal) < 1e-6
+        kullanilir = k is not None and k.son_akimlar_A is not None and ayni_nominal
+        self.akimdan_basla.setEnabled(kullanilir)
+        self.akimdan_basla.setChecked(kullanilir)
+        if k is None:
+            self.kalibrasyon_bilgi.setText("")
+            return
+        metin = (f"Kuadrupol açısı (o oturumun bobin sıfırına göre) "
+                 f"{math.degrees(k.kalibrasyon.kuadrupol_acisi_rad):+.1f}°. "
+                 "Matris bu oturuma 2 ölçümlük yön doğrulamayla uyarlanır.")
+        if k.nominal_A is not None and not ayni_nominal:
+            metin += f" Kalibrasyon {k.nominal_A:g} A'de kurulmuş (bağıl birimde geçerli); son akımlar kullanılamaz."
+        if k.kalibrasyon.supheli:
+            metin += " ŞÜPHELİ: " + "; ".join(k.kalibrasyon.supheli_nedenleri)
+        self.kalibrasyon_bilgi.setText(metin)
+
     def _otomatik_ilerle(self) -> None:
         if self.pencere is not None and self.otomatik_calisma.isChecked():
             self.pencere.otomatik_adim()
@@ -197,11 +358,14 @@ class MerkezlemeSekmesi(QWidget):
         hazir, aciklama = self.bobin_hazir()
         self.bobin_etiketi.setText(("Dönen bobin: " if hazir else "Dönen bobin HAZIR DEĞİL: ") + aciklama)
         self.baslat_dugmesi.setEnabled(hazir and not self.donanim_sorunu and self.pencere is None)
+        self.yeniden_dugmesi.setEnabled(self.yeniden_duzeltilebilir())
         if self.pencere is not None:
             a = self.pencere.akis
             ek = ""
             if self.otomatik_calisma.isChecked() and a.bekleme.name == "KULLANICI_EYLEMI":
                 ek = " — KULLANICI EYLEMİ BEKLENİYOR (otomatik geçilmez)"
+            if a.faz.value == "tamamlandi" and a.yakinsadi is False:
+                ek = " — TOLERANS DIŞINDA BİTTİ"
             self.calisma_etiketi.setText(
                 f"Nominal {a.kfg.miknatis.nominal_akim_A:g} A, tolerans {a.kfg.duzeltme.merkez_toleransi_um:g} µm"
                 f" — faz: {a.faz.value}{ek}"
@@ -212,31 +376,103 @@ class MerkezlemeSekmesi(QWidget):
         if self.pencere is not None:
             return
         kfg = ayarlari_uygula(self.kfg, self.nominal_kutusu.value(), self.tolerans_kutusu.value())
-        konvansiyon = HarmonikKonvansiyonu(kfg.harmonikler)
+        kayitli = self.secili_kayitli()
+        baslangic = None
+        if kayitli is not None and self.akimdan_basla.isEnabled() and self.akimdan_basla.isChecked():
+            baslangic = np.asarray(kayitli.son_akimlar_A, dtype=float)
+            g = kfg.guvenlik
+            asimetri = np.abs(baslangic / kfg.miknatis.nominal_akim_A - 1.0)
+            if np.any(asimetri > g.nominale_gore_max_asimetri) or np.any(baslangic > g.bobin_basi_max_akim_A):
+                QMessageBox.warning(self, "Başlangıç akımları",
+                                    "Kayıtlı son akımlar güvenlik sınırlarının dışında; nominalden başlayın.")
+                return
         try:
             grup = _kaynak_grubu_kur(kfg, canli=self.canli, gunluk=KomutGunlugu(), bekle=qt_bekle)
         except Exception as hata:  # noqa: BLE001 - kullanıcıya gösterilir
             QMessageBox.critical(self, "Güç kaynakları", f"Güç kaynaklarına bağlanılamadı:\n{hata}")
             return
+        self.otomatik_calisma.setChecked(self.otomatik_kutusu.isChecked())
+        if kayitli is None:
+            self._akisi_kur(kfg, grup)
+        else:
+            self._akisi_kur(kfg, grup, kalibrasyon=kayitli.kalibrasyon, baslangic_akimlari_A=baslangic,
+                            onceki=kayitli.dosya.parent, yon_dogrulama=True)
+
+    def _akisi_kur(self, kfg: Yapilandirma, grup, kalibrasyon=None, baslangic_akimlari_A=None,
+                   onceki: Path | None = None, yon_dogrulama: bool = False) -> None:
+        konvansiyon = HarmonikKonvansiyonu(kfg.harmonikler)
         calistirma = Calistirma(kfg)
+        ek = ""
+        if onceki is not None:
+            ek = ((f"kayıtlı kalibrasyon: {onceki} (yön doğrulamayla bu oturuma uyarlanır)\n"
+                   if yon_dogrulama else f"önceki çalıştırmadan yeniden düzeltme: {onceki}\n")
+                  + ("başlangıç akımları: nominal\n" if baslangic_akimlari_A is None else
+                     f"başlangıç akımları (A): {', '.join(f'{a:.5f}' for a in baslangic_akimlari_A)}\n")
+                  + "kalibrasyon yeniden yapılmadı\n")
         (calistirma.dizin / "arayuz_ayarlari.txt").write_text(
             f"{datetime.now():%Y-%m-%d %H:%M:%S} birleşik arayüzden başlatıldı\n"
             f"kip: {kfg.genel.kip}\n"
             f"nominal_akim_A: {kfg.miknatis.nominal_akim_A}\n"
             f"merkez_toleransi_um: {kfg.duzeltme.merkez_toleransi_um}\n"
-            f"otomatik (başlangıçta): {self.otomatik_kutusu.isChecked()}\n"
+            f"otomatik (başlangıçta): {self.otomatik_calisma.isChecked()}\n"
+            + ek +
             "(yapilandirma.yaml bu iki değer dışında aynen kullanıldı)\n",
             encoding="utf-8",
         )
         akis = IsAkisi(kfg, grup, self.olcum_kaynagi_uret(kfg, konvansiyon), calistirma,
                        konvansiyon, ModBazi(kfg.modlar, kfg.miknatis))
-        self.otomatik_calisma.setChecked(self.otomatik_kutusu.isChecked())
+        if kalibrasyon is not None:
+            akis.kalibrasyonu_yukle(kalibrasyon)
+            calistirma.kalibrasyon_yaz(kalibrasyon)
+            akis.baslangic_akimlari_A = baslangic_akimlari_A
+            akis.yon_dogrulama_gerekli = yon_dogrulama
         self.yigin.setCurrentWidget(self.calisma_sayfasi)
         # Pencere kurulurken akış başlar ve ilk ölçümü bekler (olay döngüsü işler)
         self.pencere = MerkezlemePencere(kfg, akis, otomatik_kaynak_etiketi="OTOMATİK ÖLÇÜM (dönen bobin sekmesi)")
         self.calisma_sayfasi.layout().addWidget(self.pencere)
         self.merkezleme_acilinca()
         self._durumu_yenile()
+
+    def yeniden_duzeltilebilir(self) -> bool:
+        """Akış tamamlanmış, kalibrasyonu var ve akımlar açıksa."""
+        if self.pencere is None:
+            return False
+        a = self.pencere.akis
+        return (a.faz.value == "tamamlandi" and a.kalibrasyon is not None
+                and bool(np.any(np.asarray(a.kaynaklar.ayar_akimlari_A) > 0)))
+
+    def yeniden_duzelt(self, sor: bool = True) -> None:
+        """Akımları sıfırlamadan, aynı kalibrasyonla yeni bir düzeltme çalıştırması.
+
+        17 Kasım'da yeniden merkezlemek için akımlar sıfırlanıp kalibrasyon baştan
+        yapılmıştı; mıknatıs soğudu ve ısıl düzen bozuldu. Burada eski pencere
+        kapatılmadan (closeEvent akımları sıfırlardı) sökülür, kaynak grubu ve
+        kalibrasyon yeni akışa devredilir."""
+        if not self.yeniden_duzeltilebilir():
+            return
+        eski = self.pencere.akis
+        akimlar = np.asarray(eski.kaynaklar.ayar_akimlari_A, dtype=float).copy()
+        if sor and QMessageBox.question(
+            self, "Mevcut akımlarla yeniden düzelt",
+            "Akımlar şu değerlerde açık kalacak:\n  "
+            + ", ".join(f"I{i + 1} = {a:.4f} A" for i, a in enumerate(akimlar))
+            + "\n\nBu çalıştırmanın kalibrasyonuyla düzeltme yeniden başlatılacak (kalibrasyon "
+            "yinelenmez). Yalnızca arka plan ölçümü için akımlar kısa süre sıfıra iner.\n"
+            "Kararlılık izlemesi sürüyorsa durdurulur. Devam edilsin mi?",
+        ) != QMessageBox.StandardButton.Yes:
+            return
+        for kanca in self.kapanis_kancalari:  # izlemeyi durdur
+            kanca()
+        eski.notlar.append("Mevcut akımlarla yeniden düzeltmeye geçildi; akımlar açık bırakıldı.")
+        try:
+            eski.ozeti_yaz()
+        except Exception:  # noqa: BLE001 - özet yazılamasa da devam
+            pass
+        pencere, self.pencere = self.pencere, None
+        pencere.setParent(None)   # close() DEĞİL: closeEvent akımları sıfırlardı
+        pencere.deleteLater()
+        self._akisi_kur(eski.kfg, eski.kaynaklar, kalibrasyon=eski.kalibrasyon,
+                        baslangic_akimlari_A=akimlar, onceki=eski.calistirma.dizin)
 
     def yeni_calistirma(self) -> None:
         if self.pencere is None:
@@ -248,17 +484,28 @@ class MerkezlemeSekmesi(QWidget):
             return
         self.kapat()
         self.yigin.setCurrentIndex(0)
+        self._kalibrasyonlari_yenile()  # biten çalıştırmanın kalibrasyonu da listelensin
         self._durumu_yenile()
 
     def arka_plan(self) -> dict[int, complex] | None:
-        """Quad akımları en son sıfırken ölçülen alan (n -> C_n, Tesla); yoksa None.
+        """Quad akımları sıfırken ölçülen alan (n -> C_n, Tesla); yoksa None.
 
+        Son `ARKA_PLAN_ORTALAMA_SAYISI` arka plan ölçümünün ortalamasıdır:
+        tek ölçümün saçılımı ~0.8 µT, bu da merkezde ~8 µm demek (17 Kasım).
+        Merkezlemede arka plan her noktada alındığı için bunlar son ~2 dakikaya
+        aittir. Durumdan devam edilmişse yalnızca son arka plan bilinir.
         Yalnızca birim T iken (dönen bobin Tesla yazar) ve merkezleme akışı
         en az bir arka plan ölçümü aldıysa."""
         if self.pencere is None or self.kfg.harmonikler.birim != "T":
             return None
-        ark = self.pencere.akis.son_arka_plan
-        return dict(ark.bilesenler) if ark is not None else None
+        akis = self.pencere.akis
+        olcumler = akis.son_arka_planlar[:ARKA_PLAN_ORTALAMA_SAYISI]
+        if not olcumler:
+            olcumler = [akis.son_arka_plan] if akis.son_arka_plan is not None else []
+        if not olcumler:
+            return None
+        nler = set(olcumler[0].bilesenler).intersection(*(o.bilesenler for o in olcumler[1:]))
+        return {n: sum(complex(o.bilesenler[n]) for o in olcumler) / len(olcumler) for n in nler}
 
     def kapat(self) -> None:
         """Akış varsa durdurur, akımları sıfırlar, özeti yazar (pencerenin closeEvent'i)."""
@@ -299,6 +546,12 @@ class KararlilikSekmesi(QWidget):
         self._biriken: list = []
         self._akim_kilidi = threading.Lock()
         self._son_akim: list[float] = [math.nan] * 4
+        self._akim_hatasi: str | None = None  # okuma iş parçacığının son hatası
+        self._akim_hata_sayisi = 0  # art arda başarısız okuma
+        self._akim_duzeldi = 0  # düzelmeden önceki başarısız okuma sayısı (bildirilmedi)
+        self._bildirilen_hata_sayisi = 0
+        self._son_olcum_t = 0.0
+        self._olcum_yok_bildirildi = False
         self._akim_dur = threading.Event()
         self._akim_isi: threading.Thread | None = None
         self.t: list[float] = []
@@ -383,6 +636,13 @@ class KararlilikSekmesi(QWidget):
                                     "Önce merkezleme TAMAMLANMALI (akımlar merkezlenmiş değerlerde açık kalır). "
                                     "Akımlar sıfırken 'Ortam alanını izle (akımsız)'ı kullanın.")
             return
+        if not akimsiz and akis.yakinsadi is False and QMessageBox.question(
+            self, "Kararlılık izleme",
+            "Merkezleme TOLERANS DIŞINDA bitti:\n" + (akis.durdurma_nedeni or "")
+            + "\n\nİzleme bu merkezden başlayacak. 'Mevcut akımlarla yeniden düzelt' ile önce "
+            "düzeltmeyi yineleyebilirsiniz. Yine de izleme başlatılsın mı?",
+        ) != QMessageBox.StandardButton.Yes:
+            return
         self.akimsiz = akimsiz
         d = self.bobin.dongu
         self._onceki_yaz = d.otomatik_yaz
@@ -390,11 +650,15 @@ class KararlilikSekmesi(QWidget):
         self._t0 = time.monotonic()
         self._son_kayit_t = self._t0
         self._son_sonuc = d.son_sonuc      # mevcut sonuç yeni sayılmasın
+        self._son_olcum_t = self._t0
+        self._olcum_yok_bildirildi = False
         self._biriken = []
         self.t, self.x, self.y = [], [], []
         self.dI = [[], [], [], []]
         self._I0 = None
         self._son_akim = [math.nan] * 4
+        self._akim_hatasi, self._akim_hata_sayisi, self._akim_duzeldi = None, 0, 0
+        self._bildirilen_hata_sayisi = 0
         ad = "ortam" if akimsiz else "izleme"
         self._csv = d.oturum.klasor() / f"{ad}_{datetime.now():%H%M%S}.csv"
         with open(self._csv, "w", newline="", encoding="utf-8") as f:
@@ -438,13 +702,36 @@ class KararlilikSekmesi(QWidget):
 
     def _akimlari_oku(self, kaynaklar) -> None:
         while not self._akim_dur.is_set():
+            hata = None
             try:
                 akim = [float(a) for a in kaynaklar.akimlari_oku()]
-            except Exception:  # noqa: BLE001 - okunamazsa NaN yazılır, izleme sürer
-                akim = [math.nan] * 4
+            except Exception as h:  # noqa: BLE001 - okunamazsa NaN yazılır, izleme sürer
+                akim, hata = [math.nan] * 4, h
             with self._akim_kilidi:
                 self._son_akim = akim
+                if hata is not None:
+                    self._akim_hatasi = repr(hata)
+                    self._akim_hata_sayisi += 1
+                elif self._akim_hatasi is not None:  # düzeldi: _ornekle bildirir
+                    self._akim_duzeldi += self._akim_hata_sayisi
+                    self._akim_hatasi, self._akim_hata_sayisi = None, 0
             self._akim_dur.wait(1.0)
+
+    def _akim_hatasini_bildir(self) -> None:
+        """Okuma hatasını günlüğe yazar (ana iş parçacığından): ilk hata, her 60
+        hatada bir özet ve düzelince bir satır. 17 Kasım'da okuma iki izlemede de
+        13-26 dk sonra kesilmiş, hata sessizce yutulduğu için nedeni bilinmiyordu."""
+        with self._akim_kilidi:
+            hata, sayi, duzeldi = self._akim_hatasi, self._akim_hata_sayisi, self._akim_duzeldi
+            self._akim_duzeldi = 0
+        d = self.bobin.dongu
+        if duzeldi:
+            d.gunluk(f"Güç kaynağı akımları yeniden okunuyor ({duzeldi} okuma başarısızdı).")
+            self._bildirilen_hata_sayisi = 0
+        if hata is not None and (self._bildirilen_hata_sayisi == 0
+                                   or sayi - self._bildirilen_hata_sayisi >= 60):
+            d.gunluk(f"UYARI: güç kaynağı akımları okunamıyor ({sayi}. başarısız okuma): {hata}")
+            self._bildirilen_hata_sayisi = sayi
 
     # ------------------------------------------------------------------
     def _ornekle(self) -> None:
@@ -452,11 +739,13 @@ class KararlilikSekmesi(QWidget):
             return
         d = self.bobin.dongu
         s = d.son_sonuc
+        simdi = time.monotonic()
         if s is not None and s is not self._son_sonuc:
             self._son_sonuc = s
+            self._son_olcum_t = simdi
             if not d.saglik:
                 self._biriken.append(s)
-        simdi = time.monotonic()
+        self._bekci(simdi)
         if simdi - self._son_kayit_t < self.aralik.value() - 0.01 or not self._biriken:
             return
         self._son_kayit_t = simdi
@@ -493,6 +782,7 @@ class KararlilikSekmesi(QWidget):
         z = -r * c1 / c2 if abs(c2) > 0 else complex(math.nan, math.nan)
         sx = (sum((v.real - z.real) ** 2 for v in zler) / (n - 1)) ** 0.5 if n > 1 else math.nan
         sy = (sum((v.imag - z.imag) ** 2 for v in zler) / (n - 1)) ** 0.5 if n > 1 else math.nan
+        self._akim_hatasini_bildir()
         with self._akim_kilidi:
             akim = list(self._son_akim)
         if self._I0 is None and all(math.isfinite(a) for a in akim):
@@ -506,6 +796,31 @@ class KararlilikSekmesi(QWidget):
                                     f"{abs(c1) * 1e6:.2f}", f"{abs(c2) * 1e3:.4f}", f"{hiz:.3f}", f"{artik:.2e}"]
                                    + [f"{a:.5f}" for a in akim] + [f"{c1.real * 1e6:.3f}", f"{c1.imag * 1e6:.3f}"])
         self._ciz()
+
+    def _bekci(self, simdi: float) -> None:
+        """Yeni ölçüm gelmiyorsa bir kez uyarır (günlük, kırmızı özet, Telegram).
+
+        17 Kasım 16:51'de bir yazılım hatası motoru durdurdu; akımlar ~70 dk açık
+        kaldı, izleme sessizce yazmayı bıraktı ve kimse fark etmedi."""
+        d = self.bobin.dongu
+        gecen = simdi - self._son_olcum_t
+        if gecen > OLCUM_YOK_ESIGI_S and not self._olcum_yok_bildirildi:
+            self._olcum_yok_bildirildi = True
+            neden = getattr(d, "hata_metni", "") or (
+                "motor dönmüyor" if getattr(d, "donuyor", True) is False else "neden bilinmiyor")
+            akim = "akımlar sıfır" if self.akimsiz else "quad akımları AÇIK"
+            metin = f"{gecen / 60:.0f} dakikadır yeni ölçüm yok ({akim}). Neden: {neden}"
+            if hasattr(d, "gunluk"):
+                d.gunluk("UYARI: izleme: " + metin)
+            self.ozet.setStyleSheet("color: #c0392b; font-weight: bold;")
+            self.ozet.setText("ÖLÇÜM GELMİYOR — " + metin)
+            telegram_bildir("🔴 Ölçüm durdu", metin)
+        elif gecen <= OLCUM_YOK_ESIGI_S and self._olcum_yok_bildirildi:
+            self._olcum_yok_bildirildi = False
+            if hasattr(d, "gunluk"):
+                d.gunluk("İzleme: ölçümler yeniden geliyor.")
+            self.ozet.setStyleSheet("")
+            telegram_bildir("🟢 Ölçüm yeniden başladı")
 
     def _ciz(self) -> None:
         self.egri_x.setData(self.t, self.x)
@@ -521,7 +836,8 @@ class KararlilikSekmesi(QWidget):
             metin += (f" Ortalama ± σ: {ad[0]} {np.mean(self.x):+.{ond}f} ± {np.std(self.x, ddof=1):.{ond}f}, "
                       f"{ad[1]} {np.mean(self.y):+.{ond}f} ± {np.std(self.y, ddof=1):.{ond}f} {birim}. "
                       f"Sürüklenme: {ad[0]} {ax:+.{ond}f}, {ad[1]} {ay:+.{ond}f} {birim}/saat.")
-        self.ozet.setText(metin)
+        if not self._olcum_yok_bildirildi:
+            self.ozet.setText(metin)
 
 
 class DugmeGeriBildirimi(QObject):
@@ -611,8 +927,27 @@ class BirlesikPencere(QMainWindow):
             belge.textChanged.connect(
                 lambda: self.geri_bildirim.gunluk_satiri(belge.document().lastBlock().text()))
         self.statusBar().showMessage("Basılan düğme yeşile döner; sonucu burada görünür.")
+        self.onaysiz_kapat = False  # SIGTERM: soru sorulmadan kapanır
+
+    def _suren_isler(self) -> list[str]:
+        isler = []
+        p = self.merkezleme.pencere
+        if p is not None and np.any(np.asarray(p.akis.kaynaklar.ayar_akimlari_A) > 0):
+            isler.append("quad akımları açık (rampa ile sıfıra inecek)")
+        if self.kararlilik is not None and self.kararlilik.calisiyor:
+            isler.append("kararlılık izlemesi sürüyor (bitecek)")
+        if getattr(getattr(self.bobin, "dongu", None), "donuyor", False):
+            isler.append("motor dönüyor (durdurulacak)")
+        return isler
 
     def closeEvent(self, olay) -> None:  # noqa: N802 - Qt adı
+        # Uzun ölçümde yanlışlıkla kapatmak her şeyi bitirirdi; DURDUR soruyordu, bu sormuyordu.
+        isler = [] if self.onaysiz_kapat else self._suren_isler()
+        if isler and QMessageBox.question(
+            self, "Pencereyi kapat", "Kapatılırsa:\n  • " + "\n  • ".join(isler) + "\n\nKapatılsın mı?",
+        ) != QMessageBox.StandardButton.Yes:
+            olay.ignore()
+            return
         QApplication.instance().removeEventFilter(self.geri_bildirim)
         try:
             self.merkezleme.kapat()   # akımlar sıfıra, çıkışlar kapalı, özet
@@ -668,7 +1003,11 @@ def main(argv: list[str] | None = None) -> int:
     pencere.show()
     if not g.baglanma:
         QTimer.singleShot(0, bobin.baglan)  # yalnızca bağlan; motor kullanıcı "Başlat" deyince
-    signal.signal(signal.SIGTERM, lambda *_: pencere.close())
+    def sigterm(*_) -> None:
+        pencere.onaysiz_kapat = True
+        pencere.close()
+
+    signal.signal(signal.SIGTERM, sigterm)
     return int(uygulama.exec())
 
 

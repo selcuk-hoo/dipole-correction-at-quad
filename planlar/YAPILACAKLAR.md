@@ -1,0 +1,70 @@
+# Sonradan yapılacaklar
+
+*Son güncelleme: 18 Kasım 2026 (Claude). Her maddede neden ve nereden çıktığı yazılı; yapılınca
+silin ya da "yapıldı" diye işaretleyin.*
+
+## Ölçüm ve yöntem
+
+1. **Yerçekimi açı referansı (ivmeölçer).** Ayrıntılı istem: `planlar/yercekimi_referansi_PROMPT.md`.
+   İvmeölçer rotor kartına takılınca başlanacak.
+
+2. **Kalibrasyon "şüpheli" denetimlerini kuadrupol çerçevesinde yapmak.** 6 Kasım öğleden sonrasından
+   beri yapılan kalibrasyonların çoğu "şüpheli" işaretli. Görülen nedenler ("H modu en çok y_c'yi
+   etkiliyor, x_c bekleniyordu", "V modu x_c'yi…", "H modu fiti lineer değil: g (R² = 0.89)") büyük
+   olasılıkla iki şeyden geliyor [HİPOTEZ]:
+   - Enkoder sıfırı keyfi olduğu için x_c/y_c eksenleri oturumdan oturuma dönüyor; "H → x_c" beklentisi
+     bobin çerçevesinde anlamsız. Kuadrupol çerçevesinde (ψ = arg(C₂)/2 kadar döndürülmüş) bütün
+     kalibrasyonlarda H y yönünde, V x yönünde çıkıyor (sütun açıları −46°, 43°, 134°, −135°). Bunun
+     fiziksel olarak doğru mu, bobin numaralandırması/polarite sorunu mu olduğu da ayrıca netleşmeli.
+   - g satırı 18 Kasım'a kadar B₂'den (bobin çerçevesi) hesaplanıyordu; H/V modlarının g eğimi ~0
+     olduğu için R² gürültüye ve çerçeveye çok duyarlı.
+   Yapılacak: denetimleri (`merkezleme/kalibrasyon.py`, `supheli_nedenleri`) kuadrupol çerçevesinde ve
+   anlamlı bir eğim eşiğiyle yapmak; eski kalibrasyonları yeni denetimle yeniden değerlendirmek.
+
+3. **Merkezlemenin son yinelemelerdeki salınımı.** 17 Kasım'da iki merkezleme de y'de ±20 µm salınıp
+   5 µm toleransa ulaşmadan bitti (rapor: `raporlar/izleme_2026-11-17/rapor.pdf`, Bölüm 4.4). Arka plan
+   artık her 3 noktada bir alınıyor (ısıl döngü azaldı); bir sonraki merkezlemede salınım sürüyorsa:
+   düzeltme adımını küçültmek ya da uyarlamalı yapmak (`duzeltme.alpha` = 0.9), yinelemede birden fazla
+   ölçümün ortalaması, ısınmış mıknatısta yeni kalibrasyon.
+
+4. **Skew quad akımlarla düzeltilebilir mi?** ±%0.5'lik kalibrasyon adımlarında hiçbir mod (H, V, Q, M)
+   kuadrupol açısını gürültü üstünde değiştirmedi [YORUM]. Kesin cevap için %2'lik adımlarla deneme.
+
+5. **Isınmanın kaynağını ayırmak.** 17 Kasım'da soğuk başlangıçta merkez y'de 22 µm, kuadrupol açısı
+   0.55 mrad kaydı; mıknatıs mı güç kaynakları mı ayrılamadı. Öneriler: bobinlere ve ölçüm bobini
+   yakınına sıcaklık sensörü; bir bobin devresinde bağımsız akım ölçümü (hassas şönt + multimetre ya
+   da DCCT) ile soğuk başlayan bir izleme.
+
+6. **Bobin ve quad çevresinde çelik var mı?** Sigma profil T-somunları ve cıvatalar çoğu zaman çinko
+   kaplı çelik. Mıknatısla kontrol edilmeli; varsa hava çekirdekli quad'ın alanını bozar.
+
+7. **Akım okumasının kesilmesi.** 17 Kasım'da izlemede güç kaynağı akımları 13–26 dk sonra okunamadı
+   (hep NaN). Artık hata günlüğe yazılıyor; bir sonraki uzun ölçümde nedenine bakılacak.
+
+8. **Motoru durduran `IndexError`.** Boş ölçüm penceresi artık ölçümü atlatıyor ve beklenmeyen
+   hataların yeri günlüğe yazılıyor. Bir sonraki olayda günlükteki traceback'e bakılacak; pencerenin
+   neden boşaldığı bilinmiyor.
+
+## Arayüz ve kullanım (görsel iyileştirme konuşmasında ele alınacak)
+
+9. **Elle giriş paneli otomatik kullanımda gereksiz.** B/A kutuları, biçim seçici, mutlak gradyen,
+   "Kaynaktan doldur" ekranın yarısını kaplıyor. "Elle giriş" kipine saklanabilir; yerine merkezin
+   yineleme yineleme küçük bir grafiği (salınım hemen görünür).
+
+10. **İki ayrı "Otomatik" kutusu** (ayar paneli ve çalışma sayfası), yalnızca başlangıçta eşitleniyor.
+
+11. **Sekmeler arası gizli bağımlılık.** Merkezleme, dönen bobin sekmesindeki "Merkezleme'ye yaz"
+    kutusuna bağlı; izleme bu kutuyu kendiliğinden kapatıp açıyor. Aynı program içindeki iki sekme hâlâ
+    kilit dosyası üzerinden konuşuyor.
+
+12. **İki tema sistemi.** Merkezleme penceresinin tema seçicisi bütün uygulamaya yazıp dönen bobin
+    temasını eziyor (`merkezleme_acilinca` yamasıyla geri alınıyor).
+
+13. **Ayar panelindeki kalibrasyon açıklaması uzun** (şüphe nedenlerinin hepsi tek paragrafta).
+
+## Yapı
+
+14. **Aynı iş için üç ayrı yol:** `./merkezle` (birleşik pencere, Kararlılık sekmesi var),
+    `./merkezle otomatik` (iki süreç + kilit dosyası, izleme yok), `donen_bobin/host/uzun_kararlilik.py`
+    (arayüzsüz). Düzeltmeler birine yapılınca ötekilerde eksik kalıyor (ör. arka plan ortalaması, izleme
+    bekçisi, yön doğrulama yalnızca bazı yollarda). Hedef: tek çekirdek (akış + izleme + bekçi), iki ön yüz.

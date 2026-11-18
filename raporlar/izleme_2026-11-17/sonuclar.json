@@ -1,0 +1,228 @@
+{
+  "izleme1": {
+    "kayit_sayisi": 861,
+    "sure_dk": 143.5,
+    "x_c_um": {
+      "ilk15": 1.38,
+      "son15": -0.33,
+      "egim_um_sa": -1.07,
+      "egim_hata": 0.13,
+      "ardisik_gurultu": 2.83
+    },
+    "y_c_um": {
+      "ilk15": 26.32,
+      "son15": 48.01,
+      "egim_um_sa": 9.36,
+      "egim_hata": 0.21,
+      "ardisik_gurultu": 4.21,
+      "ustel_genlik": 26.8,
+      "ustel_tau_dk": 54.79,
+      "ustel_tau_hata": 3.57
+    },
+    "ham_B1_ilk15_uT": -13.43,
+    "ham_B1_son15_uT": -11.38,
+    "ham_A1_ilk15_uT": 27.75,
+    "ham_A1_son15_uT": 26.92,
+    "G_ilk15": 0.101617,
+    "G_son15": 0.101528,
+    "G_tepe_ppm": 671,
+    "G_tepe_dk": 31,
+    "G_son_ppm": -793,
+    "akim_okuma_son": "11:05",
+    "akim_okuma_dk": 12.7,
+    "akim_fark_mA": [
+      0.203,
+      0.202,
+      -0.007,
+      0.13
+    ],
+    "akim_toplam_ppm": 14,
+    "G_ayni_aralik_ppm": 586,
+    "R_ilk_ohm": [
+      0.7058,
+      0.6977,
+      0.7132,
+      0.7297
+    ],
+    "R_son_ohm": [
+      0.7085,
+      0.7003,
+      0.7141,
+      0.7329
+    ],
+    "R_ort_ilk": 0.7116,
+    "R_ort_son": 0.714,
+    "arka_plan_n": 15,
+    "arka_plan_ort_uT": [
+      -15.65,
+      28.74
+    ],
+    "arka_plan_std_uT": [
+      0.81,
+      0.67
+    ],
+    "arka_plan_son_uT": [
+      -15.76,
+      29.09
+    ],
+    "merkezleme_son_um": [
+      5.9,
+      23.2
+    ]
+  },
+  "izleme2": {
+    "kayit_sayisi": 1235,
+    "sure_dk": 205.8,
+    "x_c_um": {
+      "ilk15": -0.02,
+      "son15": -3.86,
+      "egim_um_sa": -0.89,
+      "egim_hata": 0.08,
+      "ardisik_gurultu": 2.74,
+      "ustel_genlik": -5.63,
+      "ustel_tau_dk": 26.2,
+      "ustel_tau_hata": 3.27
+    },
+    "y_c_um": {
+      "ilk15": -2.2,
+      "son15": 2.98,
+      "egim_um_sa": 1.08,
+      "egim_hata": 0.11,
+      "ardisik_gurultu": 3.46,
+      "ustel_genlik": 6.15,
+      "ustel_tau_dk": 29.74,
+      "ustel_tau_hata": 4.72
+    },
+    "ham_B1_ilk15_uT": -15.89,
+    "ham_B1_son15_uT": -15.25,
+    "ham_A1_ilk15_uT": 28.2,
+    "ham_A1_son15_uT": 28.32,
+    "G_ilk15": 0.101705,
+    "G_son15": 0.101729,
+    "G_tepe_ppm": 333,
+    "G_tepe_dk": 206,
+    "G_son_ppm": 234,
+    "akim_okuma_son": "13:51",
+    "akim_okuma_dk": 25.8,
+    "akim_fark_mA": [
+      0.074,
+      0.075,
+      -0.006,
+      0.047
+    ],
+    "akim_toplam_ppm": 5,
+    "G_ayni_aralik_ppm": 52,
+    "R_ilk_ohm": [
+      0.7741,
+      0.765,
+      0.7695,
+      0.7869
+    ],
+    "R_son_ohm": [
+      0.7704,
+      0.7616,
+      0.7667,
+      0.7851
+    ],
+    "R_ort_ilk": 0.7739,
+    "R_ort_son": 0.7709,
+    "arka_plan_n": 15,
+    "arka_plan_ort_uT": [
+      -15.93,
+      28.52
+    ],
+    "arka_plan_std_uT": [
+      0.74,
+      0.52
+    ],
+    "arka_plan_son_uT": [
+      -15.68,
+      28.1
+    ],
+    "merkezleme_son_um": [
+      10.3,
+      3.5
+    ]
+  },
+  "isinma_K": 22.3,
+  "direnc_artisi_yuzde": 8.8,
+  "arka_plan_fark_uT": [
+    -0.28,
+    -0.22
+  ],
+  "um_per_uT": 9.83,
+  "C2_mT": 2.542,
+  "okuma_17kasim": {
+    "izleme1": {
+      "ort_mA": [
+        -0.01,
+        -0.13,
+        -0.11,
+        -0.03
+      ],
+      "akimsiz_mA": [
+        0.0,
+        0.11,
+        0.0,
+        0.0
+      ]
+    },
+    "izleme2": {
+      "ort_mA": [
+        0.47,
+        0.36,
+        -0.07,
+        0.25
+      ],
+      "akimsiz_mA": [
+        0.0,
+        0.35,
+        0.0,
+        0.3
+      ]
+    }
+  },
+  "okuma_12kasim_akimli1": {
+    "kayit": 360,
+    "ort_mA": [
+      0.57,
+      0.48,
+      -0.27,
+      0.36
+    ],
+    "ilk10_mA": [
+      0.27,
+      0.21,
+      -0.29,
+      0.21
+    ],
+    "son10_mA": [
+      0.63,
+      0.54,
+      -0.26,
+      0.41
+    ],
+    "egim_mA_sa": [
+      0.26,
+      0.24,
+      0.03,
+      0.12
+    ],
+    "en_kucuk_adim_mA": 0.01
+  },
+  "um_per_mA": [
+    [
+      0.38,
+      2.22,
+      -0.47,
+      -2.22
+    ],
+    [
+      -2.04,
+      0.43,
+      2.11,
+      -0.49
+    ]
+  ],
+  "um_per_mA_en_buyuk": 2.22
+}

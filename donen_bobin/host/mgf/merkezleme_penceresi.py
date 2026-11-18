@@ -282,18 +282,20 @@ class MerkezlemePenceresi(QMainWindow):
         # Son ölçüm
         kutu = QGroupBox("Son ölçüm")
         g = QGridLayout(kutu)
-        self.lbl_b0 = self._deger_etiketi(g, 0, 0, "b0 (dipol, normal)")
-        self.lbl_a0 = self._deger_etiketi(g, 0, 2, "a0 (dipol, skew)")
-        self.lbl_b1 = self._deger_etiketi(g, 1, 0, "b1 (kuadrupol, normal)")
-        self.lbl_a1 = self._deger_etiketi(g, 1, 2, "a1 (kuadrupol, skew)")
+        # n = 1 dipol, n = 2 kuadrupol (merkezleme ve çok kutuplar grafiğiyle aynı numara;
+        # önce b0/b1 yazıyordu). Normal/skew bobin çerçevesindedir, yerçekimine göre değil.
+        self.lbl_b0 = self._deger_etiketi(g, 0, 0, "B1 (dipol, normal)")
+        self.lbl_a0 = self._deger_etiketi(g, 0, 2, "A1 (dipol, skew)")
+        self.lbl_b1 = self._deger_etiketi(g, 1, 0, "B2 (kuadrupol, normal)")
+        self.lbl_a1 = self._deger_etiketi(g, 1, 2, "A2 (kuadrupol, skew)")
         self.lbl_g = self._deger_etiketi(g, 2, 0, "Gradyen |C₂|/r_ref")
         self.lbl_zaman = self._deger_etiketi(g, 2, 2, "Zaman")
         self.lbl_xc = self._deger_etiketi(g, 3, 0, "x_c")
         self.lbl_yc = self._deger_etiketi(g, 3, 2, "y_c")
         # Birleşik arayüzde: merkezleme'nin son arka planı (quad akımları en son
         # sıfırken ölçülen ortam alanı) çıkarılmış dipol ve merkez
-        self.lbl_net_b0 = self._deger_etiketi(g, 4, 0, "Net b0 (arka plan çıkarılmış)")
-        self.lbl_net_a0 = self._deger_etiketi(g, 4, 2, "Net a0 (arka plan çıkarılmış)")
+        self.lbl_net_b0 = self._deger_etiketi(g, 4, 0, "Net B1 (arka plan çıkarılmış)")
+        self.lbl_net_a0 = self._deger_etiketi(g, 4, 2, "Net A1 (arka plan çıkarılmış)")
         self.lbl_net_xc = self._deger_etiketi(g, 5, 0, "Net x_c")
         self.lbl_net_yc = self._deger_etiketi(g, 5, 2, "Net y_c")
         kok.addWidget(kutu)

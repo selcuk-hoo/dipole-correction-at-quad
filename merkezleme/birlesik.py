@@ -207,6 +207,12 @@ class MerkezlemeSekmesi(QWidget):
         self.pencere: MerkezlemePencere | None = None
         self.kapanis_kancalari: list[Callable[[], None]] = []  # kapat() önce bunları çağırır
 
+        self.otomatik_calisma = QCheckBox("Otomatik (onay beklemeden)")
+        self.otomatik_calisma.setToolTip(
+            "Ölçümleri ve düzeltme önerilerini kendiliğinden onaylar. Röle/modülatör gibi\n"
+            "kullanıcı eylemleri ve duraklatma yine size bırakılır. Çalışırken de açılıp kapatılabilir.")
+        # Eskiden ayar panelinde ayrı bir kutu vardı ve yalnızca başlangıçta eşitleniyordu
+        self.otomatik_kutusu = self.otomatik_calisma
         self.yigin = QStackedWidget()
         self.yigin.addWidget(self._ayar_panelini_kur())
         self.calisma_sayfasi = QWidget()
@@ -215,11 +221,6 @@ class MerkezlemeSekmesi(QWidget):
         self.calisma_etiketi = QLabel()
         ust.addWidget(self.calisma_etiketi)
         ust.addStretch()
-        self.otomatik_calisma = QCheckBox("Otomatik (onay beklemeden)")
-        self.otomatik_calisma.setToolTip(
-            "Ölçümleri ve düzeltme önerilerini kendiliğinden onaylar. Röle/modülatör gibi\n"
-            "kullanıcı eylemleri ve duraklatma yine size bırakılır. İstediğiniz an kapatılabilir.")
-        ust.addWidget(self.otomatik_calisma)
         self.yeniden_dugmesi = QPushButton("Mevcut akımlarla yeniden düzelt")
         self.yeniden_dugmesi.setToolTip(
             "Akımları SIFIRLAMADAN, bu çalıştırmanın kalibrasyonuyla düzeltmeyi yeniden başlatır.\n"
@@ -234,6 +235,11 @@ class MerkezlemeSekmesi(QWidget):
         self.yigin.addWidget(self.calisma_sayfasi)
         duzen = QVBoxLayout(self)
         duzen.setContentsMargins(0, 0, 0, 0)
+        ust_satir = QHBoxLayout()
+        ust_satir.setContentsMargins(8, 4, 8, 0)
+        ust_satir.addStretch()
+        ust_satir.addWidget(self.otomatik_calisma)
+        duzen.addLayout(ust_satir)
         duzen.addWidget(self.yigin)
 
         self.zamanlayici = QTimer(self)
@@ -272,8 +278,6 @@ class MerkezlemeSekmesi(QWidget):
         self.tolerans_kutusu.setSuffix(" µm")
         self.tolerans_kutusu.setValue(k.duzeltme.merkez_toleransi_um)
         form.addRow("Merkez toleransı", self.tolerans_kutusu)
-        self.otomatik_kutusu = QCheckBox("onay beklemeden baştan sona yürü (çalışırken de değiştirilebilir)")
-        form.addRow("Otomatik", self.otomatik_kutusu)
         self.kalibrasyon_secici = QComboBox()
         self.kalibrasyon_secici.setToolTip(
             "Kayıtlı bir kalibrasyon seçilirse kalibrasyon yinelenmez (~7 dk ve 15 akım değişimi yerine\n"
@@ -337,9 +341,13 @@ class MerkezlemeSekmesi(QWidget):
                  "Matris bu oturuma 2 ölçümlük yön doğrulamayla uyarlanır.")
         if k.nominal_A is not None and not ayni_nominal:
             metin += f" Kalibrasyon {k.nominal_A:g} A'de kurulmuş (bağıl birimde geçerli); son akımlar kullanılamaz."
+        ipucu = ""
         if k.kalibrasyon.supheli:
-            metin += " ŞÜPHELİ: " + "; ".join(k.kalibrasyon.supheli_nedenleri)
+            n = len(k.kalibrasyon.supheli_nedenleri)
+            metin += f" Şüpheli işaretli ({n} neden; ayrıntı için üzerine gelin)."
+            ipucu = "\n".join("• " + neden for neden in k.kalibrasyon.supheli_nedenleri)
         self.kalibrasyon_bilgi.setText(metin)
+        self.kalibrasyon_bilgi.setToolTip(ipucu)
 
     def _otomatik_ilerle(self) -> None:
         if self.pencere is not None and self.otomatik_calisma.isChecked():
@@ -391,7 +399,6 @@ class MerkezlemeSekmesi(QWidget):
         except Exception as hata:  # noqa: BLE001 - kullanıcıya gösterilir
             QMessageBox.critical(self, "Güç kaynakları", f"Güç kaynaklarına bağlanılamadı:\n{hata}")
             return
-        self.otomatik_calisma.setChecked(self.otomatik_kutusu.isChecked())
         if kayitli is None:
             self._akisi_kur(kfg, grup)
         else:
@@ -428,7 +435,8 @@ class MerkezlemeSekmesi(QWidget):
             akis.yon_dogrulama_gerekli = yon_dogrulama
         self.yigin.setCurrentWidget(self.calisma_sayfasi)
         # Pencere kurulurken akış başlar ve ilk ölçümü bekler (olay döngüsü işler)
-        self.pencere = MerkezlemePencere(kfg, akis, otomatik_kaynak_etiketi="OTOMATİK ÖLÇÜM (dönen bobin sekmesi)")
+        self.pencere = MerkezlemePencere(kfg, akis, otomatik_kaynak_etiketi="OTOMATİK ÖLÇÜM (dönen bobin sekmesi)",
+                                         tema_yonet=False)
         self.calisma_sayfasi.layout().addWidget(self.pencere)
         self.merkezleme_acilinca()
         self._durumu_yenile()
@@ -593,15 +601,16 @@ class KararlilikSekmesi(QWidget):
         self.grafik_merkez.setLabel("bottom", "süre", units="dk")
         self.grafik_merkez.setLabel("left", "µm")
         self.grafik_merkez.addLegend()
-        self.egri_x = self.grafik_merkez.plot(pen="r", name="x_c")
-        self.egri_y = self.grafik_merkez.plot(pen="b", name="y_c")
+        self.egri_x = self.grafik_merkez.plot(name="x_c")
+        self.egri_y = self.grafik_merkez.plot(name="y_c")
         duzen.addWidget(self.grafik_merkez)
         self.grafik_akim = pg.PlotWidget(title="Güç kaynağı akımı: ilk değerden sapma")
         self.grafik_akim.setLabel("bottom", "süre", units="dk")
         self.grafik_akim.setLabel("left", "mA")
         self.grafik_akim.addLegend()
-        self.egri_akim = [self.grafik_akim.plot(pen=pg.mkPen(c), name=f"I{i + 1}")
-                          for i, c in enumerate("rgbm")]
+        self.egri_akim = [self.grafik_akim.plot(name=f"I{i + 1}") for i in range(4)]
+        self._tema: str | None = None
+        self._grafik_temasi()
         duzen.addWidget(self.grafik_akim)
 
         self.zamanlayici = QTimer(self)
@@ -734,7 +743,37 @@ class KararlilikSekmesi(QWidget):
             self._bildirilen_hata_sayisi = sayi
 
     # ------------------------------------------------------------------
+    # Dönen bobin sekmesinin teması (yoksa açık tema) ve renk körlüğüne dayanıklı
+    # sıralı renkler (mavi, turuncu, yeşil-mavi, sarı; açık/koyu zemine ayrı tonlar)
+    RENKLER = {"acik": ("#2a78d6", "#eb6834", "#1baf7a", "#eda100"),
+               "koyu": ("#3987e5", "#d95926", "#199e70", "#c98500")}
+    ZEMIN = {"acik": ("#ffffff", "#202124", "#5f6368"), "koyu": ("#2b2c2f", "#e8eaed", "#9aa0a6")}
+
+    def _grafik_temasi(self) -> None:
+        import pyqtgraph as pg
+
+        tema = getattr(self.bobin, "tema", "acik")
+        tema = tema if tema in self.RENKLER else "acik"
+        if tema == self._tema:
+            return
+        self._tema = tema
+        zemin, yazi, soluk = self.ZEMIN[tema]
+        renk = self.RENKLER[tema]
+        for grafik in (self.grafik_merkez, self.grafik_akim):
+            grafik.setBackground(zemin)
+            grafik.showGrid(x=False, y=True, alpha=0.25)
+            for kenar in ("left", "bottom"):
+                eksen = grafik.getAxis(kenar)
+                eksen.setPen(pg.mkPen(soluk))
+                eksen.setTextPen(pg.mkPen(yazi))
+            grafik.getPlotItem().titleLabel.setAttr("color", yazi)
+        self.egri_x.setPen(pg.mkPen(renk[0], width=2))
+        self.egri_y.setPen(pg.mkPen(renk[1], width=2))
+        for egri, c in zip(self.egri_akim, renk):
+            egri.setPen(pg.mkPen(c, width=2))
+
     def _ornekle(self) -> None:
+        self._grafik_temasi()  # dönen bobin sekmesinde tema değiştiyse
         if not self.calisiyor:
             return
         d = self.bobin.dongu

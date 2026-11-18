@@ -462,3 +462,30 @@ def test_kuadrupol_acisi_kalibrasyon_dosyasinda_ve_csvden(tmp_path):
     assert np.allclose(d.R[2], yuklu.R[2]) and d.kuadrupol_acisi_rad == pytest.approx(psi - 0.5)
     yuklu.kaydet(tmp_path / "k2.json")
     assert KalibrasyonSonucu.yukle(tmp_path / "k2.json").kuadrupol_acisi_rad == pytest.approx(psi)
+
+
+def test_beklenenden_sapma_onceki_olcumun_akimlarina_gore(
+    kfg, konvansiyon, mod_bazi, simulator_uret, kaynak_grubu_uret, tmp_path
+):
+    """Öngörü, son ölçümün akımlarından bu ölçümün akımlarına olan değişimle yapılır.
+    18 Kasım'a kadar değişim sıfır çıkıyordu: büyük her düzeltme adımı "beklenenden
+    sapma" uyarısı veriyordu. Kusursuz modelde (simülatör) büyük adımlarda uyarı olmamalı."""
+    sim = simulator_uret(ofset_m=complex(-600e-6, 400e-6), tohum=63)
+    kaynak = SimulatorGirisi(sim)
+    k = dataclasses.replace(kfg, duzeltme=dataclasses.replace(kfg.duzeltme, max_iterasyon=10))
+    akis = IsAkisi(k, kaynak_grubu_uret(), kaynak, Calistirma(k, kok=tmp_path), konvansiyon, mod_bazi)
+    akis.basla()
+    sapma, duzeltme_olcumu = [], 0
+    for _ in range(400):
+        if akis.bitti_mi():
+            break
+        if akis.bekleme is Bekleme.DUZELTME_ONAYI:
+            akis.duzeltmeyi_onayla()
+            continue
+        olcum = kaynak.olcum_al(akis.mevcut_istek)
+        if akis.faz is Faz.DUZELTME and akis.bekleme is Bekleme.OLCUM_GIRISI:
+            duzeltme_olcumu += 1
+            sapma += [u for u in akis.olcum_dogrula(olcum).uyarilar if "BEKLENENDEN" in u]
+        akis.olcum_gonder(olcum)
+    assert akis.faz is Faz.TAMAMLANDI and duzeltme_olcumu >= 2
+    assert not sapma, sapma

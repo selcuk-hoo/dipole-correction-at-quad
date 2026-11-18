@@ -245,6 +245,7 @@ class IsAkisi:
         # keyfi; matris kuadrupol açısına göre döndürülür, 180° belirsizliği
         # küçük bir H adımıyla çözülür).
         self.yon_dogrulama_gerekli = False
+        self._son_y_akimlari: np.ndarray | None = None  # son_y hangi akımlarda ölçüldü
         self._yon_olcumleri: list[tuple[np.ndarray, HarmonikOlcumu]] = []
         self.yon_sonucu: dict[str, float] | None = None
         self._toplam_gorev_tahmini = 0
@@ -262,6 +263,8 @@ class IsAkisi:
             self._kalibrasyonu_kuyrukla()
             self.faz = Faz.KALIBRASYON
         elif self.yon_dogrulama_gerekli:
+            # Dosyadaki gradyen hedefi başka bir oturumun değeri: ilk ölçümden alınır
+            self.gradyen_hedefi_T_m = None
             self.faz = Faz.YON_DOGRULAMA
             self._yon_dogrulamasini_kuyrukla()
         else:
@@ -506,11 +509,17 @@ class IsAkisi:
                 and self.son_y is not None
                 and self.mevcut_gorev is not None
             ):
+                # Öngörü, son ölçümün alındığı akımlardan bu ölçümün akımlarına
+                # olan değişimdendir. (18 Kasım'a kadar değişim, öneri onaylandıktan
+                # sonra hep sıfır çıkıyordu; uyarı yalnızca "merkez 25 µm'den fazla
+                # yer değiştirdi" demekti ve her büyük adımda çıkıyordu.)
+                onceki = (self._son_y_akimlari if self._son_y_akimlari is not None
+                          else self._onceki_akimlar())
                 beklenen = beklenen_y_hesapla(
                     self.kalibrasyon.R,
                     self.son_y,
                     self.mod_bazi.bagil_sapma(self.mevcut_akimlar_A)
-                    - self.mod_bazi.bagil_sapma(self._onceki_akimlar()),
+                    - self.mod_bazi.bagil_sapma(onceki),
                 )
         sonuc = girisi_dogrula(
             olcum,
@@ -586,6 +595,7 @@ class IsAkisi:
             self.baslangic_y = y
             self.baslangic_izleme = izleme
         self.son_y = y
+        self._son_y_akimlari = self.mevcut_akimlar_A.copy()
         self.son_izleme = izleme
 
         self.calistirma.olcum_yaz(

@@ -153,3 +153,12 @@ def test_iki_bicim_arasinda_donusum_tutarli(kfg, konvansiyon, temiz_simulator, m
         merkezler.append(konvansiyon.merkez(geri))
     # Alanlar ekran biçimine yuvarlandığı için nanometre altında fark kalabilir
     assert abs(merkezler[0] - merkezler[1]) < 1e-9
+
+
+def test_arka_planda_c2_mertebesi_denetlenmez(kfg, konvansiyon):
+    from merkezleme.dogrulama import mertebe_kontrolu
+    from merkezleme.harmonikler import HarmonikOlcumu
+
+    olcum = HarmonikOlcumu(bilesenler={1: complex(-7e-6, 3e-5), 2: complex(5e-7, 4e-7)})
+    assert any("|C_2|" in u for u in mertebe_kontrolu(olcum, konvansiyon, kfg.dogrulama))
+    assert mertebe_kontrolu(olcum, konvansiyon, kfg.dogrulama, arka_plan=True) == []

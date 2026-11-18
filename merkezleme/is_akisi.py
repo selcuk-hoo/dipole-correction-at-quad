@@ -530,6 +530,7 @@ class IsAkisi:
             beklenen_y=beklenen,
             merkez_sacilimi_m=self.merkez_sacilimi_m,
             g_sacilimi=self.g_sacilimi,
+            arka_plan=self.bekleme is Bekleme.ARKA_PLAN_GIRISI,
         )
         self.son_dogrulama = sonuc
         return sonuc

@@ -47,11 +47,15 @@ class DogrulamaSonucu:
 
 
 def mertebe_kontrolu(
-    olcum: HarmonikOlcumu, konvansiyon: HarmonikKonvansiyonu, ayar: DogrulamaYapilandirmasi
+    olcum: HarmonikOlcumu, konvansiyon: HarmonikKonvansiyonu, ayar: DogrulamaYapilandirmasi,
+    arka_plan: bool = False,
 ) -> list[str]:
-    """|C_1| ve |C_2| makul aralıkta mı?"""
+    """|C_1| ve |C_2| makul aralıkta mı? Arka planda (akımlar sıfır) C_2 sıfıra
+    yakın olduğu için yalnız C_1 denetlenir (önce her arka planda uyarı çıkıyordu)."""
     uyarilar: list[str] = []
-    for n, aralik in ((1, ayar.c1_makul_aralik), (2, ayar.c2_makul_aralik)):
+    denetim = ((1, ayar.c1_makul_aralik),) if arka_plan else (
+        (1, ayar.c1_makul_aralik), (2, ayar.c2_makul_aralik))
+    for n, aralik in denetim:
         if n not in olcum.bilesenler:
             continue
         c_n = olcum.bilesenler[n]
@@ -110,9 +114,10 @@ def girisi_dogrula(
     beklenen_y: KontrolVektoru | None = None,
     merkez_sacilimi_m: float | None = None,
     g_sacilimi: float | None = None,
+    arka_plan: bool = False,
 ) -> DogrulamaSonucu:
     """İki katmanlı doğrulamayı uygular."""
-    uyarilar = mertebe_kontrolu(olcum, konvansiyon, dogrulama)
+    uyarilar = mertebe_kontrolu(olcum, konvansiyon, dogrulama, arka_plan=arka_plan)
     if olculen_y is not None and beklenen_y is not None:
         uyarilar += beklenenden_sapma_kontrolu(
             olculen_y, beklenen_y, dogrulama, duzeltme, merkez_sacilimi_m, g_sacilimi

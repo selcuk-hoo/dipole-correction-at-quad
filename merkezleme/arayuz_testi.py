@@ -37,6 +37,8 @@ def main(argv: list[str] | None = None) -> int:
     a.add_argument("--izleme-dk", type=float, default=10.0)
     a.add_argument("--bekci", action="store_true", help="izlemede motoru durdurup bekçiyi sına")
     a.add_argument("--hiz", type=float, default=8.0)
+    a.add_argument("--olcum-suresi", type=float, default=None,
+                   help="dönen bobinin her ölçümde kullandığı veri süresi (s); verilmezse parametre dosyası")
     a.add_argument("--zaman-asimi-dk", type=float, default=40.0)
     g = a.parse_args(argv)
 
@@ -111,6 +113,10 @@ def main(argv: list[str] | None = None) -> int:
         if not bekle_kosul(lambda: bobin.dongu.durum is not Durum.BAGLI_DEGIL, 20, "bağlantı"):
             raise RuntimeError("Pico'ya bağlanılamadı")
         bobin.hiz.setValue(g.hiz)
+        if g.olcum_suresi:
+            bobin.sure.setValue(g.olcum_suresi)
+            bobin.dongu.pencere_ayarla(g.olcum_suresi)
+            yaz(f"Ölçüm süresi: {g.olcum_suresi:g} s")
         bobin._baslat()
         yaz(f"Motor başlatıldı ({g.hiz:g} Hz); dönen bobin hazır olana kadar bekleniyor...")
         if not bekle_kosul(lambda: bobin_durumu(bobin.dongu)[0], 120, "dönen bobin hazır"):

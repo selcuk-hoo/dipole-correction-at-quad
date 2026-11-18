@@ -21,11 +21,17 @@ silin ya da "yapıldı" diye işaretleyin.*
    Yapılacak: denetimleri (`merkezleme/kalibrasyon.py`, `supheli_nedenleri`) kuadrupol çerçevesinde ve
    anlamlı bir eğim eşiğiyle yapmak; eski kalibrasyonları yeni denetimle yeniden değerlendirmek.
 
-3. **Merkezlemenin son yinelemelerdeki salınımı.** 17 Kasım'da iki merkezleme de y'de ±20 µm salınıp
-   5 µm toleransa ulaşmadan bitti (rapor: `raporlar/izleme_2026-11-17/rapor.pdf`, Bölüm 4.4). Arka plan
-   artık her 3 noktada bir alınıyor (ısıl döngü azaldı); bir sonraki merkezlemede salınım sürüyorsa:
-   düzeltme adımını küçültmek ya da uyarlamalı yapmak (`duzeltme.alpha` = 0.9), yinelemede birden fazla
-   ölçümün ortalaması, ısınmış mıknatısta yeni kalibrasyon.
+3. **Merkezlemenin son yinelemelerdeki salınımı: nedeni bulundu (18 Kasım).** 17 ve 18 Kasım'da
+   merkezleme y'de ±20 µm salınıp 5 µm toleransa ulaşmadan bitti. 18 Kasım tanı ölçümü
+   (`merkezleme/tani_testi.py`, `kayitlar/tani_testi_2026-11-18_153117.*`) [ÖLÇÜLDÜ]:
+   - aynı akımda tekrar: σ = 4.4 µm (x), 2.6 µm (y); akım değişiminden sonra ek gürültü yok;
+   - ±2.9 mA adımlara tepki doğrusal, döngüler arası 1.2 µm tekrarlanabilir, matris öngörüsüyle uyumlu;
+   - histerezis (yukarıdan/aşağıdan gelme) ve sıfırdan geçmenin etkisi gürültü düzeyinde;
+   - üstüne 10-20 s'lik yavaş bir dalgalanma (~5-10 µm) biniyor.
+   Yani düzeltme her yinelemede tek 2 s'lik ölçümün gürültüsünü kovalıyor [YORUM]. Seçenekler: ölçüm
+   süresini uzatmak (10 s deneniyor), yinelemede birkaç ölçümün ortalaması, yakınsama ölçütünü
+   gürültüye göre koymak (ör. ortalamanın standart hatası), α'yı küçültmek ya da toleransı ~10 µm'ye
+   çıkarmak. Kullanıcıyla karar verilecek.
 
 4. **Skew quad akımlarla düzeltilebilir mi?** ±%0.5'lik kalibrasyon adımlarında hiçbir mod (H, V, Q, M)
    kuadrupol açısını gürültü üstünde değiştirmedi [YORUM]. Kesin cevap için %2'lik adımlarla deneme.

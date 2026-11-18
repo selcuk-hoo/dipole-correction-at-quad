@@ -23,6 +23,7 @@ def p(tmp_path) -> mk.Parametreler:
     return dataclasses.replace(
         mk.parametreleri_yukle(),
         hiz_hz=23.0,  # testler bu hız için yazıldı; yapılandırmadaki çalışma hızından bağımsız
+        pencere_s=2.0,  # testlerin zamanlaması 2 s'lik pencere için (yapılandırma 18.11'den beri 10 s)
         kilit_dosyasi=tmp_path / "veri_kilidi" / ".kilit",
         kayit_dizini=tmp_path / "olcumler",
     )

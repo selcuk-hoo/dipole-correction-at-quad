@@ -59,7 +59,10 @@ motor:
   durma_zaman_asimi_s: 15.0    # Durdur'da servo kapatmadan önce en fazla bekleme
 
 olcum:
-  pencere_s: 2.0               # her ölçümde kullanılan veri süresi (tam tura kırpılır)
+  # 18.11.2026: 2 -> 10 s. 2 s'lik ölçümün merkez gürültüsü ~4 µm ve üstüne 10-20 s'lik
+  # ~5-10 µm dalgalanma biniyordu; merkezleme 5 µm'ye inemiyordu. 10 s ile yakınsadı
+  # (kayitlar/arayuz_testi_2026-11-18_153706.*). Gerekirse arayüzden değiştirilebilir.
+  pencere_s: 10.0              # her ölçümde kullanılan veri süresi (tam tura kırpılır)
   faz_ofseti_derece: 0.0       # enkoder açısından çıkarılır; "Referans" düğmesiyle ayarlanır
   # ADC örneği ile enkoder açısı arasındaki sabit zaman gecikmesi (ADC filtresi
   # - enkoder iletimi). Pencerede "Gecikme ölç (iki yön)" ile ölçülür; ölçülen

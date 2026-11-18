@@ -583,7 +583,7 @@ class KararlilikSekmesi(QWidget):
         ust.addWidget(QLabel("Kayıt aralığı (bu sürede gelen ölçümlerin ortalaması)"))
         self.aralik = QSpinBox()
         self.aralik.setRange(1, 3600)
-        self.aralik.setValue(10)
+        self.aralik.setValue(30)  # 10 s ölçümle aralıkta ~3 ölçüm: saçılım hesaplanabilsin
         self.aralik.setSuffix(" s")
         ust.addWidget(self.aralik)
         ust.addStretch()

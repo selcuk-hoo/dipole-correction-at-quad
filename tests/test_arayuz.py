@@ -76,7 +76,8 @@ def akisi_yurut(pencere, akis, max_adim: int = 400) -> None:
 
 def test_pencere_durum_panelini_gosterir(pencere_uret, kfg):
     pencere, akis, _, _, _ = pencere_uret()
-    assert "nokta 1 / 14" in pencere.adim_etiketi.text()
+    toplam = akis.plan.nokta_sayisi + kfg.duzeltme.max_iterasyon  # kalibrasyon noktaları + yinelemeler
+    assert f"nokta 1 / {toplam}" in pencere.adim_etiketi.text()
     assert "ARKA PLAN" in pencere.eylem_etiketi.text()
     # Dört bobinin ayar/ölçülen/asimetri satırı
     assert len(pencere.akim_etiketleri) == 4

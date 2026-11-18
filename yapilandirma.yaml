@@ -127,7 +127,7 @@ kalibrasyon:
 
 duzeltme:
   alpha: 0.9                             # dI = alpha * pinv(R) * (y_hedef - y)
-  max_iterasyon: 5
+  max_iterasyon: 8                       # 18.11.2026: 5 -> 8 (10 s ölçümle 5. yinelemede sınırda yakınsadı)
   merkez_toleransi_um: 5.0
   g_toleransi: 0.001                     # |g| eşiği (bağıl)
   monopol_cikar: true                    # her adımda (I - I_nominal)'in M bileşeni atılır
@@ -174,5 +174,5 @@ simulator:
 dosya_girisi:
   kilit_dosyasi: veri_kilidi/.kilit      # yok = "ölç" (sıra dönen bobinde)
                                           # var = "veri hazır" (sıra bu programda)
-  zaman_asimi_s: 30.0                    # bu sürede veri gelmezse hata ver, akımları sıfırla
+  zaman_asimi_s: 60.0                    # bu sürede veri gelmezse hata ver, akımları sıfırla (18.11: 30 -> 60, ölçüm 10 s)
   yoklama_araligi_s: 0.2                 # kilit dosyasını bu aralıkla yokla

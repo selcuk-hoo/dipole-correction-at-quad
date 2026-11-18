@@ -31,7 +31,8 @@ silin ya da "yapıldı" diye işaretleyin.*
    Yani düzeltme her yinelemede tek 2 s'lik ölçümün gürültüsünü kovalıyor [YORUM]. Seçenekler: ölçüm
    süresini uzatmak (10 s deneniyor), yinelemede birkaç ölçümün ortalaması, yakınsama ölçütünü
    gürültüye göre koymak (ör. ortalamanın standart hatası), α'yı küçültmek ya da toleransı ~10 µm'ye
-   çıkarmak. Kullanıcıyla karar verilecek.
+   çıkarmak. **Karar (18.11):** ölçüm süresi 10 s, en fazla 8 yineleme. Sonraki merkezlemelerde
+   yakınsamayı izleyin; yetmezse ortalama/ölçüt seçeneklerine dönülür.
 
 4. **Skew quad akımlarla düzeltilebilir mi?** ±%0.5'lik kalibrasyon adımlarında hiçbir mod (H, V, Q, M)
    kuadrupol açısını gürültü üstünde değiştirmedi [YORUM]. Kesin cevap için %2'lik adımlarla deneme.

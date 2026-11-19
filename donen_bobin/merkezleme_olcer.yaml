@@ -82,8 +82,13 @@ olcum:
   artik_tabani_uVs: 0.36
   # Enkoder okumaları stator saatine bağlı düzenli aralıklarla gelir; bir ADC
   # örneği kaybolursa sonraki okumalar bir örnek kayar. Bu kaymanın (örnek
-  # cinsinden) eşiği: sağlıklı veride ~0.2, tek kayıpta ~1.
-  sicrama_esigi: 0.6
+  # cinsinden) eşiği: tek kayıpta ~1 ve üstü (18 Kasım'da gerçek kayıplarda 1.3-10).
+  # 18.11.2026: 0.6 -> 0.9. Bu düzende SAĞLIKLI veride de 0.45-0.70 çıkıyor (17 Kasım: 2 s'lik
+  # ölçümlerde medyan 0.47; 10 s'lik pencerede medyan ~0.60, çünkü ölçüm süresi uzadıkça kayan
+  # medyanın tepe-tepe değişimi de büyür). 0.6 ile 18 Kasım 16:30 oturumunda 10 s'lik ölçümlerin
+  # 18'i reddedildi ve üst üste 3 ret motoru durdurdu (kayitlar/2026-11-18_163044). Gerçek
+  # kayıpla sağlıklı gürültü arasındaki boşluk 0.70 ile 1.27 arasında; 0.9 ortasında.
+  sicrama_esigi: 0.9
   r_ref_mm: 25.0               # merkezleme yapilandirma.yaml -> harmonikler.r_ref_mm ile AYNI olmalı
   kilit_dosyasi: veri_kilidi/.kilit
   # Her program oturumu kayitlar/<tarih_saat>/ altında ayrı klasör: olcumler.csv

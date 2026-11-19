@@ -145,7 +145,7 @@ def test_parametreler_ve_tutarlilik(p, tmp_path):
     assert [abs(z) for z in p.bobin.iletken_konumlari()] == pytest.approx([0.02, 0.02], rel=1e-3)
     assert p.kanallar[p.varsayilan_kanal] == (2, 3)
     assert p.kazanc == 32 and p.ornekleme_sps == 7200 and p.filtre == "Sinc4"
-    assert p.gecikme_s == 0.0 and p.artik_esigi == pytest.approx(2e-2) and p.sicrama_esigi == 0.6
+    assert p.gecikme_s == 0.0 and p.artik_esigi == pytest.approx(2e-2) and p.sicrama_esigi == 0.9
     assert mk.tutarlilik_uyarilari(p) == []
 
     kfg = tmp_path / "y.yaml"

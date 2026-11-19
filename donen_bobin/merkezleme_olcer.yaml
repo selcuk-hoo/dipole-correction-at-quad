@@ -87,8 +87,8 @@ olcum:
   # ölçümlerde medyan 0.47 (%4.6'sı 0.6'nın üstünde); 10 s'lik pencerede kayan medyanın tepe-tepe
   # değişimi büyüdüğünden medyan 0.50 (sessiz oturum) ile 0.61 (16:30 oturumu) arasında. 0.6 ile
   # 16:30 oturumunda 33 ölçümün 17'si reddedildi ve üst üste 3 ret motoru durdurdu
-  # (kayitlar/2026-11-18_163044). Gerçek kayıplarda 1.3-10 çıkıyor; sağlıklı gürültüyle kayıp
-  # arasındaki boşluk 0.70 ile 1.27 arasında, 0.9 ortasında. Rapor: raporlar/merkezleme_2026-11-18.
+  # (kayitlar/2026-11-18_163044). Büyük olasılıkla gerçek kayıplarda 1.3-11 çıkıyor; sağlıklı gürültüyle kayıp
+  # arasındaki boşluk 0.70 ile ~1.3 arasında, 0.9 ortasında. Rapor: raporlar/merkezleme_2026-11-18.
   sicrama_esigi: 0.9
   r_ref_mm: 25.0               # merkezleme yapilandirma.yaml -> harmonikler.r_ref_mm ile AYNI olmalı
   kilit_dosyasi: veri_kilidi/.kilit

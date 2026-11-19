@@ -51,6 +51,9 @@ açık kalır, dönen bobin sürekli ölçüme geçer ve her N saniyede (varsay�
 ölçümlerin ortalamasıdır (`n_olcum`, saçılım `sx_um`/`sy_um`); sürüklenme (µm/saat) hesaplanır.
 Akımları ayrı bir iş parçacığı okur, arayüz donmaz.
 
+**Durum özeti, bulgular ve açık işler için önce `raporlar/merkezleme_2026-11-18/rapor.pdf` (ve `planlar/YAPILACAKLAR.md`)
+okuyun.** Yeni arayüz `arayuz-duzen` dalındadır (birleştirilmedi, donanımla denenmedi).
+
 **18 Kasım 2026'da eklenenler** (17 Kasım ölçümünden çıkan dersler, `raporlar/izleme_2026-11-17/`):
 - Merkezleme en fazla iterasyonda toleransa ulaşmadan biterse ekranda kırmızı **"TOLERANS DIŞINDA BİTTİ"**
   yazar (önceden yakınsamayla aynı "TAMAMLANDI" görünüyordu); izleme başlatılırken ayrıca sorulur.
